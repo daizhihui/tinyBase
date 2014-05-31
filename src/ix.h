@@ -51,6 +51,17 @@ public:
 
     // Close index scan
     RC CloseScan();
+    private:
+
+    int bScanOpen;
+   // PageNum curPageNum;
+    //SlotNum curSlotNum;
+
+    IX_IndexHandle *pIndexHandle;
+    CompOp compOp;
+    void *value;
+    ClientHint pinHint;
+
 };
 
 //
