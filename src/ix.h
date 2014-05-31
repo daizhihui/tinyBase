@@ -86,10 +86,11 @@ private:
 // IX_FileHdr: Header structure for files
 //
 struct IX_FileHdr {
-    AttrType attrType;
-    int attrLength;
+    AttrType attrType; //attribute type
+    int attrLength; //attribute length
+    int indexNo; //indexNo
     int numMaxEntries; // max number of entries in a node
-    PageNum rootPageNum; // page number of the root in the B+ tree  
+    PageNum rootPageNum; // page number of the root in the B+ tree
 };
 
 //
