@@ -98,4 +98,6 @@ struct IX_FileHdr {
 //
 void IX_PrintError(RC rc);
 
+#define  IX_INVALIDATTR (START_IX_WARN + 0) //invalid attribute 
+
 #endif
