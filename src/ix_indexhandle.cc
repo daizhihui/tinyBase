@@ -51,6 +51,8 @@ bool compare(void* k1,void* k2)
     
 }
 
+//Will read and init a node from this page on the disk
+
 node* readNodeFromPageNum(PageNum pn)
 {
     filehandler.GetThisPage(pn, pageHandler);
@@ -102,6 +104,7 @@ node* readNodeFromPageNum(PageNum pn)
     return  x;
 }
 
+//will write a node on a new page
 void writeNodeOnNewPage(node* x)
 {
     filehandler.AllocatePage(pageHandler);
@@ -155,6 +158,11 @@ void splitChild(node * x, int i)
     
 }
 
+
+//called recursively, if node x is a leaf, it adds the entry to the bucket
+// if x is not a leaf, it goes to its children while splitting them if they have
+// the necessary amount of keys.
+
 void insertNonFull(node* x, void*  pData,const RID &rid)
 {
     //if same key, add to bucket and increment number of rids.
@@ -194,6 +202,7 @@ void insertNonFull(node* x, void*  pData,const RID &rid)
     
 }
 
+//start of recursion for the insert, x should be the root node
 void insert(node* x, void* pData, const RID &rid)
 {
     //x is the root node
