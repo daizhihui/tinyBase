@@ -24,7 +24,7 @@ struct node
 {
     PageNum pageNumber;
     int numberOfKeys;
-//    int numberOfChildren; = numberOfKeys+1;
+    //    int numberOfChildren; = numberOfKeys+1;
     char** keys; //read as array of bytes
     PageNum* children;
     bool leaf;
@@ -65,34 +65,34 @@ node* readNodeFromPageNum(PageNum pn)
         memcpy(x->keys[i], &pData[sizeof(PageNum)+sizeof(int)+i*filehdr.attrLength], filehdr.attrLength);
     
     //in case we want the exact length of the strings:
-//    switch (filehdr.attrType) {
-//        case STRING:
-//        {
-//            x->keys = new char*[x->numberOfKeys];
-//            int count=0;
-//            for(int i =0;i<x->numberOfKeys;i++)
-//            {
-//                x->keys[i]=new char[MAXSTRINGLEN];
-//                int j =0;
-//                while(true)
-//                {
-//                    x->keys[i][j] = pData[sizeof(PageNum)+1+count];
-//                    if(x->keys[i][j]=='\0' || j==MAXSTRINGLEN)
-//                        break;
-//                    j++;
-//                    count++;
-//                }
-//            }
-//            break;
-//        }
-//        default:
-//        {
-//            x->keys = new char*[x->numberOfKeys];
-//            for(int i =0;i<x->numberOfKeys;i++)
-//                x->keys[i]=&pData[sizeof(PageNum)+sizeof(int)+i*filehdr.attrLength];
-//            break;
-//        }
-//    }
+    //    switch (filehdr.attrType) {
+    //        case STRING:
+    //        {
+    //            x->keys = new char*[x->numberOfKeys];
+    //            int count=0;
+    //            for(int i =0;i<x->numberOfKeys;i++)
+    //            {
+    //                x->keys[i]=new char[MAXSTRINGLEN];
+    //                int j =0;
+    //                while(true)
+    //                {
+    //                    x->keys[i][j] = pData[sizeof(PageNum)+1+count];
+    //                    if(x->keys[i][j]=='\0' || j==MAXSTRINGLEN)
+    //                        break;
+    //                    j++;
+    //                    count++;
+    //                }
+    //            }
+    //            break;
+    //        }
+    //        default:
+    //        {
+    //            x->keys = new char*[x->numberOfKeys];
+    //            for(int i =0;i<x->numberOfKeys;i++)
+    //                x->keys[i]=&pData[sizeof(PageNum)+sizeof(int)+i*filehdr.attrLength];
+    //            break;
+    //        }
+    //    }
     
     for(int i =0;i<=x->numberOfKeys;i++)
     {
@@ -112,12 +112,12 @@ void writeNodeOnNewPage(node* x)
     pData[0+sizeof(PageNum)]=x->numberOfKeys;
     for(int i =0;i<x->numberOfKeys;i++)
     {
-       memcpy(&pData[sizeof(PageNum)+sizeof(int)+i*filehdr.attrLength], x->keys[i], filehdr.attrLength);
+        memcpy(&pData[sizeof(PageNum)+sizeof(int)+i*filehdr.attrLength], x->keys[i], filehdr.attrLength);
     }
     
     for(int i =0;i<=x->numberOfKeys;i++)
     {
-       pData[sizeof(PageNum)+sizeof(int)+x->numberOfKeys*filehdr.attrLength+i*sizeof(PageNum)]= x->children[i];
+        pData[sizeof(PageNum)+sizeof(int)+x->numberOfKeys*filehdr.attrLength+i*sizeof(PageNum)]= x->children[i];
     }
     x->leaf = (bool)pData[sizeof(PageNum)+sizeof(int)+x->numberOfKeys*filehdr.attrLength+(x->numberOfKeys+1)*sizeof(PageNum)];
     filehandler.MarkDirty(x->pageNumber);
@@ -164,11 +164,11 @@ void insertNonFull(node* x, void*  pData,const RID &rid)
     int i = x->numberOfKeys;
     if(x->leaf)
     {
-            while(i>=1 && !compare(pData,x->keys[i]))
-            {
-                x->keys[i+1]=x->keys[i];
-                i--;
-            }
+        while(i>=1 && !compare(pData,x->keys[i]))
+        {
+            x->keys[i+1]=x->keys[i];
+            i--;
+        }
         x->keys[i+1]=(char*)pData;
         x->numberOfKeys++;
         //write x;
@@ -186,28 +186,28 @@ void insertNonFull(node* x, void*  pData,const RID &rid)
         {
             splitChild(x,i);
             if(compare(pData,x->keys[i]))
-               i++;
-    }
+                i++;
+        }
         insertNonFull(childi,pData,rid);
     }
     
     
 }
-               
+
 void insert(node* x, void* pData, const RID &rid)
 {
     //x is the root node
-  if(x->numberOfKeys==2*t-1)
-  {
-      node* s = new node();//s becomes the root
-      s->leaf = false;
-      s->numberOfKeys=0;
-      s->children[0]=x->pageNumber;
-      splitChild(s,0);
-      insertNonFull(s,pData,rid);
-  }
-  else
-    insertNonFull(x,pData,rid);
+    if(x->numberOfKeys==2*t-1)
+    {
+        node* s = new node();//s becomes the root
+        s->leaf = false;
+        s->numberOfKeys=0;
+        s->children[0]=x->pageNumber;
+        splitChild(s,0);
+        insertNonFull(s,pData,rid);
+    }
+    else
+        insertNonFull(x,pData,rid);
 }
 
 IX_IndexHandle::IX_IndexHandle()
