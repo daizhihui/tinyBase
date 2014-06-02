@@ -53,6 +53,7 @@ bool compare(void* k1,void* k2)
 
 node* readNodeFromPageNum(PageNum pn)
 {
+    
     return  NULL;
 }
 
@@ -85,23 +86,24 @@ void splitChild(node * x, int i)
     
 }
 
-void insertNonFull(node* x, void*  value)
+void insertNonFull(node* x, void*  pData,const RID &rid)
 {
     int i = x->numberOfKeys;
     if(x->leaf)
     {
-            while(i>=1 && !compare(value,x->keys[i]))
+            while(i>=1 && !compare(pData,x->keys[i]))
             {
                 x->keys[i+1]=x->keys[i];
                 i--;
             }
-        x->keys[i+1]=value;
+        x->keys[i+1]=pData;
         x->numberOfKeys++;
         //write x;
+        
     }
     else
     {
-        while(i>=1 && !compare(value,x->keys[i]))
+        while(i>=1 && !compare(pData,x->keys[i]))
             i--;
         i++;
         //read x->children[i];
@@ -110,16 +112,16 @@ void insertNonFull(node* x, void*  value)
         if(childi->numberOfKeys==2*t-1)
         {
             splitChild(x,i);
-            if(compare(value,x->keys[i]))
+            if(compare(pData,x->keys[i]))
                i++;
     }
-        insertNonFull(childi,value);
+        insertNonFull(childi,pData,rid);
     }
     
     
 }
                
-void insert(node* x, void* value)
+void insert(node* x, void* pData, const RID &rid)
 {
     //x is the root node
   if(x->numberOfKeys==2*t-1)
@@ -129,10 +131,10 @@ void insert(node* x, void* value)
       s->numberOfKeys=0;
       s->children[0]=x->pageNumber;
       splitChild(s,0);
-      insertNonFull(s,value);
+      insertNonFull(s,pData,rid);
   }
   else
-    insertNonFull(x,value);
+    insertNonFull(x,pData,rid);
 }
 
 IX_IndexHandle::IX_IndexHandle()
