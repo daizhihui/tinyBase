@@ -15,6 +15,7 @@
 // Constants and defines
 //
 const int IX_HEADER_PAGE_NUM = 0;
+const int IX_ROOT_NULL = -1;
 
 
 #endif // IX_INTERNAL_H
