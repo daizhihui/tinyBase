@@ -33,14 +33,18 @@ struct node
 //compare
 //returns true when k1 is greater than k2
 // if k1 and k2 are strings, it will return the one with the biggest first character that does not match.
-bool compare(void* k1,void* k2)
+int compare(void* k1,void* k2)
 {
     switch (filehdr.attrType) {
         case FLOAT:
-            return (*(float*)k1)>(*(float*)k2);
+            if(*(float*)k1==(*(float*)k2))
+                return 0;
+            return (*(float*)k1)>(*(float*)k2)?1:-1;
             break;
         case INT:
-            return (*(int*)k1)>(*(int*)k2);
+            if((*(int*)k1)==(*(int*)k2))
+                return 0;
+            return (*(int*)k1)>(*(int*)k2)?1:-1;
             break;
         case STRING:
             return strcmp((char*)k1,(char*)k2);
@@ -220,18 +224,30 @@ void insertNonFull(node* x, void*  pData,const RID &rid)
     //Leaves point only to 1 bucket.
     
     int i = x->numberOfKeys;
+    int comp =0;
     if(x->leaf)
     {
-        while(i>=1 && !compare(pData,x->keys[i]))
+        while(i>=1 && ((comp = compare(pData,x->keys[i]))==-1))
         {
-            x->keys[i+1]=x->keys[i];
-            i--;
+                x->keys[i+1]=x->keys[i];
+                i--;
         }
-        x->keys[i+1]=(char*)pData;
-        x->numberOfKeys++;
-        //bucket:
+        if(comp == 1)//new key
+        {
+            x->keys[i+1]=(char*)pData;
+            x->numberOfKeys++;
+            PageNum next=-1;
+            addToBucket(next, rid);
+            x->children[i+1] = next;
+            //new bucket
+        }
+        else
+        {// existing bucket
+            addToBucket(x->children[i], rid);
+        }
+        
+        
         //x->children = new PageNum();
-        writeNodeOnNewPage(x);
         filehandler.MarkDirty(x->pageNumber);
     }
     else
