@@ -10,10 +10,10 @@
 #include <stdio.h>
 #include <string.h>
 //temporary, just for algo.
+//we will need these
 struct IX_FileHdr filehdr;
 PF_FileHandle filehandler;
 PF_PageHandle pageHandler;
-//RC GetThisPage (PageNum pageNum, PF_PageHandle &pageHandle)
 
 //TODO: make sure bucket logic is there.
 
@@ -25,7 +25,7 @@ struct node
     PageNum pageNumber;
     int numberOfKeys;
 //    int numberOfChildren; = numberOfKeys+1;
-    void** keys;
+    char** keys; //read as array of bytes
     PageNum* children;
     bool leaf;
 };
@@ -58,13 +58,71 @@ node* readNodeFromPageNum(PageNum pn)
     pageHandler.GetData(pData);
     node* x = new node();
     x->pageNumber = pData[0];
-    x->numberOfKeys = pData[0+sizeof(PageNum)];
-    x->keys = (void**)pData[0+sizeof(PageNum)+sizeof(int)];
-    x->children = (PageNum*)pData[0+sizeof(PageNum)+2*sizeof(int)];
-    x->leaf = (bool)pData[0+2*sizeof(PageNum)+2*sizeof(int)];
+    x->numberOfKeys = pData[sizeof(PageNum)];
+    
+    x->keys = new char*[x->numberOfKeys];
+    for(int i =0;i<x->numberOfKeys;i++)
+        memcpy(x->keys[i], &pData[sizeof(PageNum)+sizeof(int)+i*filehdr.attrLength], filehdr.attrLength);
+    
+    //in case we want the exact length of the strings:
+//    switch (filehdr.attrType) {
+//        case STRING:
+//        {
+//            x->keys = new char*[x->numberOfKeys];
+//            int count=0;
+//            for(int i =0;i<x->numberOfKeys;i++)
+//            {
+//                x->keys[i]=new char[MAXSTRINGLEN];
+//                int j =0;
+//                while(true)
+//                {
+//                    x->keys[i][j] = pData[sizeof(PageNum)+1+count];
+//                    if(x->keys[i][j]=='\0' || j==MAXSTRINGLEN)
+//                        break;
+//                    j++;
+//                    count++;
+//                }
+//            }
+//            break;
+//        }
+//        default:
+//        {
+//            x->keys = new char*[x->numberOfKeys];
+//            for(int i =0;i<x->numberOfKeys;i++)
+//                x->keys[i]=&pData[sizeof(PageNum)+sizeof(int)+i*filehdr.attrLength];
+//            break;
+//        }
+//    }
+    
+    for(int i =0;i<=x->numberOfKeys;i++)
+    {
+        x->children[i] = (PageNum)pData[sizeof(PageNum)+sizeof(int)+x->numberOfKeys*filehdr.attrLength+i*sizeof(PageNum)];
+    }
+    x->leaf = (bool)pData[sizeof(PageNum)+sizeof(int)+x->numberOfKeys*filehdr.attrLength+(x->numberOfKeys+1)*sizeof(PageNum)];
     return  x;
 }
 
+void writeNodeOnNewPage(node* x)
+{
+    filehandler.AllocatePage(pageHandler);
+    char* pData;
+    pageHandler.GetData(pData);
+    pageHandler.GetPageNum(x->pageNumber);
+    pData[0]=x->pageNumber;
+    pData[0+sizeof(PageNum)]=x->numberOfKeys;
+    for(int i =0;i<x->numberOfKeys;i++)
+    {
+       memcpy(&pData[sizeof(PageNum)+sizeof(int)+i*filehdr.attrLength], x->keys[i], filehdr.attrLength);
+    }
+    
+    for(int i =0;i<=x->numberOfKeys;i++)
+    {
+       pData[sizeof(PageNum)+sizeof(int)+x->numberOfKeys*filehdr.attrLength+i*sizeof(PageNum)]= x->children[i];
+    }
+    x->leaf = (bool)pData[sizeof(PageNum)+sizeof(int)+x->numberOfKeys*filehdr.attrLength+(x->numberOfKeys+1)*sizeof(PageNum)];
+    filehandler.MarkDirty(x->pageNumber);
+    
+}
 
 void splitChild(node * x, int i)
 {
@@ -91,6 +149,9 @@ void splitChild(node * x, int i)
     x->keys[i]=y->keys[t];
     x->numberOfKeys=x->numberOfKeys+1;
     //write y,z,x
+    filehandler.MarkDirty(y->pageNumber);
+    filehandler.MarkDirty(x->pageNumber);
+    writeNodeOnNewPage(z);
     
 }
 
@@ -108,7 +169,7 @@ void insertNonFull(node* x, void*  pData,const RID &rid)
                 x->keys[i+1]=x->keys[i];
                 i--;
             }
-        x->keys[i+1]=pData;
+        x->keys[i+1]=(char*)pData;
         x->numberOfKeys++;
         //write x;
         
