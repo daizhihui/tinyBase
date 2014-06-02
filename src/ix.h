@@ -14,6 +14,17 @@
 #include "pf.h"
 
 //
+// IX_FileHdr: Header structure for files
+//
+struct IX_FileHdr {
+    AttrType attrType; //attribute type
+    int attrLength; //attribute length
+    int indexNo; //indexNo
+    int numMaxEntries; // max number of entries in a node
+    PageNum rootPageNum; // page number of the root in the B+ tree
+};
+
+//
 // IX_IndexHandle: IX Index File interface
 //
 class IX_IndexHandle {
@@ -29,6 +40,10 @@ public:
 
     // Force index files to disk
     RC ForcePages();
+    
+    PF_FileHandle pfFileHandle;
+    IX_FileHdr fileHdr;                                   // file header
+    int bHdrChanged;                                      // dirty flag for file
 };
 
 //
@@ -93,16 +108,7 @@ private:
 };
 
 
-//
-// IX_FileHdr: Header structure for files
-//
-struct IX_FileHdr {
-    AttrType attrType; //attribute type
-    int attrLength; //attribute length
-    int indexNo; //indexNo
-    int numMaxEntries; // max number of entries in a node
-    PageNum rootPageNum; // page number of the root in the B+ tree
-};
+
 
 //
 // Print-error function
