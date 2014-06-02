@@ -53,8 +53,16 @@ bool compare(void* k1,void* k2)
 
 node* readNodeFromPageNum(PageNum pn)
 {
-    
-    return  NULL;
+    filehandler.GetThisPage(pn, pageHandler);
+    char* pData;
+    pageHandler.GetData(pData);
+    node* x = new node();
+    x->pageNumber = pData[0];
+    x->numberOfKeys = pData[0+sizeof(PageNum)];
+    x->keys = (void**)pData[0+sizeof(PageNum)+sizeof(int)];
+    x->children = (PageNum*)pData[0+sizeof(PageNum)+2*sizeof(int)];
+    x->leaf = (bool)pData[0+2*sizeof(PageNum)+2*sizeof(int)];
+    return  x;
 }
 
 
@@ -88,6 +96,10 @@ void splitChild(node * x, int i)
 
 void insertNonFull(node* x, void*  pData,const RID &rid)
 {
+    //if same key, add to bucket and increment number of rids.
+    //if new key create bucket and add.
+    //Leaves point only to 1 bucket.
+    
     int i = x->numberOfKeys;
     if(x->leaf)
     {
