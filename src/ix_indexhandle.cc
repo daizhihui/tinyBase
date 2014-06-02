@@ -63,6 +63,7 @@ node* readNodeFromPageNum(PageNum pn)
     x->numberOfKeys = pData[sizeof(PageNum)];
     
     x->keys = new char*[x->numberOfKeys];
+    x->children = new PageNum[x->numberOfKeys+1];
     for(int i =0;i<x->numberOfKeys;i++)
         memcpy(x->keys[i], &pData[sizeof(PageNum)+sizeof(int)+i*filehdr.attrLength], filehdr.attrLength);
     
@@ -127,6 +128,55 @@ void writeNodeOnNewPage(node* x)
     
 }
 
+void addToBucket(PageNum bucket, const RID &rid)
+{
+    PageNum ridPN;
+    SlotNum ridSN;
+    rid.GetPageNum(ridPN);
+    rid.GetSlotNum(ridSN);
+    
+    if(bucket == -1 || filehandler.GetThisPage(bucket, pageHandler)!=0)
+    {//bucket does not exist
+        filehandler.AllocatePage(pageHandler);
+        pageHandler.GetPageNum(bucket);
+        char* data;
+        pageHandler.GetData(data);
+        data[0] = (int)(2*sizeof(int)+sizeof(PageNum)+sizeof(SlotNum));
+        data[sizeof(int)]=(int)-1;//no next TODO: change?
+        data[2*sizeof(int)]=ridPN;
+        data[2*sizeof(int)+sizeof(PageNum)]=ridSN;
+        filehandler.MarkDirty(bucket);
+    }
+    else //bucket exists
+    {
+        char* data;
+        pageHandler.GetData(data);
+
+        int size = (int)data[0];
+        PageNum next = (PageNum)data[sizeof(int)];
+        if(next!=-1)
+        {//bucket full and already has next
+            
+            addToBucket(next,rid);
+        }
+        else if(size + sizeof(PageNum) + sizeof(SlotNum)>= PF_PAGE_SIZE)
+        {
+            //allocate new bucket
+            addToBucket(next, rid);
+            data[sizeof(int)]=next;
+
+        }
+        else
+        {
+            // goes into bucket
+            data[size] = ridPN;
+            data[size+sizeof(PageNum)]=ridSN;
+            data[0]= size+sizeof(PageNum)+sizeof(SlotNum);
+            filehandler.MarkDirty(bucket);
+        }
+    }
+    
+}
 void splitChild(node * x, int i)
 {
     //the new node to write
@@ -179,8 +229,10 @@ void insertNonFull(node* x, void*  pData,const RID &rid)
         }
         x->keys[i+1]=(char*)pData;
         x->numberOfKeys++;
-        //write x;
-        
+        //bucket:
+        //x->children = new PageNum();
+        writeNodeOnNewPage(x);
+        filehandler.MarkDirty(x->pageNumber);
     }
     else
     {
