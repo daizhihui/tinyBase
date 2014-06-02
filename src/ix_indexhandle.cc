@@ -221,7 +221,10 @@ void insert(node* x, void* pData, const RID &rid)
 
 IX_IndexHandle::IX_IndexHandle()
 {
-    
+    // Initialize member variables
+    bHdrChanged = FALSE;
+    memset(&fileHdr, 0, sizeof(fileHdr));
+    fileHdr.rootPageNum = IX_ROOT_NULL;
 }
 
 IX_IndexHandle::~IX_IndexHandle()
@@ -241,8 +244,60 @@ RC IX_IndexHandle::DeleteEntry(void *pData, const RID &rid)
     
 }
 
+
 // Force index files to disk
 RC IX_IndexHandle::ForcePages()
 {
-    
+    RC rc;
+
+    // Write back the file header if any changes made to the header
+    // while the file is open
+    if (bHdrChanged) {
+       PF_PageHandle pageHandle;
+       char* pData;
+
+       // Get the header page
+       if (rc = pfFileHandle.GetFirstPage(pageHandle))
+          // Test: unopened(closed) fileHandle, invalid file
+          goto err_return;
+
+       // Get a pointer where header information will be written
+       if (rc = pageHandle.GetData(pData))
+          // Should not happen
+          goto err_unpin;
+
+       // Write the file header (to the buffer pool)
+       memcpy(pData, &fileHdr, sizeof(fileHdr));
+
+       // Mark the header page as dirty
+       if (rc = pfFileHandle.MarkDirty(IX_HEADER_PAGE_NUM))
+          // Should not happen
+          goto err_unpin;
+
+       // Unpin the header page
+       if (rc = pfFileHandle.UnpinPage(IX_HEADER_PAGE_NUM))
+          // Should not happen
+          goto err_return;
+
+       if (rc = pfFileHandle.ForcePages(IX_HEADER_PAGE_NUM))
+          // Should not happen
+          goto err_return;
+
+       // Set file header to be not changed
+       bHdrChanged = FALSE;
+    }
+
+    // Call PF_FileHandle::ForcePages()
+    if (rc = pfFileHandle.ForcePages(ALL_PAGES))
+       goto err_return;
+
+    // Return ok
+    return (0);
+
+    // Recover from inconsistent state due to unexpected error
+ err_unpin:
+    pfFileHandle.UnpinPage(IX_HEADER_PAGE_NUM);
+ err_return:
+    // Return error
+    return (rc);
 }
