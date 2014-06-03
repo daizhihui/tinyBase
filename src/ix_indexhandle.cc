@@ -34,14 +34,18 @@ struct node
 //compare
 //returns true when k1 is greater than k2
 // if k1 and k2 are strings, it will return the one with the biggest first character that does not match.
-bool compare(void* k1,void* k2)
+int compare(void* k1,void* k2)
 {
     switch (filehdr.attrType) {
         case FLOAT:
-            return (*(float*)k1)>(*(float*)k2);
+            if(*(float*)k1==(*(float*)k2))
+                return 0;
+            return (*(float*)k1)>(*(float*)k2)?1:-1;
             break;
         case INT:
-            return (*(int*)k1)>(*(int*)k2);
+            if((*(int*)k1)==(*(int*)k2))
+                return 0;
+            return (*(int*)k1)>(*(int*)k2)?1:-1;
             break;
         case STRING:
             return strcmp((char*)k1,(char*)k2);
@@ -51,6 +55,8 @@ bool compare(void* k1,void* k2)
     }
     
 }
+
+//Will read and init a node from this page on the disk
 
 node* readNodeFromPageNum(PageNum pn)
 {
@@ -62,6 +68,7 @@ node* readNodeFromPageNum(PageNum pn)
     x->numberOfKeys = pData[sizeof(PageNum)];
     
     x->keys = new char*[x->numberOfKeys];
+    x->children = new PageNum[x->numberOfKeys+1];
     for(int i =0;i<x->numberOfKeys;i++)
         memcpy(x->keys[i], &pData[sizeof(PageNum)+sizeof(int)+i*filehdr.attrLength], filehdr.attrLength);
     
@@ -103,6 +110,7 @@ node* readNodeFromPageNum(PageNum pn)
     return  x;
 }
 
+//will write a node on a new page
 void writeNodeOnNewPage(node* x)
 {
     filehandler.AllocatePage(pageHandler);
@@ -125,6 +133,55 @@ void writeNodeOnNewPage(node* x)
     
 }
 
+void addToBucket(PageNum bucket, const RID &rid)
+{
+    PageNum ridPN;
+    SlotNum ridSN;
+    rid.GetPageNum(ridPN);
+    rid.GetSlotNum(ridSN);
+    
+    if(bucket == -1 || filehandler.GetThisPage(bucket, pageHandler)!=0)
+    {//bucket does not exist
+        filehandler.AllocatePage(pageHandler);
+        pageHandler.GetPageNum(bucket);
+        char* data;
+        pageHandler.GetData(data);
+        data[0] = (int)(2*sizeof(int)+sizeof(PageNum)+sizeof(SlotNum));
+        data[sizeof(int)]=(int)-1;//no next TODO: change?
+        data[2*sizeof(int)]=ridPN;
+        data[2*sizeof(int)+sizeof(PageNum)]=ridSN;
+        filehandler.MarkDirty(bucket);
+    }
+    else //bucket exists
+    {
+        char* data;
+        pageHandler.GetData(data);
+
+        int size = (int)data[0];
+        PageNum next = (PageNum)data[sizeof(int)];
+        if(next!=-1)
+        {//bucket full and already has next
+            
+            addToBucket(next,rid);
+        }
+        else if(size + sizeof(PageNum) + sizeof(SlotNum)>= PF_PAGE_SIZE)
+        {
+            //allocate new bucket
+            addToBucket(next, rid);
+            data[sizeof(int)]=next;
+
+        }
+        else
+        {
+            // goes into bucket
+            data[size] = ridPN;
+            data[size+sizeof(PageNum)]=ridSN;
+            data[0]= size+sizeof(PageNum)+sizeof(SlotNum);
+            filehandler.MarkDirty(bucket);
+        }
+    }
+    
+}
 void splitChild(node * x, int i)
 {
     //the new node to write
@@ -156,6 +213,11 @@ void splitChild(node * x, int i)
     
 }
 
+
+//called recursively, if node x is a leaf, it adds the entry to the bucket
+// if x is not a leaf, it goes to its children while splitting them if they have
+// the necessary amount of keys.
+
 void insertNonFull(node* x, void*  pData,const RID &rid)
 {
     //if same key, add to bucket and increment number of rids.
@@ -163,17 +225,31 @@ void insertNonFull(node* x, void*  pData,const RID &rid)
     //Leaves point only to 1 bucket.
     
     int i = x->numberOfKeys;
+    int comp =0;
     if(x->leaf)
     {
-        while(i>=1 && !compare(pData,x->keys[i]))
+        while(i>=1 && ((comp = compare(pData,x->keys[i]))==-1))
         {
-            x->keys[i+1]=x->keys[i];
-            i--;
+                x->keys[i+1]=x->keys[i];
+                i--;
         }
-        x->keys[i+1]=(char*)pData;
-        x->numberOfKeys++;
-        //write x;
+        if(comp == 1)//new key
+        {
+            x->keys[i+1]=(char*)pData;
+            x->numberOfKeys++;
+            PageNum next=-1;
+            addToBucket(next, rid);
+            x->children[i+1] = next;
+            //new bucket
+        }
+        else
+        {// existing bucket
+            addToBucket(x->children[i], rid);
+        }
         
+        
+        //x->children = new PageNum();
+        filehandler.MarkDirty(x->pageNumber);
     }
     else
     {
@@ -195,6 +271,7 @@ void insertNonFull(node* x, void*  pData,const RID &rid)
     
 }
 
+//start of recursion for the insert, x should be the root node
 void insert(node* x, void* pData, const RID &rid)
 {
     //x is the root node
