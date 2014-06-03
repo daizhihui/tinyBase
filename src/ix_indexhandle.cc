@@ -7,6 +7,7 @@
 //
 
 #include "ix.h"
+#include "ix_internal.h"
 #include <stdio.h>
 #include <string.h>
 //temporary, just for algo.
