@@ -18,4 +18,9 @@ const int IX_HEADER_PAGE_NUM = 0;
 const int IX_ROOT_NULL = -1;
 
 
+struct IX_BucketHdr {
+    PageNum before;
+    PageNum next;
+};
+
 #endif // IX_INTERNAL_H

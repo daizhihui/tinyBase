@@ -29,6 +29,10 @@ struct node
     char** keys; //read as array of bytes
     PageNum* children;
     bool leaf;
+
+    //add by dzh
+    bool isRoot;
+    int layerNum; //layer number in the tree
 };
 
 //compare
@@ -307,11 +311,353 @@ RC IX_IndexHandle::InsertEntry(void *pData, const RID &rid)
     
 }
 
-// Delete a new index entry
-RC IX_IndexHandle::DeleteEntry(void *pData, const RID &rid)
-{
-    
+
+struct nodeInfoInPath{
+    PageNum self;
+    PageNum neighborL;
+    PageNum neighborR;
+    PageNum anchor;
+    AttrType key; //key value
+    int entryNum; //position of this entry
+};
+
+
+void collapseRoot(node * oldRoot){
+    char* data;
+    PF_PageHandle pageHandle;
+
+
+    //tree becomes empty
+    if(oldRoot->leaf) {
+        filehdr.rootPageNum = IX_EMPTY_TREE;
+
+
+    }
+    else{ //generate new root
+        filehdr.rootPageNum = oldRoot->children[0];
+
+    }
+    //write back to buffer pool fileHeader
+    filehandler.GetFirstPage(pageHandle);
+    pageHandle.GetData(data);
+    PageNum fileHeaderPage;
+    pageHandle.GetPageNum(fileHeaderPage);
+    ((IX_FileHdr *)data)->rootPageNum = filehdr.rootPageNum;
+    filehandler.MarkDirty(fileHeaderPage); //
+
+    //dispose of oldRoot page
+    filehandler.MarkDirty(oldRoot->pageNumber);
+    filehandler.UnpinPage(oldRoot->pageNumber);
+    filehandler.DisposePage(oldRoot->pageNumber);
 }
+
+
+
+void merge (node * thisNode , node *neighborNode, node *anchorNode, int keyNum){
+    node * leftN = NULL; //to check all new node -> memory leak
+    node * rightN = NULL;
+    if(compare(thisNode->keys[0],neighborNode->keys[0]) >=0) {
+        leftN = neighborNode;
+        rightN = thisNode;
+    }
+    else{
+        leftN = thisNode;
+        rightN = neighborNode;
+    }
+
+    //node is not leaf, copy keyNum key to leftN
+    if(!leftN->leaf){
+        leftN->keys[leftN->numberOfKeys] = anchorNode->keys[keyNum];
+    }
+
+    for(int i=0; i<rightN->numberOfKeys; i++){
+        leftN->keys[i+leftN->numberOfKeys+1] = rightN->keys[i];
+        leftN->children[i+leftN->numberOfKeys] = rightN->children[i];
+    }
+
+
+    //modify numberOfKeys
+    leftN->numberOfKeys += rightN->numberOfKeys;
+
+    //dispose page in node rightN
+    //PF_PageHandle pageHandle;
+    //char * pData; //initialiate ??
+    //filehandler.GetThisPage(rightN->pageNumber,pageHandle);
+    //pageHandle.GetData(pData);
+    filehandler.DisposePage(rightN->pageNumber);
+
+    //write left node to buffer pool
+    writeNodeOnNewPage(leftN);
+
+    anchorNode->children[keyNum-1] = leftN->pageNumber;
+
+     //disappear keyNum in anchorNode, shift all the following keys forward
+//     for(int i= keyNum; i<anchorNode->numberOfKeys-1; i++){
+//         anchorNode->keys[i] = anchorNode->keys[i+1];
+//         anchorNode->children[i] = anchorNode->children[i+1];
+//     }
+
+    //size of keys diminules 1
+    anchorNode->numberOfKeys -= 1;
+
+     //delete keyNum in anchorNode, recursively
+    deleteEntryInNode(anchorNode,keyNum,path);
+}
+
+// input : keyNum is the position of key that separates this node and neighorNode
+//shift over half of a neighbor’s plus keys, adjust anchor
+void shift (node * thisNode , node *neighborNode, node *anchorNode, int keyNum ){
+    //node is not leaf, copy keyNum key to thisNode
+    if(!thisNode->leaf){
+        thisNode->keys[t-1] = anchorNode->keys[keyNum];
+    }
+
+    int numKeysShifted = (neighborNode->numberOfKeys - thisNode->numberOfKeys) / 2;
+    //shift to thisNode from neighborNode
+    for(int i=0; i<numKeysShifted;i++){
+        thisNode->keys[t+i] = neighborNode->keys[i];
+        thisNode->children[t+i] = neighborNode->children[i];
+        neighborNode->keys[i] = neighborNode->keys[i+numKeysShifted];
+        neighborNode->children[i] = neighborNode->children[i+numKeysShifted];
+    }
+    //thisNode->children[t+numKeysShifted] =
+    thisNode->numberOfKeys += (numKeysShifted+1);
+    neighborNode->numberOfKeys -= numKeysShifted;
+
+    //copy separate valut to anchorNode key
+    anchorNode->keys[keyNum] = neighborNode->keys[numKeysShifted];
+
+    //write these changes to buffer pool
+    writeNodeOnNewPage(thisNode);
+    writeNodeOnNewPage(neighborNode);
+    writeNodeOnNewPage(anchorNode);
+}
+
+//delete the entry in position keyNum in node x
+void deleteEntryInNode(node* x, int keyNum, nodeInfoInPath * path)
+{
+    //remove the entry and move its following entries forward
+    // TODO make more efficient
+    for(int i=keyNum; i < x->numberOfKeys ; ++i){
+        x->keys[i] = x->keys[i+1];
+        x->children[i] = x->children[i+1];
+    }
+    --(x->numberOfKeys);
+
+    //underflow
+    if(x->numberOfKeys < t){
+
+        //this node is root
+        if(x->isRoot) {
+            collapseRoot(x);
+            return;
+        }
+
+        //check immediate neighbors
+
+        nodeInfoInPath = path[x->layerNum];
+
+        PageNum neighborR = path[x->layerNum].neighborR;
+        PageNum neighborL = path[x->layerNum].neighborL;
+        //choose a right neighor
+        node * nodeNeighbor = new node();
+        int entryNum = 0;
+        if(neighborR!=-1&&neighborL!=-1){
+            node * nodeR = readNodeFromPageNum(neighborR);
+            node * nodeL = readNodeFromPageNum(neighborL);
+            nodeNeighbor = ((nodeR->numberOfKeys >= nodeL->numberOfKeys) ? nodeR:nodeL);
+            entryNum = ((nodeR->numberOfKeys >= nodeL->numberOfKeys) ? nodeInfoInPath.entryNum: (nodeInfoInPath.entryNum-1));  //
+        }
+        else if(neighborR!= -1 && neighborL==-1) {
+            nodeNeighbor = readNodeFromPageNum(neighborR);
+            entryNum = nodeInfoInPath.entryNum;
+        }
+        else if(neighborR == -1 && neighborL!=-1) {
+            nodeNeighbor = readNodeFromPageNum(neighborL);
+            entryNum = nodeInfoInPath.entryNum -1;
+        }
+        else return; //TODO shouldn't happen
+
+
+        node *anchorNode = readNodeFromPageNum(nodeInfoInPath.anchor);
+
+        //both neighbors are minimum size
+        if(nodeNeighbor->numberOfKeys==t){
+            merge(x,nodeNeighbor,anchorNode,entryNum);
+        }
+        else {
+            shift(x,nodeNeighbor,anchorNode,entryNum);
+        }
+    }
+
+}
+
+
+
+
+
+RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * path){
+    char* data;
+    PF_PageHandle pageHandle;
+    filehandler.GetThisPage(bucket, pageHandle);
+    pageHandle.GetData(data);
+    IX_BucketHdr bucketHdr = (IX_BucketHdr)data[sizeof(IX_BucketHdr)];
+
+    PageNum before = bucketHdr.before;
+    PageNum next = bucketHdr.next;
+
+    int ridNum=0;
+    RID ridi;
+    //iterate for all non-empty rids
+    for(; ridNum< size && GetBitmap(pData + sizeof(IX_BucketHdr), ridNum); ++ridNum){
+        ridi = data[filehdr.bucketHeaderSize+ridNum*sizeof(RID)];
+        //found in this page
+        if(ridi==rid) {
+            // Clear bit
+            ClrBitmap(pData + sizeof(IX_BucketHdr), ridNum);
+            // Find a non-free rid
+            for ( ridNum = 0; ridNum < filehdr.numRidsPerBucket; ridNum++)
+               if (GetBitmap(pData + sizeof(IX_BucketHdr), ridNum))
+                  break;
+
+            // Dispose the bucket if empty (the deleted rid was the last one)
+            // This will help the total number of occupied pages to be remained
+            // as small as possible
+
+
+            if (ridNum == filehdr.numRidsPerBucket) {
+               //TODO change insert (rid space be free, can be reused, add freeSlot in bucket page header)
+
+                //dispose of page bucket
+                pfFileHandle.MarkDirty(bucket);
+                pfFileHandle.UnpinPage(bucket);
+                pfFileHandle.DisposePage(bucket);
+
+               //the first  bucket to be removed
+                if(before == -1) {
+                    PageNum leafPage = path[IX_NUM_Layers].anchor;
+                    int entryNum = path[IX_NUM_Layers].entryNum;
+                    node * leaf = readNodeFromPageNum(leafPage);
+                    if(bucketHdr.next == -1) {
+                        //delete the entry in leaf
+
+                        deleteEntryInNode(leaf,entryNum,path);
+
+                    }
+                    else{
+                        //replace pageNum in leaf, change IX_BucketHdr.before in next bucket
+                        filehandler.GetThisPage(bucketHdr.next,pageHandle);
+                        pageHandle.GetData(data);
+                        ((IX_BucketHdr *) data)->before = -1; //this bucket becomes the first bucket in the chain list
+                        leaf->children[entryNum] = bucketHdr.next;
+                        pfFileHandle.MarkDirty(leafPage);
+                        pfFileHandle.MarkDirty(bucketHdr.next);
+
+                    }
+
+                }
+                //rid not in the first bucket
+                else{
+
+                    //modify IX_BucketHdr.after in last bucket
+                    filehandler.GetThisPage(bucketHdr.before,pageHandle);
+                    pageHandle.GetData(data);
+                    ((IX_BucketHdr *) data)->next = bucketHdr.next; //
+                    pfFileHandle.MarkDirty(bucketHdr.before);
+
+                    if(bucketHdr.next!=-1){
+                        //modify IX_BucketHdr.before in next bucket
+                        filehandler.GetThisPage(bucketHdr.next,pageHandle);
+                        pageHandle.GetData(data);
+                        ((IX_BucketHdr *) data)->before = bucketHdr.before; //
+                        pfFileHandle.MarkDirty(bucketHdr.next);
+                    }
+                }
+
+            }
+            return 0;
+        }
+    }
+
+    //not found in this page, find the next
+    if(bucketHdr.next == -1) return IX_INDEX_NOTFOUND;
+    return deleteRID(next,rid);
+}
+
+
+
+// Delete a index entry
+RC IX_IndexHandle::DeleteEntry(void *pData, const RID &rid){
+    //rechercher la feuille L contenant le point d’accès.
+//    node* x = new node();
+//    //TODO
+
+    PageNum rootPage = filehdr.rootPageNum;
+    node *root = readNodeFromPageNum(rootPage);
+    nodeInfoInPath path[IX_NUM_Layers]; //TODO define IX_NUM_Layers(not including buckets)
+    //for root
+    path[0].self = rootPage;
+    path[0].anchor=-1; //implicit root
+    path[0].neighborL=-1;
+    path[0].neighborR=-1;
+    path[0].key = -1;
+    path[0].entryNum = -1;
+    //parcourir l'arbre et obtenir les donnees enregistrees dans path
+    traversalTree(root,pData,path,0);
+    //remove rid in bucket
+    //get the first bucket page
+    PageNum bucket = path[IX_NUM_Layers].self;
+    filehandler.GetThisPage(bucket, pageHandler);
+
+    //delete rid in the buckets
+    RC rc = deleteRID(bucket,rid,path);
+}
+
+
+//recurse to a leaf node from root to find deletable entry:
+//for nodes in the search path, calculate immediate neighbors and their anchors
+RC traversalTree(node *x, void *pData, nodeInfoInPath *path,int pathLayer){
+    if(x->leaf){
+        int i = 0;
+        while(i<=x->numberOfKeys && compare(pData,x->keys[i])!=0)
+            i++;
+        // if not found in leaf
+        if(compare(pData,x->keys[i])!=0) return IX_INDEX_NOTFOUND; //TODO define ERROR
+
+        //found in leaf
+        path[pathLayer+1].self = x->children[i]; //TODO verify
+        path[pathLayer+1].anchor = x->pageNumber;
+        path[pathLayer+1].neighborL = -1; //for bucket, no need to know its neighbors
+        path[pathLayer+1].neighborR = -1;
+        path[pathLayer+1].key = x->keys[i];
+        path[pathLayer+1].entryNum = i;
+        return 0;
+    }
+
+    int i = 0;
+    while(i<=x->numberOfKeys && compare(pData,x->keys[i])==1)
+        i++;
+    node* childi = readNodeFromPageNum(x->children[i]);
+    //save immdediate neighor
+    path[pathLayer+1].anchor = x->pageNumber; //childi's anchor
+    path[pathLayer+1].self = x->children[i];
+    path[pathLayer+1].key = x->keys[i];
+    path[pathLayer+1].entryNum = i;
+
+
+    if(0<i<=x->numberOfKeys) {
+        path[pathLayer+1].neighborL = x->children[i-1];
+        path[pathLayer+1].neighborR = x->children[i+1];
+    }
+    else if(i==0){
+        path[pathLayer+1].neighborR = x->children[1];
+    }
+    else{
+        path[pathLayer+1].neighborR = x->children[x->numberOfKeys];
+    }
+    return traversalTree(childi,pData,path,pathLayer+1);
+}
+
 
 
 // Force index files to disk
@@ -370,3 +716,42 @@ RC IX_IndexHandle::ForcePages()
     // Return error
     return (rc);
 }
+
+
+//
+// GetBitmap
+//
+// Desc: Return a bit corresponding to the given index
+// In:   map - address of bitmap
+//       idx - bit index
+// Ret:  TRUE or FALSE
+//
+int IX_IndexHandle::GetBitmap(char *map, int idx) const
+{
+   return (map[idx / 8] & (1 << (idx % 8))) != 0;
+}
+
+//
+// SetBitmap
+//
+// Desc: Set a bit corresponding to the given index
+// In:   map - address of bitmap
+//       idx - bit index
+//
+void IX_IndexHandle::SetBitmap(char *map, int idx) const
+{
+   map[idx / 8] |= (1 << (idx % 8));
+}
+
+//
+// ClrBitmap
+//
+// Desc: Clear a bit corresponding to the given index
+// In:   map - address of bitmap
+//       idx - bit index
+//
+void IX_IndexHandle::ClrBitmap(char *map, int idx) const
+{
+   map[idx / 8] &= ~(1 << (idx % 8));
+}
+

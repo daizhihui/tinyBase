@@ -102,7 +102,12 @@ RC IX_Manager::CreateIndex(const char *fileName, int indexNo, AttrType attrType,
     fileHdr->attrLength=attrLength;
     fileHdr->numMaxEntries=(PF_PAGE_SIZE)/(attrLength+sizeof(PageNum));
     fileHdr->rootPageNum=1;
-    
+
+    //add by dzh : calculate numRidsPerBucket and bucketHeaderSize
+    fileHdr->numRidsPerBucket = (PF_PAGE_SIZE - sizeof(IX_BucketHdr) - 1)
+            / (sizeof(RID) + 1.0/8);
+    fileHdr->bucketHeaderSize = sizeof(IX_BucketHdr) + (fileHdr->numRidsPerBucket + 7) / 8;
+
     // Mark the header page as dirty
     if (rc = pfFileHandle.MarkDirty(IX_HEADER_PAGE_NUM))
         // Should not happen

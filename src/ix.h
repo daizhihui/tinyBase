@@ -22,6 +22,9 @@ struct IX_FileHdr {
     int indexNo; //indexNo
     int numMaxEntries; // max number of entries in a node
     PageNum rootPageNum; // page number of the root in the B+ tree
+    //add by dzh
+    int numRidsPerBucket; //# of rids in each bucket
+    int bucketHeaderSize; // nextFree + bitMap
 };
 
 //
@@ -44,6 +47,13 @@ public:
     PF_FileHandle pfFileHandle;
     IX_FileHdr fileHdr;                                   // file header
     int bHdrChanged;                                      // dirty flag for file
+
+private:
+    // Bitmap Manipulation
+    int GetBitmap  (char *map, int idx) const;
+    void SetBitmap (char *map, int idx) const;
+    void ClrBitmap (char *map, int idx) const;
+
 };
 
 //
@@ -116,5 +126,5 @@ private:
 void IX_PrintError(RC rc);
 
 #define  IX_INVALIDATTR (START_IX_WARN + 0) //invalid attribute parameters
-
+#define IX_INDEX_NOTFOUND (START_IX_WARN + 1) //index not found
 #endif
