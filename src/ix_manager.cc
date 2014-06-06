@@ -102,6 +102,7 @@ RC IX_Manager::CreateIndex(const char *fileName, int indexNo, AttrType attrType,
     fileHdr->attrLength=attrLength;
     fileHdr->numMaxEntries=(PF_PAGE_SIZE)/(attrLength+sizeof(PageNum));
     fileHdr->rootPageNum=1;
+    fileHdr->numRidsPerBucket=(PF_PAGE_SIZE)/(sizeof(PageNum)+sizeof(SlotNum));
 
     //add by dzh : calculate numRidsPerBucket and bucketHeaderSize
     fileHdr->numRidsPerBucket = (PF_PAGE_SIZE - sizeof(IX_BucketHdr) - 1)
