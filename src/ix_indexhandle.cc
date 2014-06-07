@@ -312,6 +312,7 @@ RC IX_IndexHandle::InsertEntry(void *pData, const RID &rid)
 }
 
 
+
 struct nodeInfoInPath{
     PageNum self;
     PageNum neighborL;
@@ -326,16 +327,12 @@ void collapseRoot(node * oldRoot){
     char* data;
     PF_PageHandle pageHandle;
 
-
     //tree becomes empty
     if(oldRoot->leaf) {
         filehdr.rootPageNum = IX_EMPTY_TREE;
-
-
     }
     else{ //generate new root
         filehdr.rootPageNum = oldRoot->children[0];
-
     }
     //write back to buffer pool fileHeader
     filehandler.GetFirstPage(pageHandle);
@@ -351,10 +348,17 @@ void collapseRoot(node * oldRoot){
     filehandler.DisposePage(oldRoot->pageNumber);
 }
 
+//Desc: merge two nodes, copy all the entries in the right node to the leftnode
+//      delete the right node, that means call recusively the function deleteEntryInNode(node* x, int keyNum, nodeInfoInPath * path)
+//      where node x is replaced by the node anchorNode
 
+//input : keyNum - is the position of key that separates this node and neighorNode
+//
+//
 
 void merge (node * thisNode , node *neighborNode, node *anchorNode, int keyNum){
-    node * leftN = NULL; //to check all new node -> memory leak
+    //to get right node and left node
+    node * leftN = NULL;
     node * rightN = NULL;
     if(compare(thisNode->keys[0],neighborNode->keys[0]) >=0) {
         leftN = neighborNode;
@@ -365,67 +369,126 @@ void merge (node * thisNode , node *neighborNode, node *anchorNode, int keyNum){
         rightN = neighborNode;
     }
 
-    //node is not leaf, copy keyNum key to leftN
+    //node is not leaf
     if(!leftN->leaf){
+        //copy keyNum key to leftN
         leftN->keys[leftN->numberOfKeys] = anchorNode->keys[keyNum];
+        leftN->numberOfKeys++;
     }
 
+    //copy all the entries in the right node to the leftnode
     for(int i=0; i<rightN->numberOfKeys; i++){
-        leftN->keys[i+leftN->numberOfKeys+1] = rightN->keys[i];
-        leftN->children[i+leftN->numberOfKeys] = rightN->children[i];
+        leftN->children[leftN->numberOfKeys] = rightN->children[i];
+        leftN->keys[leftN->numberOfKeys] = rightN->keys[i];
+        leftN->numberOfKeys++;
+
     }
 
-
-    //modify numberOfKeys
-    leftN->numberOfKeys += rightN->numberOfKeys;
+    //node is not leaf, copy the last child of rightN to leftN
+    if(!leftN->leaf){
+        leftN->children[leftN->numberOfKeys] = rightN->children[rightN->numberOfKeys];
+    }
 
     //dispose page in node rightN
-    //PF_PageHandle pageHandle;
-    //char * pData; //initialiate ??
-    //filehandler.GetThisPage(rightN->pageNumber,pageHandle);
-    //pageHandle.GetData(pData);
+    filehandler.UnpinPage(rightN->pageNumber);
     filehandler.DisposePage(rightN->pageNumber);
 
     //write left node to buffer pool
     writeNodeOnNewPage(leftN);
 
-    anchorNode->children[keyNum-1] = leftN->pageNumber;
-
-     //disappear keyNum in anchorNode, shift all the following keys forward
-//     for(int i= keyNum; i<anchorNode->numberOfKeys-1; i++){
-//         anchorNode->keys[i] = anchorNode->keys[i+1];
-//         anchorNode->children[i] = anchorNode->children[i+1];
-//     }
-
-    //size of keys diminules 1
-    anchorNode->numberOfKeys -= 1;
-
      //delete keyNum in anchorNode, recursively
     deleteEntryInNode(anchorNode,keyNum,path);
 }
 
-// input : keyNum is the position of key that separates this node and neighorNode
-//shift over half of a neighbor’s plus keys, adjust anchor
-void shift (node * thisNode , node *neighborNode, node *anchorNode, int keyNum ){
-    //node is not leaf, copy keyNum key to thisNode
-    if(!thisNode->leaf){
-        thisNode->keys[t-1] = anchorNode->keys[keyNum];
-    }
+
+//Desc: shift over half of a neighbor’s plus keys to this node
+//      update anchor : the key value in the index entry pointing to the second node must be changed to the the lowest search key in the second node
+
+//input : keyNum - is the position of key that separates this node and neighorNode
+//        isRight - true : neighbor is on the rightside; false : neighbor is on the leftside
+//
+void shift (node * thisNode , node *neighborNode, node *anchorNode, int keyNum, bool isRight ){
 
     int numKeysShifted = (neighborNode->numberOfKeys - thisNode->numberOfKeys) / 2;
-    //shift to thisNode from neighborNode
-    for(int i=0; i<numKeysShifted;i++){
-        thisNode->keys[t+i] = neighborNode->keys[i];
-        thisNode->children[t+i] = neighborNode->children[i];
-        neighborNode->keys[i] = neighborNode->keys[i+numKeysShifted];
-        neighborNode->children[i] = neighborNode->children[i+numKeysShifted];
-    }
-    //thisNode->children[t+numKeysShifted] =
-    thisNode->numberOfKeys += (numKeysShifted+1);
-    neighborNode->numberOfKeys -= numKeysShifted;
+    // neighbor is on the rightside
+    if(isRight){
+        //node is not leaf
+        if(!thisNode->leaf){
+            //copy key in position keyNum to thisNode
+            thisNode->keys[t-1] = anchorNode->keys[keyNum];
+            thisNode->numberOfKeys++;
+            //shift numKeysShifted-1 (p,k) to thisNode from neighborNode
+            for(int i=0; i<numKeysShifted-1;i++){
+                thisNode->children[thisNode->numberOfKeys] = neighborNode->children[i];
+                thisNode->keys[thisNode->numberOfKeys] = neighborNode->keys[i];
+                thisNode->numberOfKeys++;
+            }
+            thisNode->children[thisNode->numberOfKeys] = neighborNode->children[numKeysShifted-1];
+            //copy separate value to anchorNode key
+            anchorNode->keys[keyNum] = neighborNode->keys[numKeysShifted-1];
+        }
 
-    //copy separate valut to anchorNode key
-    anchorNode->keys[keyNum] = neighborNode->keys[numKeysShifted];
+        //node is leaf, shift numKeysShifted (k,p) to thisNode from neighborNode
+        else{
+            for(int i=0; i<numKeysShifted;i++){
+                thisNode->children[thisNode->numberOfKeys] = neighborNode->children[i];
+                thisNode->keys[thisNode->numberOfKeys] = neighborNode->keys[i];
+                thisNode->numberOfKeys++;
+            }
+            //copy the the lowest search key in the second node to anchor's
+             anchorNode->keys[keyNum] = neighborNode->keys[numKeysShifted];
+        }
+
+        //shift neighborNode (k,v) to the left
+        for(int i=0; i<neighborNode->numberOfKeys-numKeysShifted;i++){
+            neighborNode->keys[i] = neighborNode->keys[i+numKeysShifted];
+            neighborNode->children[i] = neighborNode->children[i+numKeysShifted];
+        }
+        //update the number of keys in neighborNode
+        neighborNode->numberOfKeys -= numKeysShifted;
+    }
+    //neighbor is on the leftside
+    else {
+        //shift all the entries in thisNode by numKeysShifted to the right
+        for(int i=thisNode->numberOfKeys-1; i>=0;i--){
+            thisNode->children[i+numKeysShifted] = thisNode->children[i];
+            thisNode->keys[i+numKeysShifted] = thisNode->keys[i];
+        }
+
+        //node is not leaf
+        if(!thisNode->leaf){
+            //copy the last pointer of neighborNode to the numKeysShifted-1 of thisNode
+            thisNode->children[numKeysShifted-1] = neighborNode->children[neighborNode->numberOfKeys];
+
+            //shift numKeysShifted-1 pairs of (pointer,key) to thisNode from the end of neighborNode
+            for(int i=numKeysShifted-2; i>=0; i--){
+                thisNode->keys[i] = neighborNode->keys[neighborNode->numberOfKeys-1];
+                thisNode->children[i] = neighborNode->children[neighborNode->numberOfKeys-1];
+                thisNode->numberOfKeys++;
+                neighborNode->numberOfKeys--;
+            }
+
+            //copy key in position keyNum of anchorNode to thisNode
+            thisNode->keys[numKeysShifted-1] = anchorNode->keys[keyNum];
+            thisNode->numberOfKeys++;
+
+            //copy the last key value from neighborNode to the position keyNum of anchorNode
+            anchorNode->keys[keyNum] = neighborNode->keys[neighborNode->numberOfKeys-1];
+        }
+
+        //node is leaf, shift numKeysShifted (k,p) to thisNode from neighborNode
+        else{
+            for(int i=numKeysShifted-1; i>=0; i--){
+                thisNode->keys[i] = neighborNode->keys[neighborNode->numberOfKeys-1];
+                thisNode->children[i] = neighborNode->children[neighborNode->numberOfKeys-1];
+                thisNode->numberOfKeys++;
+                neighborNode->numberOfKeys--;
+            }
+
+            //copy the the largest search key in the second node to anchor's
+             anchorNode->keys[keyNum] = neighborNode->keys[neighborNode->numberOfKeys-1];
+        }
+    }
 
     //write these changes to buffer pool
     writeNodeOnNewPage(thisNode);
@@ -438,15 +501,22 @@ void deleteEntryInNode(node* x, int keyNum, nodeInfoInPath * path)
 {
     //remove the entry and move its following entries forward
     // TODO make more efficient
-    for(int i=keyNum; i < x->numberOfKeys ; ++i){
-        x->keys[i] = x->keys[i+1];
-        x->children[i] = x->children[i+1];
+    if(x->leaf){
+        for(int i=keyNum; i < x->numberOfKeys ; ++i){
+            x->keys[i] = x->keys[i+1];
+            x->children[i] = x->children[i+1];
+        }
+    }
+    else{
+        for(int i=keyNum; i < x->numberOfKeys ; ++i){
+            x->keys[i] = x->keys[i+1];
+            x->children[i+1] = x->children[i+2];
+        }
     }
     --(x->numberOfKeys);
 
     //underflow
     if(x->numberOfKeys < t){
-
         //this node is root
         if(x->isRoot) {
             collapseRoot(x);
@@ -454,27 +524,39 @@ void deleteEntryInNode(node* x, int keyNum, nodeInfoInPath * path)
         }
 
         //check immediate neighbors
-
         nodeInfoInPath = path[x->layerNum];
-
         PageNum neighborR = path[x->layerNum].neighborR;
         PageNum neighborL = path[x->layerNum].neighborL;
-        //choose a right neighor
-        node * nodeNeighbor = new node();
+
+        //choose a neighor with more keys
+        node * nodeNeighbor = NULL;
         int entryNum = 0;
-        if(neighborR!=-1&&neighborL!=-1){
+        bool isRight = false;
+        if(neighborR!=-1 && neighborL!=-1){
             node * nodeR = readNodeFromPageNum(neighborR);
             node * nodeL = readNodeFromPageNum(neighborL);
-            nodeNeighbor = ((nodeR->numberOfKeys >= nodeL->numberOfKeys) ? nodeR:nodeL);
-            entryNum = ((nodeR->numberOfKeys >= nodeL->numberOfKeys) ? nodeInfoInPath.entryNum: (nodeInfoInPath.entryNum-1));  //
+            if(nodeR->numberOfKeys >= nodeL->numberOfKeys){
+                nodeNeighbor = nodeR;
+                entryNum = nodeInfoInPath.entryNum;
+                isRight = true;
+
+            }
+            else{
+                nodeNeighbor = nodeL;
+                entryNum = nodeInfoInPath.entryNum - 1;
+                isRight = false;
+            }
+
         }
         else if(neighborR!= -1 && neighborL==-1) {
             nodeNeighbor = readNodeFromPageNum(neighborR);
             entryNum = nodeInfoInPath.entryNum;
+            isRight = true;
         }
         else if(neighborR == -1 && neighborL!=-1) {
             nodeNeighbor = readNodeFromPageNum(neighborL);
             entryNum = nodeInfoInPath.entryNum -1;
+            isRight = false;
         }
         else return; //TODO shouldn't happen
 
@@ -486,14 +568,11 @@ void deleteEntryInNode(node* x, int keyNum, nodeInfoInPath * path)
             merge(x,nodeNeighbor,anchorNode,entryNum);
         }
         else {
-            shift(x,nodeNeighbor,anchorNode,entryNum);
+            shift(x,nodeNeighbor,anchorNode,entryNum,isRight);
         }
     }
 
 }
-
-
-
 
 
 RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * path){
@@ -524,23 +603,20 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
             // This will help the total number of occupied pages to be remained
             // as small as possible
 
-
             if (ridNum == filehdr.numRidsPerBucket) {
                //TODO change insert (rid space be free, can be reused, add freeSlot in bucket page header)
-
                 //dispose of page bucket
                 pfFileHandle.MarkDirty(bucket);
                 pfFileHandle.UnpinPage(bucket);
                 pfFileHandle.DisposePage(bucket);
 
-               //the first  bucket to be removed
+               //the first bucket to be removed
                 if(before == -1) {
                     PageNum leafPage = path[IX_NUM_Layers].anchor;
                     int entryNum = path[IX_NUM_Layers].entryNum;
                     node * leaf = readNodeFromPageNum(leafPage);
                     if(bucketHdr.next == -1) {
                         //delete the entry in leaf
-
                         deleteEntryInNode(leaf,entryNum,path);
 
                     }
@@ -564,7 +640,6 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
                     pageHandle.GetData(data);
                     ((IX_BucketHdr *) data)->next = bucketHdr.next; //
                     pfFileHandle.MarkDirty(bucketHdr.before);
-
                     if(bucketHdr.next!=-1){
                         //modify IX_BucketHdr.before in next bucket
                         filehandler.GetThisPage(bucketHdr.next,pageHandle);
