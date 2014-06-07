@@ -21,19 +21,28 @@ PF_PageHandle pageHandler;
 //node =data + child page numbers
 //t is the minimum degree of the Tree: every node other than the root must have t-1 keys at least.
 int t;
+struct entry
+{
+    PageNum child;
+    char* key;
+};
+
 struct node
 {
     PageNum pageNumber;
-    int numberOfKeys;
-    //    int numberOfChildren; = numberOfKeys+1;
-    char** keys; //read as array of bytes
-    PageNum* children;
+    PageNum previous;//Next node on the same level, might only need to implement for leaf nodes.
+    PageNum next;
     bool leaf;
-
+    
     //add by dzh
     bool isRoot;
     int layerNum; //layer number in the tree
+    
+    int numberOfKeys;
+    entry* entries;//K,V pairs
+  
 };
+
 
 //compare
 //returns true when k1 is greater than k2
@@ -67,14 +76,14 @@ node* readNodeFromPageNum(PageNum pn)
     filehandler.GetThisPage(pn, pageHandler);
     char* pData;
     pageHandler.GetData(pData);
-    node* x = new node();
-    x->pageNumber = pData[0];
-    x->numberOfKeys = pData[sizeof(PageNum)];
-    
-    x->keys = new char*[x->numberOfKeys];
-    x->children = new PageNum[x->numberOfKeys+1];
-    for(int i =0;i<x->numberOfKeys;i++)
-        memcpy(x->keys[i], &pData[sizeof(PageNum)+sizeof(int)+i*filehdr.attrLength], filehdr.attrLength);
+    node* x = (node*)pData;
+//    x->pageNumber = pData[0];
+//    x->numberOfKeys = pData[sizeof(PageNum)];
+//    
+//    x->keys = new char*[x->numberOfKeys];
+//    x->children = new PageNum[x->numberOfKeys+1];
+//    for(int i =0;i<x->numberOfKeys;i++)
+//        memcpy(x->keys[i], &pData[sizeof(PageNum)+sizeof(int)+i*filehdr.attrLength], filehdr.attrLength);
     
     //in case we want the exact length of the strings:
     //    switch (filehdr.attrType) {
@@ -106,35 +115,32 @@ node* readNodeFromPageNum(PageNum pn)
     //        }
     //    }
     
-    for(int i =0;i<=x->numberOfKeys;i++)
-    {
-        x->children[i] = (PageNum)pData[sizeof(PageNum)+sizeof(int)+x->numberOfKeys*filehdr.attrLength+i*sizeof(PageNum)];
-    }
-    x->leaf = (bool)pData[sizeof(PageNum)+sizeof(int)+x->numberOfKeys*filehdr.attrLength+(x->numberOfKeys+1)*sizeof(PageNum)];
+//    for(int i =0;i<=x->numberOfKeys;i++)
+//    {
+//        x->children[i] = (PageNum)pData[sizeof(PageNum)+sizeof(int)+x->numberOfKeys*filehdr.attrLength+i*sizeof(PageNum)];
+//    }
+//    x->leaf = (bool)pData[sizeof(PageNum)+sizeof(int)+x->numberOfKeys*filehdr.attrLength+(x->numberOfKeys+1)*sizeof(PageNum)];
     return  x;
 }
 
 //will write a node on a new page
+//must write part by part because of dynamic allocation on entries.
 void writeNodeOnNewPage(node* x)
 {
     filehandler.AllocatePage(pageHandler);
     char* pData;
     pageHandler.GetData(pData);
     pageHandler.GetPageNum(x->pageNumber);
-    pData[0]=x->pageNumber;
-    pData[0+sizeof(PageNum)]=x->numberOfKeys;
+    
+    memcpy(pData,x,3*sizeof(PageNum)+2*sizeof(bool)+2*sizeof(int));
+    
+    //copy entries
     for(int i =0;i<x->numberOfKeys;i++)
     {
-        memcpy(&pData[sizeof(PageNum)+sizeof(int)+i*filehdr.attrLength], x->keys[i], filehdr.attrLength);
+        memcpy(&pData[3*sizeof(PageNum)+2*sizeof(bool)+2*sizeof(int)+i*(filehdr.attrLength+sizeof(PageNum))], &(x->entries[i]), filehdr.attrLength+sizeof(PageNum));
     }
-    
-    for(int i =0;i<=x->numberOfKeys;i++)
-    {
-        pData[sizeof(PageNum)+sizeof(int)+x->numberOfKeys*filehdr.attrLength+i*sizeof(PageNum)]= x->children[i];
-    }
-    x->leaf = (bool)pData[sizeof(PageNum)+sizeof(int)+x->numberOfKeys*filehdr.attrLength+(x->numberOfKeys+1)*sizeof(PageNum)];
     filehandler.MarkDirty(x->pageNumber);
-    
+//    delete x;
 }
 
 void addToBucket(PageNum bucket, const RID &rid)
@@ -143,6 +149,7 @@ void addToBucket(PageNum bucket, const RID &rid)
     SlotNum ridSN;
     rid.GetPageNum(ridPN);
     rid.GetSlotNum(ridSN);
+    //use IX_BUCKETHEADER
     
     if(bucket == -1 || filehandler.GetThisPage(bucket, pageHandler)!=0)
     {//bucket does not exist
@@ -188,33 +195,42 @@ void addToBucket(PageNum bucket, const RID &rid)
 }
 void splitChild(node * x, int i)
 {
+    
     //the new node to write
     node *z = new node();
     //read x's child from disk and fill out
-    node *y = readNodeFromPageNum(x->children[i]);
+    node *y = readNodeFromPageNum(x->entries[i].child);
     //
     z->leaf = y->leaf;
     z->numberOfKeys=t-1;
+    z->entries = new entry[t];
     for(int j = 1;j<=t-1;j++)
     {
-        z->keys[j]=y->keys[j+1];
+        z->entries[j].key = y->entries[j+1].key;
+        //z->keys[j]=y->keys[j+1];
     }
     if(!y->leaf)
         for(int j =1;j<=t;j++)
-            z->children[j]=y->children[j+1];
+            z->entries[j].child=y->entries[j+1].child;
     y->numberOfKeys=t-1;
     for(int j = x->numberOfKeys+1;j>i+1;j--)
-        x->children[j+1]=x->children[j];
-    x->children[i+1]=z->pageNumber;
+        x->entries[j+1].child=x->entries[j].child;
+    x->entries[i+1].child=z->pageNumber;
     for(int j = x->numberOfKeys;j>i;j--)
-        x->keys[j+1]=x->keys[j];
-    x->keys[i]=y->keys[t];
+        x->entries[j+1].key=x->entries[j].key;
+    x->entries[i].key=y->entries[t].key;
     x->numberOfKeys=x->numberOfKeys+1;
-    //write y,z,x
+    
+    if(y->leaf)
+    {
+        z->next=y->next;
+        y->next=z->pageNumber;
+        z->previous=y->pageNumber;
+    }
     filehandler.MarkDirty(y->pageNumber);
     filehandler.MarkDirty(x->pageNumber);
     writeNodeOnNewPage(z);
-    
+    //deletes
 }
 
 
@@ -232,23 +248,23 @@ void insertNonFull(node* x, void*  pData,const RID &rid)
     int comp =0;
     if(x->leaf)
     {
-        while(i>=1 && ((comp = compare(pData,x->keys[i]))==-1))
+        while(i>=1 && ((comp = compare(pData,x->entries[i].key))==-1))
         {
-                x->keys[i+1]=x->keys[i];
+                x->entries[i+1].key=x->entries[i].key;
                 i--;
         }
         if(comp == 1)//new key
         {
-            x->keys[i+1]=(char*)pData;
+            x->entries[i+1].key=(char*)pData;
             x->numberOfKeys++;
             PageNum next=-1;
             addToBucket(next, rid);
-            x->children[i+1] = next;
+            x->entries[i+1].child = next;
             //new bucket
         }
         else
         {// existing bucket
-            addToBucket(x->children[i], rid);
+            addToBucket(x->entries[i].child, rid);
         }
         
         
@@ -257,16 +273,16 @@ void insertNonFull(node* x, void*  pData,const RID &rid)
     }
     else
     {
-        while(i>=1 && !compare(pData,x->keys[i]))
+        while(i>=1 && !compare(pData,x->entries[i].key))
             i--;
         i++;
         //read x->children[i];
-        node* childi = readNodeFromPageNum(x->children[i]);
+        node* childi = readNodeFromPageNum(x->entries[i].child);
         
         if(childi->numberOfKeys==2*t-1)
         {
             splitChild(x,i);
-            if(compare(pData,x->keys[i]))
+            if(compare(pData,x->entries[i].key))
                 i++;
         }
         insertNonFull(childi,pData,rid);
@@ -281,12 +297,21 @@ void insert(node* x, void* pData, const RID &rid)
     //x is the root node
     if(x->numberOfKeys==2*t-1)
     {
+
         node* s = new node();//s becomes the root
+        //allocate and write s?
         s->leaf = false;
+        s->isRoot=true;
         s->numberOfKeys=0;
-        s->children[0]=x->pageNumber;
+        s->entries = new entry();
+        s->entries[0].child = x->previous;
+//        s->children[0]=x->pageNumber;
+        x->leaf = true;
+        x->isRoot=false;
         splitChild(s,0);
         insertNonFull(s,pData,rid);
+        //write s
+        //update x
     }
     else
         insertNonFull(x,pData,rid);
