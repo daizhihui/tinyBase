@@ -20,11 +20,13 @@ struct IX_FileHdr {
     AttrType attrType; //attribute type
     int attrLength; //attribute length
     int indexNo; //indexNo
-    int numMaxEntries; // max number of entries in a node
+    //int numMaxEntries; // max number of entries in a node
+    int orderOfTree;  //every node contains m entries, where order<=m<=2order except for the root, corresponding to t
     PageNum rootPageNum; // page number of the root in the B+ tree
     //add by dzh
     int numRidsPerBucket; //# of rids in each bucket
-    int bucketHeaderSize; // nextFree + bitMap
+    int bucketHeaderSize; // size of (IX_BucketHdr + bitMap)
+    int treeLayerNums; //number of layers in the b+ tree
 };
 
 //

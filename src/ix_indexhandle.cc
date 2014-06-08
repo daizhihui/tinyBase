@@ -36,8 +36,7 @@ struct node
     
     //add by dzh
     bool isRoot;
-    int layerNum; //layer number in the tree
-    
+
     int numberOfKeys;
     entry* entries;//K,V pairs
   
@@ -322,7 +321,7 @@ IX_IndexHandle::IX_IndexHandle()
     // Initialize member variables
     bHdrChanged = FALSE;
     memset(&fileHdr, 0, sizeof(fileHdr));
-    fileHdr.rootPageNum = IX_ROOT_NULL;
+    fileHdr.rootPageNum = IX_EMPTY_TREE;
 }
 
 IX_IndexHandle::~IX_IndexHandle()
@@ -338,19 +337,17 @@ RC IX_IndexHandle::InsertEntry(void *pData, const RID &rid)
 
 
 
-struct nodeInfoInPath{
-    PageNum self;
-    PageNum neighborL;
-    PageNum neighborR;
-    PageNum anchor;
-    AttrType key; //key value
-    int entryNum; //position of this entry
-};
 
+//desc : after delete the last entry in the root, this function collapseRoot change the root
+//      if root is also the leaf, the tree becomes empty;
+//      otherwise, the first child of oldRoot becomes the new root
+//      treeLayerNums descrease by 1
 
+//input : oldRoot - old root
 void collapseRoot(node * oldRoot){
     char* data;
     PF_PageHandle pageHandle;
+
 
     //tree becomes empty
     if(oldRoot->leaf) {
@@ -359,13 +356,18 @@ void collapseRoot(node * oldRoot){
     else{ //generate new root
         filehdr.rootPageNum = oldRoot->children[0];
     }
+
+
     //write back to buffer pool fileHeader
     filehandler.GetFirstPage(pageHandle);
     pageHandle.GetData(data);
     PageNum fileHeaderPage;
     pageHandle.GetPageNum(fileHeaderPage);
     ((IX_FileHdr *)data)->rootPageNum = filehdr.rootPageNum;
-    filehandler.MarkDirty(fileHeaderPage); //
+    //number of layers in the tree decrease by 1
+    ((IX_FileHdr *)data)->treeLayerNums--;
+
+    filehandler.MarkDirty(fileHeaderPage);
 
     //dispose of oldRoot page
     filehandler.MarkDirty(oldRoot->pageNumber);
@@ -378,10 +380,10 @@ void collapseRoot(node * oldRoot){
 //      where node x is replaced by the node anchorNode
 
 //input : keyNum - is the position of key that separates this node and neighorNode
-//
+//        depthInPath - the depth of node thisNode in the path
 //
 
-void merge (node * thisNode , node *neighborNode, node *anchorNode, int keyNum){
+void merge (node * thisNode , node *neighborNode, node *anchorNode, int keyNum, int depthInPath){
     //to get right node and left node
     node * leftN = NULL;
     node * rightN = NULL;
@@ -422,7 +424,7 @@ void merge (node * thisNode , node *neighborNode, node *anchorNode, int keyNum){
     writeNodeOnNewPage(leftN);
 
      //delete keyNum in anchorNode, recursively
-    deleteEntryInNode(anchorNode,keyNum,path);
+    deleteEntryInNode(anchorNode,keyNum,path,depthInPath);
 }
 
 
@@ -521,8 +523,9 @@ void shift (node * thisNode , node *neighborNode, node *anchorNode, int keyNum, 
     writeNodeOnNewPage(anchorNode);
 }
 
-//delete the entry in position keyNum in node x
-void deleteEntryInNode(node* x, int keyNum, nodeInfoInPath * path)
+//desc : delete the entry in position keyNum in node x
+//input : depthInPath - the depth of node x in the path
+void deleteEntryInNode(node* x, int keyNum, nodeInfoInPath * path, int depthInPath)
 {
     //remove the entry and move its following entries forward
     // TODO make more efficient
@@ -544,14 +547,15 @@ void deleteEntryInNode(node* x, int keyNum, nodeInfoInPath * path)
     if(x->numberOfKeys < t){
         //this node is root
         if(x->isRoot) {
-            collapseRoot(x);
-            return;
+            if(x->numberOfKeys==0) //root has no more keys after delete
+                collapseRoot(x);
+            else //root has still keys, do nothing
+                return;
         }
-
         //check immediate neighbors
-        nodeInfoInPath = path[x->layerNum];
-        PageNum neighborR = path[x->layerNum].neighborR;
-        PageNum neighborL = path[x->layerNum].neighborL;
+        nodeInfoInPath = path[depthInPath];
+        PageNum neighborR = path[depthInPath].neighborR;
+        PageNum neighborL = path[depthInPath].neighborL;
 
         //choose a neighor with more keys
         node * nodeNeighbor = NULL;
@@ -590,7 +594,7 @@ void deleteEntryInNode(node* x, int keyNum, nodeInfoInPath * path)
 
         //both neighbors are minimum size
         if(nodeNeighbor->numberOfKeys==t){
-            merge(x,nodeNeighbor,anchorNode,entryNum);
+            merge(x,nodeNeighbor,anchorNode,entryNum, depthInPath-1);
         }
         else {
             shift(x,nodeNeighbor,anchorNode,entryNum,isRight);
@@ -599,8 +603,12 @@ void deleteEntryInNode(node* x, int keyNum, nodeInfoInPath * path)
 
 }
 
+// input :  bucket - the pageNum of bucket page
+//          rid - the rid that need be deleted
+//          path - an array of nodeNeighbor infos
+//          pathDepth - the length of array path
 
-RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * path){
+RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * path, int pathDepth){
     char* data;
     PF_PageHandle pageHandle;
     filehandler.GetThisPage(bucket, pageHandle);
@@ -637,12 +645,12 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
 
                //the first bucket to be removed
                 if(before == -1) {
-                    PageNum leafPage = path[IX_NUM_Layers].anchor;
-                    int entryNum = path[IX_NUM_Layers].entryNum;
+                    PageNum leafPage = path[pathDepth].anchor;
+                    int entryNum = path[pathDepth].entryNum;
                     node * leaf = readNodeFromPageNum(leafPage);
                     if(bucketHdr.next == -1) {
                         //delete the entry in leaf
-                        deleteEntryInNode(leaf,entryNum,path);
+                        deleteEntryInNode(leaf,entryNum,path,pathDepth-1);
 
                     }
                     else{
@@ -686,15 +694,14 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
 
 
 
-// Delete a index entry
+//desc : Delete a index entry
+//input : pData - the key value of index
+//          rid - the rid to be deleted
 RC IX_IndexHandle::DeleteEntry(void *pData, const RID &rid){
-    //rechercher la feuille L contenant le point d’accès.
-//    node* x = new node();
-//    //TODO
-
     PageNum rootPage = filehdr.rootPageNum;
     node *root = readNodeFromPageNum(rootPage);
-    nodeInfoInPath path[IX_NUM_Layers]; //TODO define IX_NUM_Layers(not including buckets)
+    //an array of nodeInfo to save infos about neighors and anchors
+    nodeInfoInPath path[fileHdr.treeLayerNums];
     //for root
     path[0].self = rootPage;
     path[0].anchor=-1; //implicit root
@@ -702,60 +709,76 @@ RC IX_IndexHandle::DeleteEntry(void *pData, const RID &rid){
     path[0].neighborR=-1;
     path[0].key = -1;
     path[0].entryNum = -1;
+
+    int pathDepth = 0;
     //parcourir l'arbre et obtenir les donnees enregistrees dans path
-    traversalTree(root,pData,path,0);
+    traversalTree(root,pData,path,pathDepth);
     //remove rid in bucket
     //get the first bucket page
-    PageNum bucket = path[IX_NUM_Layers].self;
-    filehandler.GetThisPage(bucket, pageHandler);
+    PageNum bucket = path[pathDepth].self;
+
 
     //delete rid in the buckets
-    RC rc = deleteRID(bucket,rid,path);
+    return deleteRID(bucket,rid,path,pathDepth);
 }
 
 
-//recurse to a leaf node from root to find deletable entry:
-//for nodes in the search path, calculate immediate neighbors and their anchors
-RC traversalTree(node *x, void *pData, nodeInfoInPath *path,int pathLayer){
+//desc : recurse to a leaf node from root to find deletable entry:
+//       for nodes in the search path, calculate immediate neighbors and their anchors
+//input : pData - the key value of index
+//          x - the node to
+//return : path - a pointer that points to a list of nodeInfoInPath
+//         pathDepth - the length of this list of nodeInfoInPath
+RC traversalTree(node *x, void *pData, nodeInfoInPath *path,int &pathDepth){
+    pathDepth++;
     if(x->leaf){
         int i = 0;
-        while(i<=x->numberOfKeys && compare(pData,x->keys[i])!=0)
+        while(i<x->numberOfKeys && compare(pData,x->keys[i])!=0)
             i++;
         // if not found in leaf
         if(compare(pData,x->keys[i])!=0) return IX_INDEX_NOTFOUND; //TODO define ERROR
 
-        //found in leaf
-        path[pathLayer+1].self = x->children[i]; //TODO verify
-        path[pathLayer+1].anchor = x->pageNumber;
-        path[pathLayer+1].neighborL = -1; //for bucket, no need to know its neighbors
-        path[pathLayer+1].neighborR = -1;
-        path[pathLayer+1].key = x->keys[i];
-        path[pathLayer+1].entryNum = i;
+        //found in leaf, save neighbor infos for bucket page
+        path[pathDepth].self = x->children[i]; //TODO verify
+        path[pathDepth].anchor = x->pageNumber;
+        path[pathDepth].neighborL = -1; //for bucket, no need to know its neighbors
+        path[pathDepth].neighborR = -1;
+        path[pathDepth].key = x->keys[i];
+        path[pathDepth].entryNum = i;
         return 0;
     }
 
     int i = 0;
-    while(i<=x->numberOfKeys && compare(pData,x->keys[i])==1)
+    while(i<x->numberOfKeys && compare(pData,x->keys[i])!=-1)
         i++;
     node* childi = readNodeFromPageNum(x->children[i]);
-    //save immdediate neighor
-    path[pathLayer+1].anchor = x->pageNumber; //childi's anchor
-    path[pathLayer+1].self = x->children[i];
-    path[pathLayer+1].key = x->keys[i];
-    path[pathLayer+1].entryNum = i;
+    //save immdediate neighors for childi
+    path[pathDepth].anchor = x->pageNumber; //childi's anchor
+    path[pathDepth].self = x->children[i];
+    path[pathDepth].key = x->keys[i];
+    path[pathDepth].entryNum = i;
 
 
-    if(0<i<=x->numberOfKeys) {
-        path[pathLayer+1].neighborL = x->children[i-1];
-        path[pathLayer+1].neighborR = x->children[i+1];
+    if(0<i<x->numberOfKeys) {
+        path[pathDepth].neighborL = x->children[i-1];
+        path[pathDepth].neighborR = x->children[i+1];
     }
+    //if pointer to this page is the first pointer in its parent
     else if(i==0){
-        path[pathLayer+1].neighborR = x->children[1];
+        path[pathDepth].neighborL = -1; //doesn't have left neighbor
+        path[pathDepth].neighborR = x->children[1];
     }
+    //if pointer to this page is the last pointer in its parent
+    else if(i==x->numberOfKeys){
+        path[pathDepth].neighborL = x->children[x->numberOfKeys-1];
+        path[pathDepth].neighborR = -1;
+    }
+    //this shouldn't happen
     else{
-        path[pathLayer+1].neighborR = x->children[x->numberOfKeys];
+        path[pathDepth].neighborL = -1;
+        path[pathDepth].neighborR = -1;
     }
-    return traversalTree(childi,pData,path,pathLayer+1);
+    return traversalTree(childi,pData,path,pathDepth);
 }
 
 

@@ -100,9 +100,11 @@ RC IX_Manager::CreateIndex(const char *fileName, int indexNo, AttrType attrType,
     fileHdr->indexNo=indexNo;
     fileHdr->attrType=attrType;
     fileHdr->attrLength=attrLength;
-    fileHdr->numMaxEntries=(PF_PAGE_SIZE)/(attrLength+sizeof(PageNum));
-    fileHdr->rootPageNum=1;
-    fileHdr->numRidsPerBucket=(PF_PAGE_SIZE)/(sizeof(PageNum)+sizeof(SlotNum));
+    //fileHdr->numMaxEntries=(PF_PAGE_SIZE)/(attrLength+sizeof(PageNum));
+    fileHdr->orderOfTree = (PF_PAGE_SIZE - sizeof(IX_IndexPageHdr))/(attrLength+sizeof(PageNum))/2;
+    fileHdr->rootPageNum=IX_EMPTY_TREE; //this tree is empty
+    fileHdr->treeLayerNums = 0;//this tree is empty
+    //fileHdr->numRidsPerBucket=(PF_PAGE_SIZE)/(sizeof(PageNum)+sizeof(SlotNum));
 
     //add by dzh : calculate numRidsPerBucket and bucketHeaderSize
     fileHdr->numRidsPerBucket = (PF_PAGE_SIZE - sizeof(IX_BucketHdr) - 1)
