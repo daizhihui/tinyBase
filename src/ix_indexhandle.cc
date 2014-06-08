@@ -30,7 +30,7 @@ struct entry
 struct node
 {
     PageNum pageNumber;
-    PageNum previous;//Next node on the same level, might only need to implement for leaf nodes.
+    PageNum previous;//previous node for leaves, first child for intermediary nodes.
     PageNum next;
     bool leaf;
     
@@ -142,7 +142,7 @@ void writeNodeOnNewPage(node* x)
 //    delete x;
 }
 
-void addToBucket(PageNum bucket, const RID &rid)
+void addToBucket(PageNum& bucket, const RID &rid, PageNum prev)
 {
     PageNum ridPN;
     SlotNum ridSN;
@@ -156,38 +156,60 @@ void addToBucket(PageNum bucket, const RID &rid)
         pageHandler.GetPageNum(bucket);
         char* data;
         pageHandler.GetData(data);
-        data[0] = (int)(2*sizeof(int)+sizeof(PageNum)+sizeof(SlotNum));
-        data[sizeof(int)]=(int)-1;//no next TODO: change?
-        data[2*sizeof(int)]=ridPN;
-        data[2*sizeof(int)+sizeof(PageNum)]=ridSN;
+        int maxEntries = (PF_PAGE_SIZE-sizeof(IX_BucketHdr))/(sizeof(RID)+1);
+        
+        data[0] = prev;//prev
+        data[sizeof(PageNum)] = -1;//next
+        //create bitmap: set all to 0 -- if bitmap isn't a multiple of bytes, uncomment following
+        int bytes = filehdr.numRidsPerBucket/8;
+        memset(data+sizeof(IX_BucketHdr), 0, bytes);//set to 0
+        
+//        int r = filehdr.numRidsPerBucket-bytes; //rest of bits
+//        int ind  = 0;
+//        while(r!=0)//set bit by bit
+//        {
+//            ClrBitmap(data+sizeof(IX_BucketHdr),filehdr.numRidsPerBucket-bytes*8+ind);
+//            r--;
+//            ind++;
+//        }
+//        //set first to 1;
+        SetBitmap(data+sizeof(IX_BucketHdr),0);
+        
+        data[sizeof(IX_BucketHdr)+filehdr.numRidsPerBucket/8]=ridPN;
+        data[sizeof(IX_BucketHdr)+filehdr.numRidsPerBucket/8+sizeof(PageNum)]=ridSN;
+
         filehandler.MarkDirty(bucket);
     }
     else //bucket exists
     {
         char* data;
         pageHandler.GetData(data);
-
-        int size = (int)data[0];
-        PageNum next = (PageNum)data[sizeof(int)];
-        if(next!=-1)
-        {//bucket full and already has next
+        //find first empty rid num
+        int ridnum;
+        for(ridnum=0;ridnum<filehdr.numRidsPerBucket;ridnum++)
+            if(GetBitmap(data+sizeof(IX_BucketHdr),ridnum))
+                break;
+        if(ridnum!=filehdr.numRidsPerBucket)
+        {
+            //found empty one.
+            //insert
+            data[sizeof(IX_BucketHdr)+filehdr.numRidsPerBucket/8 + ridnum*(sizeof(PageNum)+sizeof(SlotNum))] = ridPN;
+            data[sizeof(IX_BucketHdr)+filehdr.numRidsPerBucket/8 + ridnum*(sizeof(PageNum)+sizeof(SlotNum))+sizeof(PageNum)] = ridSN;
+            SetBitmap(data+sizeof(IX_BucketHdr),ridnum);
             
-            addToBucket(next,rid);
         }
-        else if(size + sizeof(PageNum) + sizeof(SlotNum)>= PF_PAGE_SIZE)
+        else//bucket full
         {
-            //allocate new bucket
-            addToBucket(next, rid);
-            data[sizeof(int)]=next;
-
-        }
-        else
-        {
-            // goes into bucket
-            data[size] = ridPN;
-            data[size+sizeof(PageNum)]=ridSN;
-            data[0]= size+sizeof(PageNum)+sizeof(SlotNum);
-            filehandler.MarkDirty(bucket);
+            PageNum next = data[sizeof(PageNum)];
+            if(next!=-1)
+            {//bucket full and already has next
+                addToBucket(next,rid,-1);
+            }
+            else
+            {//allocate new bucket
+                addToBucket(next, rid,bucket);
+                data[sizeof(PageNum)]=next;
+            }
         }
     }
     
@@ -198,7 +220,11 @@ void splitChild(node * x, int i)
     //the new node to write
     node *z = new node();
     //read x's child from disk and fill out
-    node *y = readNodeFromPageNum(x->entries[i].child);
+    node *y;
+    if(i!=-1)
+        y = readNodeFromPageNum(x->entries[i].child);
+    else
+        y = readNodeFromPageNum(x->previous);
     //
     z->leaf = y->leaf;
     z->numberOfKeys=t-1;
@@ -220,7 +246,7 @@ void splitChild(node * x, int i)
     x->entries[i].key=y->entries[t].key;
     x->numberOfKeys=x->numberOfKeys+1;
     
-    if(y->leaf)
+    if(y->leaf)//double linked list.
     {
         z->next=y->next;
         y->next=z->pageNumber;
@@ -257,13 +283,13 @@ void insertNonFull(node* x, void*  pData,const RID &rid)
             x->entries[i+1].key=(char*)pData;
             x->numberOfKeys++;
             PageNum next=-1;
-            addToBucket(next, rid);
+            addToBucket(next, rid,-1);
             x->entries[i+1].child = next;
             //new bucket
         }
         else
         {// existing bucket
-            addToBucket(x->entries[i].child, rid);
+            addToBucket(x->entries[i].child, rid,-1);
         }
         
         
@@ -302,12 +328,12 @@ void insert(node* x, void* pData, const RID &rid)
         s->leaf = false;
         s->isRoot=true;
         s->numberOfKeys=0;
-        s->entries = new entry();
-        s->entries[0].child = x->previous;
+//        s->entries = new entry();
+        s->previous = x->previous;
 //        s->children[0]=x->pageNumber;
         x->leaf = true;
         x->isRoot=false;
-        splitChild(s,0);
+        splitChild(s,-1);
         insertNonFull(s,pData,rid);
         //write s
         //update x
