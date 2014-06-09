@@ -139,7 +139,6 @@ void writeNodeOnNewPage(node* x)
         memcpy(&pData[3*sizeof(PageNum)+2*sizeof(bool)+2*sizeof(int)+i*(filehdr.attrLength+sizeof(PageNum))], &(x->entries[i]), filehdr.attrLength+sizeof(PageNum));
     }
     filehandler.MarkDirty(x->pageNumber);
-//    delete x;
 }
 
 void addToBucket(PageNum& bucket, const RID &rid, PageNum prev)
@@ -175,8 +174,8 @@ void addToBucket(PageNum& bucket, const RID &rid, PageNum prev)
 //        //set first to 1;
         SetBitmap(data+sizeof(IX_BucketHdr),0);
         
-        data[sizeof(IX_BucketHdr)+filehdr.numRidsPerBucket/8]=ridPN;
-        data[sizeof(IX_BucketHdr)+filehdr.numRidsPerBucket/8+sizeof(PageNum)]=ridSN;
+        data[sizeof(IX_BucketHdr)+bytes]=ridPN;
+        data[sizeof(IX_BucketHdr)+bytes+sizeof(PageNum)]=ridSN;
 
         filehandler.MarkDirty(bucket);
     }
@@ -214,36 +213,38 @@ void addToBucket(PageNum& bucket, const RID &rid, PageNum prev)
     }
     
 }
-void splitChild(node * x, int i)
+//x is father
+//y is child
+//i is index in x's entries, -1 if first
+void splitChild(node * x, int i,node * y)
 {
     
     //the new node to write
     node *z = new node();
-    //read x's child from disk and fill out
-    node *y;
-    if(i!=-1)
-        y = readNodeFromPageNum(x->entries[i].child);
-    else
-        y = readNodeFromPageNum(x->previous);
+
     //
     z->leaf = y->leaf;
     z->numberOfKeys=t-1;
-    z->entries = new entry[t];
-    for(int j = 1;j<=t-1;j++)
-    {
-        z->entries[j].key = y->entries[j+1].key;
-        //z->keys[j]=y->keys[j+1];
-    }
+    z->entries = new entry[t-1];
+    for(int j = 0;j<=t-2;j++)//largest t-1 keys of y
+        z->entries[j].key = y->entries[j+t].key;
     if(!y->leaf)
-        for(int j =1;j<=t;j++)
-            z->entries[j].child=y->entries[j+1].child;
+    {   z->previous=y->entries[t-1].child;//1 child +
+        for(int j =0;j<=t-2;j++)//t-1 children
+            z->entries[j].child=y->entries[j+t].child;
+    }
     y->numberOfKeys=t-1;
-    for(int j = x->numberOfKeys+1;j>i+1;j--)
-        x->entries[j+1].child=x->entries[j].child;
-    x->entries[i+1].child=z->pageNumber;
-    for(int j = x->numberOfKeys;j>i;j--)
-        x->entries[j+1].key=x->entries[j].key;
-    x->entries[i].key=y->entries[t].key;
+    if(i!=-1)
+    {
+        
+        for(int j = x->numberOfKeys;j>i;j--)
+        {
+            x->entries[j].child=x->entries[j-1].child;
+            x->entries[j].key=x->entries[j-1].key;
+        }
+        x->entries[i+1].child=z->pageNumber;
+        x->entries[i].key=y->entries[t-1].key;
+    }
     x->numberOfKeys=x->numberOfKeys+1;
     
     if(y->leaf)//double linked list.
@@ -255,7 +256,11 @@ void splitChild(node * x, int i)
     filehandler.MarkDirty(y->pageNumber);
     filehandler.MarkDirty(x->pageNumber);
     writeNodeOnNewPage(z);
-    //deletes
+    filehandler.ForcePages();
+    for(int i =0;i<z->numberOfKeys;i++)
+        delete z->entries[i].key;
+    delete z->entries;
+    delete z;
 }
 
 
@@ -311,6 +316,11 @@ void insertNonFull(node* x, void*  pData,const RID &rid)
                 i++;
         }
         insertNonFull(childi,pData,rid);
+        
+        for(int i =0;i<childi->numberOfKeys;i++)
+            delete childi->entries[i].key;
+        delete childi->entries;
+        delete childi;
     }
     
     
@@ -328,18 +338,29 @@ void insert(node* x, void* pData, const RID &rid)
         s->leaf = false;
         s->isRoot=true;
         s->numberOfKeys=0;
-//        s->entries = new entry();
         s->previous = x->previous;
-//        s->children[0]=x->pageNumber;
         x->leaf = true;
         x->isRoot=false;
+        s->entries= new entry[t-1];//allocate entries for new root.
         splitChild(s,-1);
         insertNonFull(s,pData,rid);
-        //write s
-        //update x
+        
+        filehdr.rootPageNum=s->pageNumber;
+        writeNodeOnNewPage(s);
+        filehandler.MarkDirty(x->pageNumber);
+        //point T->root = s; if we put the root in memory
+        filehandler.ForcePages();
+        
+        for(int i =0;i<x->numberOfKeys;i++)
+            delete x->entries[i].key;
+        delete x->entries;
+        delete x;
+    
     }
     else
         insertNonFull(x,pData,rid);
+   
+    
 }
 
 IX_IndexHandle::IX_IndexHandle()
