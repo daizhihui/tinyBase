@@ -23,6 +23,15 @@ struct IX_BucketHdr {
     PageNum next;
 };
 
+
+struct IX_IndexPageHdr{
+    PageNum pageNumber;
+    PageNum previous;//previous node for leaves, first child for intermediary nodes.
+    PageNum next;
+    bool leaf;
+    bool isRoot;
+    int numberOfKeys;     
+};
 //a structure to save infos about neighors and anchors when delete a index
 struct nodeInfoInPath{
     PageNum self;
