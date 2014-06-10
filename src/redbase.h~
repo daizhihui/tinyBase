@@ -18,7 +18,7 @@
                                         // in a relation
 
 #define yywrap() 1
-#define YY_SKIP_YYWRAP //add by dzh 03/06 because of error in building like "error: macro "yywrap" passed 1 arguments, but takes just 0"
+#define YY_SKIP_YYWRAP //add by dzh 03/06 because of error in building "error: macro "yywrap" passed 1 arguments, but takes just 0"
 void yyerror(const char *);
 
 //

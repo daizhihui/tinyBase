@@ -13,6 +13,7 @@
 #include "rm_rid.h"  // Please don't change these lines
 #include "pf.h"
 
+
 //
 // IX_FileHdr: Header structure for files
 //
@@ -28,6 +29,32 @@ struct IX_FileHdr {
     int bucketHeaderSize; // size of (IX_BucketHdr + bitMap)
     int treeLayerNums; //number of layers in the b+ tree
 };
+
+//TODO
+//need to be changed!!! here just for test
+struct entry
+{
+    PageNum child;
+    char* key;
+};
+
+struct node
+{
+    PageNum pageNumber;
+    PageNum previous;//previous node for leaves, first child for intermediary nodes.
+    PageNum next;
+    bool leaf;
+
+    //add by dzh
+    bool isRoot;
+
+    int numberOfKeys;
+    entry* entries;//K,V pairs
+
+};
+
+
+
 
 //
 // IX_IndexHandle: IX Index File interface
@@ -51,6 +78,20 @@ public:
     int bHdrChanged;                                      // dirty flag for file
 
 private:
+
+    int compare(void* k1,void* k2);
+    node* readNodeFromPageNum(PageNum pn);
+    void writeNodeOnNewPage(node* x);
+    void addToBucket(PageNum& bucket, const RID &rid, PageNum prev);
+    void splitChild(node * x, int i,node * y);
+    void insertNonFull(node* x, void*  pData,const RID &rid);
+    void insert(node* x, void* pData, const RID &rid);
+    void collapseRoot(node * oldRoot);
+    void merge (node * thisNode , node *neighborNode, node *anchorNode, int keyNum, int depthInPath);
+    void shift (node * thisNode , node *neighborNode, node *anchorNode, int keyNum, bool isRight );
+    void deleteEntryInNode(node* x, int keyNum, nodeInfoInPath * path, int depthInPath);
+    RC deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * path, int pathDepth);
+    RC traversalTree(node *x, void *pData, nodeInfoInPath *path,int &pathDepth);
     // Bitmap Manipulation
     int GetBitmap  (char *map, int idx) const;
     void SetBitmap (char *map, int idx) const;
@@ -78,10 +119,10 @@ public:
 
     // Close index scan
     RC CloseScan();
-    private:
 
-    boolean bScanOpen;
-    boolean endScan;
+private:
+    bool bScanOpen;
+    bool endScan;
     SlotNum curSlotNum;
     PageNum currentBucket;
     node* currentLeaf;
