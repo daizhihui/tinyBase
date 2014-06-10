@@ -12,6 +12,7 @@
 #include "redbase.h"
 #include "rm.h"
 #include "sm.h"
+#include "ql.h"
 
 using namespace std;
 
@@ -47,7 +48,6 @@ main(int argc, char *argv[])
     if ((rc = smm.OpenDb(dbname))){
         // call the parser
         RBparse(pfm, smm, qlm);
-        
         
     }
     
