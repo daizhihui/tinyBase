@@ -21,32 +21,13 @@ PF_PageHandle pageHandler;
 //node =data + child page numbers
 //t is the minimum degree of the Tree: every node other than the root must have t-1 keys at least.
 int t;
-struct entry
-{
-    PageNum child;
-    char* key;
-};
 
-struct node
-{
-    PageNum pageNumber;
-    PageNum previous;//previous node for leaves, first child for intermediary nodes.
-    PageNum next;
-    bool leaf;
-    
-    //add by dzh
-    bool isRoot;
-
-    int numberOfKeys;
-    entry* entries;//K,V pairs
-  
-};
 
 
 //compare
 //returns true when k1 is greater than k2
 // if k1 and k2 are strings, it will return the one with the biggest first character that does not match.
-int compare(void* k1,void* k2)
+int IX_IndexHandle::compare(void* k1,void* k2)
 {
     switch (filehdr.attrType) {
         case FLOAT:
@@ -70,7 +51,7 @@ int compare(void* k1,void* k2)
 
 //Will read and init a node from this page on the disk
 
-node* readNodeFromPageNum(PageNum pn)
+node* IX_IndexHandle::readNodeFromPageNum(PageNum pn)
 {
     filehandler.GetThisPage(pn, pageHandler);
     char* pData;
@@ -124,7 +105,7 @@ node* readNodeFromPageNum(PageNum pn)
 
 //will write a node on a new page
 //must write part by part because of dynamic allocation on entries.
-void writeNodeOnNewPage(node* x)
+void IX_IndexHandle::writeNodeOnNewPage(node* x)
 {
     filehandler.AllocatePage(pageHandler);
     char* pData;
@@ -141,7 +122,7 @@ void writeNodeOnNewPage(node* x)
     filehandler.MarkDirty(x->pageNumber);
 }
 
-void addToBucket(PageNum& bucket, const RID &rid, PageNum prev)
+void IX_IndexHandle::addToBucket(PageNum& bucket, const RID &rid, PageNum prev)
 {
     PageNum ridPN;
     SlotNum ridSN;
@@ -216,7 +197,7 @@ void addToBucket(PageNum& bucket, const RID &rid, PageNum prev)
 //x is father
 //y is child
 //i is index in x's entries, -1 if first
-void splitChild(node * x, int i,node * y)
+void IX_IndexHandle::splitChild(node * x, int i,node * y)
 {
     
     //the new node to write
@@ -268,7 +249,7 @@ void splitChild(node * x, int i,node * y)
 // if x is not a leaf, it goes to its children while splitting them if they have
 // the necessary amount of keys.
 
-void insertNonFull(node* x, void*  pData,const RID &rid)
+void IX_IndexHandle::insertNonFull(node* x, void*  pData,const RID &rid)
 {
     //if same key, add to bucket and increment number of rids.
     //if new key create bucket and add.
@@ -327,7 +308,7 @@ void insertNonFull(node* x, void*  pData,const RID &rid)
 }
 
 //start of recursion for the insert, x should be the root node
-void insert(node* x, void* pData, const RID &rid)
+void IX_IndexHandle::insert(node* x, void* pData, const RID &rid)
 {
     //x is the root node
     if(x->numberOfKeys==2*t-1)
@@ -391,7 +372,7 @@ RC IX_IndexHandle::InsertEntry(void *pData, const RID &rid)
 //      treeLayerNums descrease by 1
 
 //input : oldRoot - old root
-void collapseRoot(node * oldRoot){
+void IX_IndexHandle::collapseRoot(node * oldRoot){
     char* data;
     PF_PageHandle pageHandle;
 
@@ -430,7 +411,7 @@ void collapseRoot(node * oldRoot){
 //        depthInPath - the depth of node thisNode in the path
 //
 
-void merge (node * thisNode , node *neighborNode, node *anchorNode, int keyNum, int depthInPath){
+void IX_IndexHandle::merge (node * thisNode , node *neighborNode, node *anchorNode, int keyNum, int depthInPath){
     //to get right node and left node
     node * leftN = NULL;
     node * rightN = NULL;
@@ -481,7 +462,7 @@ void merge (node * thisNode , node *neighborNode, node *anchorNode, int keyNum, 
 //input : keyNum - is the position of key that separates this node and neighorNode
 //        isRight - true : neighbor is on the rightside; false : neighbor is on the leftside
 //
-void shift (node * thisNode , node *neighborNode, node *anchorNode, int keyNum, bool isRight ){
+void IX_IndexHandle::shift (node * thisNode , node *neighborNode, node *anchorNode, int keyNum, bool isRight ){
 
     int numKeysShifted = (neighborNode->numberOfKeys - thisNode->numberOfKeys) / 2;
     // neighbor is on the rightside
@@ -776,7 +757,7 @@ RC IX_IndexHandle::DeleteEntry(void *pData, const RID &rid){
 //          x - the node to
 //return : path - a pointer that points to a list of nodeInfoInPath
 //         pathDepth - the length of this list of nodeInfoInPath
-RC traversalTree(node *x, void *pData, nodeInfoInPath *path,int &pathDepth){
+RC IX_IndexHandle::traversalTree(node *x, void *pData, nodeInfoInPath *path,int &pathDepth){
     pathDepth++;
     if(x->leaf){
         int i = 0;
