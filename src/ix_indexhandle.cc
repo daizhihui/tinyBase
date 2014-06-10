@@ -406,6 +406,7 @@ void IX_IndexHandle::collapseRoot(node * oldRoot){
 //Desc: merge two nodes, copy all the entries in the right node to the leftnode
 //      delete the right node, that means call recusively the function deleteEntryInNode(node* x, int keyNum, nodeInfoInPath * path)
 //      where node x is replaced by the node anchorNode
+// 10/06/2014 deal with leaf linked list
 
 //input : keyNum - is the position of key that separates this node and neighorNode
 //        depthInPath - the depth of node thisNode in the path
@@ -427,21 +428,23 @@ void IX_IndexHandle::merge (node * thisNode , node *neighborNode, node *anchorNo
     //node is not leaf
     if(!leftN->leaf){
         //copy keyNum key to leftN
-        leftN->keys[leftN->numberOfKeys] = anchorNode->keys[keyNum];
+        leftN->entries[leftN->numberOfKeys].key = anchorNode->entries[keyNum].key;
+        //copy the first pointer in the right node to the left node
+        leftN->entries[leftN->numberOfKeys].child = rightN->previous;
         leftN->numberOfKeys++;
     }
 
     //copy all the entries in the right node to the leftnode
     for(int i=0; i<rightN->numberOfKeys; i++){
-        leftN->children[leftN->numberOfKeys] = rightN->children[i];
-        leftN->keys[leftN->numberOfKeys] = rightN->keys[i];
+        leftN->entries[leftN->numberOfKeys] = rightN->entries[i];
         leftN->numberOfKeys++;
 
     }
 
-    //node is not leaf, copy the last child of rightN to leftN
-    if(!leftN->leaf){
-        leftN->children[leftN->numberOfKeys] = rightN->children[rightN->numberOfKeys];
+    //deal with leaf linked list
+    if(leftN->leaf){
+        leftN->next = rightN->next;
+        readNodeFromPageNum(rightN->next)->previous = leftN->pageNumber;
     }
 
     //dispose page in node rightN
@@ -470,35 +473,42 @@ void IX_IndexHandle::shift (node * thisNode , node *neighborNode, node *anchorNo
         //node is not leaf
         if(!thisNode->leaf){
             //copy key in position keyNum to thisNode
-            thisNode->keys[t-1] = anchorNode->keys[keyNum];
+            thisNode->entries[t-1].key = anchorNode->entries[keyNum].key;
+            thisNode->entries[t-1].child = neighborNode->previous;
             thisNode->numberOfKeys++;
             //shift numKeysShifted-1 (p,k) to thisNode from neighborNode
             for(int i=0; i<numKeysShifted-1;i++){
-                thisNode->children[thisNode->numberOfKeys] = neighborNode->children[i];
-                thisNode->keys[thisNode->numberOfKeys] = neighborNode->keys[i];
+                thisNode->entries[thisNode->numberOfKeys] = neighborNode->entries[i];
                 thisNode->numberOfKeys++;
             }
-            thisNode->children[thisNode->numberOfKeys] = neighborNode->children[numKeysShifted-1];
+
+            //TODO to verify
+            //shift neighborNode (k,v) to the left
+            neighborNode->previous = neighborNode->entries[numKeysShifted-1].child;
+            for(int i=0; i<neighborNode->numberOfKeys-numKeysShifted;i++){
+                neighborNode->entries[i] = neighborNode->entries[i+numKeysShifted];
+            }
             //copy separate value to anchorNode key
-            anchorNode->keys[keyNum] = neighborNode->keys[numKeysShifted-1];
+            anchorNode->entries[keyNum].key = neighborNode->entries[numKeysShifted-1].key;
         }
 
         //node is leaf, shift numKeysShifted (k,p) to thisNode from neighborNode
         else{
             for(int i=0; i<numKeysShifted;i++){
-                thisNode->children[thisNode->numberOfKeys] = neighborNode->children[i];
-                thisNode->keys[thisNode->numberOfKeys] = neighborNode->keys[i];
+                thisNode->entries[thisNode->numberOfKeys] = neighborNode->entries[i];
                 thisNode->numberOfKeys++;
             }
+
+            //shift neighborNode (k,v) to the left
+            for(int i=0; i<neighborNode->numberOfKeys-numKeysShifted;i++){
+                neighborNode->entries[i] = neighborNode->entries[i+numKeysShifted];
+            }
+
             //copy the the lowest search key in the second node to anchor's
-             anchorNode->keys[keyNum] = neighborNode->keys[numKeysShifted];
+             anchorNode->entries[keyNum].key = neighborNode->entries[numKeysShifted].key;
         }
 
-        //shift neighborNode (k,v) to the left
-        for(int i=0; i<neighborNode->numberOfKeys-numKeysShifted;i++){
-            neighborNode->keys[i] = neighborNode->keys[i+numKeysShifted];
-            neighborNode->children[i] = neighborNode->children[i+numKeysShifted];
-        }
+
         //update the number of keys in neighborNode
         neighborNode->numberOfKeys -= numKeysShifted;
     }
@@ -506,42 +516,45 @@ void IX_IndexHandle::shift (node * thisNode , node *neighborNode, node *anchorNo
     else {
         //shift all the entries in thisNode by numKeysShifted to the right
         for(int i=thisNode->numberOfKeys-1; i>=0;i--){
-            thisNode->children[i+numKeysShifted] = thisNode->children[i];
-            thisNode->keys[i+numKeysShifted] = thisNode->keys[i];
+            thisNode->entries[i+numKeysShifted] = thisNode->entries[i];
         }
+
 
         //node is not leaf
         if(!thisNode->leaf){
-            //copy the last pointer of neighborNode to the numKeysShifted-1 of thisNode
-            thisNode->children[numKeysShifted-1] = neighborNode->children[neighborNode->numberOfKeys];
+            //shift the first pointer of thisNode
+            thisNode->entries[numKeysShifted-1].child = thisNode->previous;
+
+            //copy key in position keyNum of anchorNode to thisNode
+            thisNode->entries[numKeysShifted-1].key = anchorNode->entries[keyNum].key;
+            thisNode->numberOfKeys++;
+
 
             //shift numKeysShifted-1 pairs of (pointer,key) to thisNode from the end of neighborNode
             for(int i=numKeysShifted-2; i>=0; i--){
-                thisNode->keys[i] = neighborNode->keys[neighborNode->numberOfKeys-1];
-                thisNode->children[i] = neighborNode->children[neighborNode->numberOfKeys-1];
+                thisNode->entries[i] = neighborNode->entries[neighborNode->numberOfKeys-1];
                 thisNode->numberOfKeys++;
                 neighborNode->numberOfKeys--;
             }
 
-            //copy key in position keyNum of anchorNode to thisNode
-            thisNode->keys[numKeysShifted-1] = anchorNode->keys[keyNum];
-            thisNode->numberOfKeys++;
+            //copy the last pointer of neighborNode to the fisrt pointer of thisNode
+            thisNode->previous = neighborNode->entries[neighborNode->numberOfKeys-1].child;
+
 
             //copy the last key value from neighborNode to the position keyNum of anchorNode
-            anchorNode->keys[keyNum] = neighborNode->keys[neighborNode->numberOfKeys-1];
+            anchorNode->entries[keyNum].key = neighborNode->entries[neighborNode->numberOfKeys-1].key;
         }
 
         //node is leaf, shift numKeysShifted (k,p) to thisNode from neighborNode
         else{
             for(int i=numKeysShifted-1; i>=0; i--){
-                thisNode->keys[i] = neighborNode->keys[neighborNode->numberOfKeys-1];
-                thisNode->children[i] = neighborNode->children[neighborNode->numberOfKeys-1];
+                thisNode->entries[i] = neighborNode->entries[neighborNode->numberOfKeys-1];
                 thisNode->numberOfKeys++;
                 neighborNode->numberOfKeys--;
             }
 
-            //copy the the largest search key in the second node to anchor's
-             anchorNode->keys[keyNum] = neighborNode->keys[neighborNode->numberOfKeys-1];
+            //copy the the lowest search key in the second node to anchor's
+             anchorNode->entries[keyNum].key = thisNode->entries[0].key;
         }
     }
 
@@ -717,7 +730,7 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
 
     //not found in this page, find the next
     if(bucketHdr.next == -1) return IX_INDEX_NOTFOUND;
-    return deleteRID(next,rid);
+    return deleteRID(next,rid,path,pathDepth);
 }
 
 
@@ -761,44 +774,53 @@ RC IX_IndexHandle::traversalTree(node *x, void *pData, nodeInfoInPath *path,int 
     pathDepth++;
     if(x->leaf){
         int i = 0;
-        while(i<x->numberOfKeys && compare(pData,x->keys[i])!=0)
+        while(i<x->numberOfKeys && compare(pData,x->entries[i].key)!=0)
             i++;
         // if not found in leaf
-        if(compare(pData,x->keys[i])!=0) return IX_INDEX_NOTFOUND; //TODO define ERROR
+        if(compare(pData,x->entries[i].key)!=0) return IX_INDEX_NOTFOUND; //TODO define ERROR
 
         //found in leaf, save neighbor infos for bucket page
-        path[pathDepth].self = x->children[i]; //TODO verify
+        path[pathDepth].self = x->entries[i].child;
         path[pathDepth].anchor = x->pageNumber;
         path[pathDepth].neighborL = -1; //for bucket, no need to know its neighbors
         path[pathDepth].neighborR = -1;
-        path[pathDepth].key = x->keys[i];
+        path[pathDepth].key = x->entries[i].key;
         path[pathDepth].entryNum = i;
         return 0;
     }
 
     int i = 0;
-    while(i<x->numberOfKeys && compare(pData,x->keys[i])!=-1)
+    while(i<x->numberOfKeys && compare(pData,x->entries[i].key)!=-1)
         i++;
-    node* childi = readNodeFromPageNum(x->children[i]);
+    node* childi = NULL;
+    //pData is less than the first key, so childi is pointed by the first pointer in x
+    if(i==0){
+        childi = readNodeFromPageNum(x->previous);
+        path[pathDepth].self = x->previous;
+        //if pointer to this page is the first pointer in its parent
+        path[pathDepth].neighborL = -1; //doesn't have left neighbor
+        path[pathDepth].neighborR = x->entries[0].child;
+
+    }
+    else{
+        childi = readNodeFromPageNum(x->entries[i-1].child);
+        path[pathDepth].self = x->entries[i-1].child;
+    }
     //save immdediate neighors for childi
     path[pathDepth].anchor = x->pageNumber; //childi's anchor
-    path[pathDepth].self = x->children[i];
-    path[pathDepth].key = x->keys[i];
+    path[pathDepth].key = x->entries[i].key;
     path[pathDepth].entryNum = i;
 
 
     if(0<i<x->numberOfKeys) {
-        path[pathDepth].neighborL = x->children[i-1];
-        path[pathDepth].neighborR = x->children[i+1];
+        if(i==1)    path[pathDepth].neighborL = x->previous;
+        else    path[pathDepth].neighborL = x->children[i-2];
+        path[pathDepth].neighborR = x->entries[i].child;
     }
-    //if pointer to this page is the first pointer in its parent
-    else if(i==0){
-        path[pathDepth].neighborL = -1; //doesn't have left neighbor
-        path[pathDepth].neighborR = x->children[1];
-    }
+
     //if pointer to this page is the last pointer in its parent
     else if(i==x->numberOfKeys){
-        path[pathDepth].neighborL = x->children[x->numberOfKeys-1];
+        path[pathDepth].neighborL = x->entries[x->numberOfKeys-2].child;
         path[pathDepth].neighborR = -1;
     }
     //this shouldn't happen
