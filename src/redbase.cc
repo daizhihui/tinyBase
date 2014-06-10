@@ -49,7 +49,6 @@ main(int argc, char *argv[])
     if ((rc = smm.OpenDb(dbname))){
         // call the parser
         RBparse(pfm, smm, qlm);
-        
     }
     
     // close the database
