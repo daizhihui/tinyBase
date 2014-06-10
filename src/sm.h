@@ -55,6 +55,24 @@ private:
 //
 // Print-error function
 //
+
+//struct for Catelog relcat
+struct Relation{
+    char * relName; //relation name
+    int tupleLength; //tuple length in bytes
+    int attrCount; //number of attributes
+    int indexCount; //number of indexed attributes
+};
+
+//struct for Catelog attrcat
+struct Attr_Relation{
+    char * relName; //this attribute's relation
+    char * attrName; //attribute name
+    int offset; //offset in bytes from beginning
+    AttrType attrType; //attribute type
+    int attrLength; //attribute length
+    int indexNo; //index number, or -1 if not indexed
+};
 void SM_PrintError(RC rc);
 
 #endif
