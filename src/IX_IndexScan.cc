@@ -17,7 +17,6 @@ IX_IndexScan::IX_IndexScan()
     currentLeaf= NULL;
     nextLeaf=-1;
     prevLeaf=-1;
-    currentNumberOfKeys=-1;
     currentPosInLeaf=-1;
     pIndexHandle= NULL;
     compOp=-1;
@@ -360,7 +359,6 @@ RC IX_IndexScan::CloseScan()
     currentLeaf= NULL;
     nextLeaf=-1;
     prevLeaf=-1;
-    currentNumberOfKeys=-1;
     currentPosInLeaf=-1;
     pIndexHandle= NULL;
     compOp=-1;
