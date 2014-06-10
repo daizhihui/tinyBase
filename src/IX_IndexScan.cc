@@ -4,6 +4,7 @@
 // Author:
 //
 #include "ix.h"
+#include "ix_internal.h"
 
 IX_IndexScan::IX_IndexScan()
 {
