@@ -19,7 +19,7 @@ const int IX_EMPTY_TREE = -1; //an empty tree
 
 
 struct IX_BucketHdr {
-    PageNum before;
+    PageNum before; //previous
     PageNum next;
 };
 
@@ -43,25 +43,6 @@ struct nodeInfoInPath{
     int entryNum; //position of this entry
 };
 
-struct entry
-{
-    PageNum child;
-    char* key;
-};
 
-struct node
-{
-    PageNum pageNumber;
-    PageNum previous;//previous node for leaves, first child for intermediary nodes.
-    PageNum next;
-    bool leaf;
-
-    //add by dzh
-    bool isRoot;
-
-    int numberOfKeys;
-    entry* entries;//K,V pairs
-
-};
 
 #endif // IX_INTERNAL_H

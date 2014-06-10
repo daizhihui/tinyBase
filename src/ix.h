@@ -53,6 +53,16 @@ struct node
 
 };
 
+//a structure to save infos about neighors and anchors when delete a index
+struct nodeInfoInPath{
+    PageNum self;
+    PageNum neighborL;
+    PageNum neighborR;
+    PageNum anchor;
+    AttrType key; //key value
+    int entryNum; //position of this entry
+};
+
 
 
 
