@@ -47,6 +47,9 @@ public:
                    const char *value);            //   value
 
 private:
+    RM_Manager * Rmm;
+    IX_Manager * Ixm;
+    
 };
 
 //

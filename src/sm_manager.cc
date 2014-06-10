@@ -15,10 +15,15 @@ using namespace std;
 
 SM_Manager::SM_Manager(IX_Manager &ixm, RM_Manager &rmm)
 {
+    Ixm=&ixm;
+    Rmm=&rmm;
+    
 }
 
 SM_Manager::~SM_Manager()
 {
+    Ixm=NULL;
+    Rmm=NULL;
 }
 
 RC SM_Manager::OpenDb(const char *dbName)
