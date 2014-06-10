@@ -80,15 +80,18 @@ public:
     RC CloseScan();
     private:
 
-    int bScanOpen;
-   // PageNum curPageNum;
-    //SlotNum curSlotNum;
-
+    boolean bScanOpen;
+    boolean endScan;
+    SlotNum curSlotNum;
+    PageNum currentBucket;
+    node* currentLeaf;
+    PageNum nextLeaf;
+    PageNum prevLeaf;
+    int currentPosInLeaf;
     IX_IndexHandle *pIndexHandle;
     CompOp compOp;
     void *value;
     ClientHint pinHint;
-
 };
 
 //
