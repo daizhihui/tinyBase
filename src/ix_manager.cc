@@ -70,7 +70,7 @@ RC IX_Manager::CreateIndex(const char *fileName, int indexNo, AttrType attrType,
     char filename[(unsigned)strlen(fileName)];//filename = fileName.indexNo as the new filename
     strcpy(filename, fileName);
     strcat(filename, ".");
-    char index[4];
+    char index[sizeof(int)];
     sprintf(index, "%d", indexNo);
     strcat(filename, index);
     
@@ -156,7 +156,7 @@ RC IX_Manager::DestroyIndex(const char *fileName, int indexNo){
     char filename[(unsigned)strlen(fileName)];//filename = fileName.indexNo as the new filename
     strcpy(filename, fileName);
     strcat(filename, ".");
-    char index[4];
+    char index[sizeof(int)];
     sprintf(index, "%d", indexNo);
     strcat(filename, index);
     
@@ -196,7 +196,7 @@ RC IX_Manager::OpenIndex(const char *fileName, int indexNo, IX_IndexHandle &inde
     char filename[(unsigned)strlen(fileName)];//filename = fileName.indexNo as the new filename
     strcpy(filename, fileName);
     strcat(filename, ".");
-    char index[4];
+    char index[sizeof(int)];
     sprintf(index, "%d", indexNo);
     strcat(filename, index);
     
