@@ -32,6 +32,7 @@ struct IX_IndexPageHdr{
     bool isRoot;
     int numberOfKeys;     
 };
+
 //a structure to save infos about neighors and anchors when delete a index
 struct nodeInfoInPath{
     PageNum self;
