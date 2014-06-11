@@ -78,6 +78,14 @@ RC SM_Manager::CreateTable(const char *relName,
     // relation name can't be longer than MAXNAME
     if ((unsigned)strlen(relName)>=MAXNAME) return (SM_INVALIDRELNAME);
     
+    // define de RM_FileScan
+    RM_FileScan filescan;
+    RM_Record rec;
+    filescan.OpenScan(fileHandle_Relcat, STRING, (unsigned)strlen(relName), 0, EQ_OP, (void *)relName);
+    // if exists the same attribute name in relcat
+    if(filescan.GetNextRec(rec)!=RM_EOF) return (SM_INVALIDRELNAME);
+    filescan.CloseScan();
+    
     int recordsize=0;
     for (int i=0;i<attrCount;i++){
         
@@ -89,7 +97,6 @@ RC SM_Manager::CreateTable(const char *relName,
         
         //calculate the total length of attributes
         recordsize += attributes[i].attrLength;
-        
         
     }
     
