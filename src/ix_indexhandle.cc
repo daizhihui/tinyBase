@@ -141,7 +141,7 @@ void IX_IndexHandle::addToBucket(PageNum& bucket, const RID &rid, PageNum prev)
         data[0] = prev;//prev
         data[sizeof(PageNum)] = -1;//next
         //create bitmap: set all to 0 -- if bitmap isn't a multiple of bytes, uncomment following
-        int bytes = filehdr.numRidsPerBucket/8;
+        int bytes =  filehdr.bucketHeaderSize - sizeof(IX_BucketHdr);
         memset(data+sizeof(IX_BucketHdr), 0, bytes);//set to 0
         
 //        int r = filehdr.numRidsPerBucket-bytes; //rest of bits
@@ -173,8 +173,10 @@ void IX_IndexHandle::addToBucket(PageNum& bucket, const RID &rid, PageNum prev)
         {
             //found empty one.
             //insert
-            data[sizeof(IX_BucketHdr)+filehdr.numRidsPerBucket/8 + ridnum*(sizeof(PageNum)+sizeof(SlotNum))] = ridPN;
-            data[sizeof(IX_BucketHdr)+filehdr.numRidsPerBucket/8 + ridnum*(sizeof(PageNum)+sizeof(SlotNum))+sizeof(PageNum)] = ridSN;
+            int bytes =  filehdr.bucketHeaderSize - sizeof(IX_BucketHdr);
+
+            data[sizeof(IX_BucketHdr)+bytes + ridnum*(sizeof(PageNum)+sizeof(SlotNum))] = ridPN;
+            data[sizeof(IX_BucketHdr)+bytes + ridnum*(sizeof(PageNum)+sizeof(SlotNum))+sizeof(PageNum)] = ridSN;
             SetBitmap(data+sizeof(IX_BucketHdr),ridnum);
             
         }
@@ -242,6 +244,7 @@ void IX_IndexHandle::splitChild(node * x, int i,node * y)
         delete z->entries[i].key;
     delete z->entries;
     delete z;
+    
 }
 
 
@@ -325,7 +328,7 @@ void IX_IndexHandle::insert(node* x, void* pData, const RID &rid)
         s->entries= new entry[t-1];//allocate entries for new root.
         splitChild(s,-1);
         insertNonFull(s,pData,rid);
-        
+        filehdr.treeLayerNums++;
         filehdr.rootPageNum=s->pageNumber;
         writeNodeOnNewPage(s);
         filehandler.MarkDirty(x->pageNumber);
