@@ -49,6 +49,8 @@ public:
 private:
     RM_Manager * Rmm;
     IX_Manager * Ixm;
+    RM_FileHandle fileHandle_Relcat;
+    RM_FileHandle fileHandle_Attrcat;
     
 };
 
@@ -74,5 +76,8 @@ struct Attr_Relation{
     int indexNo; //index number, or -1 if not indexed
 };
 void SM_PrintError(RC rc);
+
+#define SM_INVALIDRELNAME     (START_SM_WARN + 0) // invalid relation name
+#define SM_INVALIATTRNAME     (START_SM_WARN + 1) // invalid attribute name
 
 #endif

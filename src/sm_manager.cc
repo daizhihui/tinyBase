@@ -6,6 +6,8 @@
 
 #include <cstdio>
 #include <iostream>
+#include <cstring>
+#include <unistd.h>
 #include "redbase.h"
 #include "sm.h"
 #include "ix.h"
@@ -28,11 +30,39 @@ SM_Manager::~SM_Manager()
 
 RC SM_Manager::OpenDb(const char *dbName)
 {
+    //change to current directory
+    if (chdir(dbName) < 0) {
+        cerr << " chdir error to " << dbName << "\n";
+        exit(1);
+    }
+    
+    RC rc;
+    
+    // Call RM_Manager::OpenFile() to open Catalog relcat
+    if((rc=Rmm->OpenFile("relcat", fileHandle_Relcat))) goto err_return;
+    
+    // Call RM_Manager::OpenFile() to open Catalog attrcat
+    if((rc=Rmm->OpenFile("attrcat", fileHandle_Attrcat))) goto err_return;
+
+err_return:
+    return (rc);
+    
     return (0);
 }
 
 RC SM_Manager::CloseDb()
 {
+    RC rc;
+    
+    //Call RM_Manager::CloseFile() to close Catalog relcat
+    if((rc=Rmm->CloseFile(fileHandle_Relcat))) goto err_return;
+    
+    //Call RM_Manager::CloseFile() to close Catalog relcat
+    if((rc=Rmm->CloseFile(fileHandle_Attrcat))) goto err_return;
+    
+err_return:
+    return (rc);
+    
     return (0);
 }
 
@@ -40,6 +70,36 @@ RC SM_Manager::CreateTable(const char *relName,
                            int        attrCount,
                            AttrInfo   *attributes)
 {
+    RC rc;
+    
+    //check if relation name begin with letter
+    if(!(relName[0] <= 'z' && relName[0] >= 'a') || (relName[0] <= 'Z' && relName[0] >= 'A')) return (SM_INVALIDRELNAME);
+    
+    // relation name can't be longer than MAXNAME
+    if ((unsigned)strlen(relName)>=MAXNAME) return (SM_INVALIDRELNAME);
+    
+    int recordsize=0;
+    for (int i=0;i<attrCount;i++){
+        
+        //check if attribute name begin with letter
+        if(!(attributes[i].attrName[0] <= 'z' && attributes[i].attrName[0] >= 'a') || (attributes[i].attrName[0] <= 'Z' && attributes[i].attrName[0] >= 'A')) return (SM_INVALIATTRNAME);
+        
+        // attribute name can't be longer than MAXNAME
+        if ((unsigned)strlen(attributes[i].attrName)>=MAXNAME) return (SM_INVALIATTRNAME);
+        
+        //calculate the total length of attributes
+        recordsize += attributes[i].attrLength;
+        
+        
+    }
+    
+    //Call RM_Manager::CreateFile to create table file
+    if((rc=Rmm->CreateFile(relName, recordsize))) goto err_return;
+    
+err_return:
+    return (rc);
+    
+    
     cout << "CreateTable\n"
          << "   relName     =" << relName << "\n"
          << "   attrCount   =" << attrCount << "\n";
@@ -49,7 +109,10 @@ RC SM_Manager::CreateTable(const char *relName,
              << (attributes[i].attrType == INT ? "INT" :
                  attributes[i].attrType == FLOAT ? "FLOAT" : "STRING")
              << "   attrLength=" << attributes[i].attrLength << "\n";
+    
+
     return (0);
+    
 }
 
 RC SM_Manager::DropTable(const char *relName)
