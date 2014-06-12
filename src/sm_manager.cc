@@ -66,6 +66,9 @@ err_return:
     return (0);
 }
 
+// CreateTable
+// IN: relName, attrCount, attributes
+//RC: SM_INVALIDRELNAME, SM_INVALIDRELNAME, SM_EXCEEDMAXATTRS
 RC SM_Manager::CreateTable(const char *relName,
                            int        attrCount,
                            AttrInfo   *attributes)
@@ -82,29 +85,95 @@ RC SM_Manager::CreateTable(const char *relName,
     RM_FileScan filescan;
     RM_Record rec;
     filescan.OpenScan(fileHandle_Relcat, STRING, (unsigned)strlen(relName), 0, EQ_OP, (void *)relName);
-    // if exists the same attribute name in relcat
+    // check if exists the same attribute name in relcat
     if(filescan.GetNextRec(rec)!=RM_EOF) return (SM_INVALIDRELNAME);
     filescan.CloseScan();
     
-    int recordsize=0;
+    // check number of attributes
+    if(!(attrCount>=1 && attrCount<=MAXATTRS)) return (SM_EXCEEDMAXATTRS);
+    
+    // check if two attributes name are the same
+    for(int j=0;j<attrCount-1;j++){
+        for (int k=j+1;k<attrCount;k++){
+            if(attributes[j].attrName==attributes[k].attrName) return (SM_INVALIDATTRNAME);
+        }
+    }
+    
+    int tuplelength=0;
     for (int i=0;i<attrCount;i++){
         
         //check if attribute name begin with letter
-        if(!(attributes[i].attrName[0] <= 'z' && attributes[i].attrName[0] >= 'a') || (attributes[i].attrName[0] <= 'Z' && attributes[i].attrName[0] >= 'A')) return (SM_INVALIATTRNAME);
+        if(!(attributes[i].attrName[0] <= 'z' && attributes[i].attrName[0] >= 'a') || (attributes[i].attrName[0] <= 'Z' && attributes[i].attrName[0] >= 'A')) return (SM_INVALIDATTRNAME);
         
         // attribute name can't be longer than MAXNAME
-        if ((unsigned)strlen(attributes[i].attrName)>=MAXNAME) return (SM_INVALIATTRNAME);
+        if ((unsigned)strlen(attributes[i].attrName)>=MAXNAME) return (SM_INVALIDATTRNAME);
         
+        // check attribute
+        switch (attributes[i].attrType) {
+            case INT:
+                if(attributes[i].attrLength!=4)
+                    // Test: wrong attribute length
+                    return (SM_INVALIDATTR);
+            case FLOAT:
+                if (attributes[i].attrLength != 4)
+                    // Test: wrong attribute length
+                    return (SM_INVALIDATTR);
+                break;
+                
+            case STRING:
+                if (attributes[i].attrLength < 1 || attributes[i].attrLength > MAXSTRINGLEN)
+                    // Test: wrong _attrLength
+                    return (SM_INVALIDATTR);
+                break;
+                
+            default:
+                // Test: wrong _attrType
+                return (SM_INVALIDATTR);
+        }
+
         //calculate the total length of attributes
-        recordsize += attributes[i].attrLength;
-        
+        tuplelength += attributes[i].attrLength;
     }
     
-    //Call RM_Manager::CreateFile to create table file
-    if((rc=Rmm->CreateFile(relName, recordsize))) goto err_return;
+    // new Relation record
+    RID rid;
+    char * data;
+    strcpy(data,relName);
+    data[MAXNAME]=tuplelength;
+    data[MAXNAME+sizeof(int)]=attrCount;
+    data[MAXNAME+sizeof(int)+sizeof(int)]=0;
     
-err_return:
-    return (rc);
+    //store new Relation record to Catalog relcat
+    if((rc=fileHandle_Relcat.InsertRec(data, rid))) return (rc);
+    
+    //force page
+    if((rc=fileHandle_Relcat.ForcePages())) return (rc);
+    
+    //Attr_Relation records
+    for (int i=0;i<attrCount;i++){
+        char * data;
+        strcpy(data,relName);
+        data[MAXNAME]=*attributes[i].attrName;
+        //calculate offset
+        int offset=0;
+        for (int j=0;j<i;i++){
+            offset+=attributes[j].attrLength;
+        }
+        data[2*MAXNAME]=offset;
+        data[2*MAXNAME+sizeof(int)]=attributes[i].attrType;
+        data[2*MAXNAME+sizeof(int)+sizeof(AttrType)]=attributes[i].attrLength;
+        data[2*MAXNAME+2*sizeof(int)+sizeof(AttrType)]=-1;
+        
+        //store new Attr_Relation record to Catalog attrcat
+        if((rc=fileHandle_Attrcat.InsertRec(data, rid))) return (rc);
+    }
+    
+    //force page
+    if((rc=fileHandle_Attrcat.ForcePages())) return (rc);
+    
+    
+    //Call RM_Manager::CreateFile to create table file
+    if((rc=Rmm->CreateFile(relName, tuplelength))) goto err_return;
     
     
     cout << "CreateTable\n"
@@ -116,7 +185,8 @@ err_return:
              << (attributes[i].attrType == INT ? "INT" :
                  attributes[i].attrType == FLOAT ? "FLOAT" : "STRING")
              << "   attrLength=" << attributes[i].attrLength << "\n";
-    
+err_return:
+    return (rc);
 
     return (0);
     
