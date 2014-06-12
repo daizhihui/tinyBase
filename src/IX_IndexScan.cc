@@ -81,7 +81,8 @@ RC IX_IndexScan::OpenScan(const IX_IndexHandle &indexHandle,CompOp _compOp, void
 
  // search of leaf containing value
 
-int searchLeaf(PageNum startPageNum,void* value, PageNum &leaf){ // Penser à gerer les cas d'erreurs
+int IX_IndexScan::searchLeaf(PageNum startPageNum,void* value, PageNum &leaf ){ // Penser à gerer les cas d'erreurs
+ 
  indexNode* currentNode;
  int numberOfKeys;
  int pos=0;
@@ -116,7 +117,7 @@ int searchLeaf(PageNum startPageNum,void* value, PageNum &leaf){ // Penser à ge
 //testBitValue in bitmap
 //
 
-int testBitValue(unsigned char bitmap[],int bit)
+int IX_IndexScan::testBitValue(char bitmap[],int bit)
 {
 
     int numoctet = bit/8;
@@ -140,7 +141,7 @@ int testBitValue(unsigned char bitmap[],int bit)
 //getNextFullSlot
 //
 
-int getNextFullSlot(int start,unsigned char bitmap[],int maxrecnumber)
+int IX_IndexScan::getNextFullSlot(int start,char bitmap[],int maxrecnumber)
 {
     start++;
     while(start<maxrecnumber)
@@ -165,7 +166,7 @@ int getNextFullSlot(int start,unsigned char bitmap[],int maxrecnumber)
 RC IX_IndexScan::GetNextEntry(RID &rid){
 
     RC rc;
-    PageNumb leaf;
+    PageNum leaf;
 
    PageNum gBucket=-1,pBucket=-1, nBucket=-1;
    int pos_g=-1,pos_p=-1,pos_n=-1;  // Positions linked to  entries
@@ -181,7 +182,7 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
     if(bScanOpen){
 
         if(currentBucket == -1 && endScan !=true){ //  First access
-            searchLeaf(pIndexHandle->fileHdr.rootPageNum,value,leaf,indexHandle);
+            searchLeaf(pIndexHandle->fileHdr.rootPageNum,value,leaf);
             currentLeaf= pIndexHandle->readNodeFromPageNum(leaf);
 
 
@@ -250,7 +251,7 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
                 pageHandler.GetData(pdata);
                 memcpy(&bucketHdr,(IX_BucketHdr*)pdata, sizeof(IX_BucketHdr));
              //find nextSlot in bitmap
-                nextSlot= getNextFullSlot(curSlotNum, pdata+sizeof(IX_BucketHdr),pIndexHandle->filehdr.numRidsPerBucket);
+                nextSlot= getNextFullSlot(curSlotNum, pdata+sizeof(IX_BucketHdr),pIndexHandle->fileHdr.numRidsPerBucket);
 
                  if(nextSlot!=-2){
                     stop=true; // Sortie de la boucle While
@@ -275,7 +276,7 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
                         if(compOp==LE_OP || compOp==LT_OP){
                             if(currentPosInLeaf -1 >= 0){
                                 currentPosInLeaf=currentPosInLeaf-1;
-                                currentBucket=(currentLeaf->entries[currentPosInLeaf])->child;
+                                currentBucket=(currentLeaf->entries[currentPosInLeaf]).child;
                                 curSlotNum=-1;
                             }else{ // I must go to another leaf
                                 if(currentLeaf->previous !=-1){
