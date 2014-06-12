@@ -136,7 +136,7 @@ void IX_IndexHandle::addToBucket(PageNum& bucket, const RID &rid, PageNum prev)
         pageHandler.GetPageNum(bucket);
         char* data;
         pageHandler.GetData(data);
-        int maxEntries = (PF_PAGE_SIZE-sizeof(IX_BucketHdr))/(sizeof(RID)+1);
+//        int maxEntries = (PF_PAGE_SIZE-sizeof(IX_BucketHdr))/(sizeof(RID)+1);
         
         data[0] = prev;//prev
         data[sizeof(PageNum)] = -1;//next
@@ -262,6 +262,17 @@ void IX_IndexHandle::insertNonFull(node* x, void*  pData,const RID &rid)
     int comp =0;
     if(x->leaf)
     {
+        if(i==0)
+        {
+            x->numberOfKeys++;
+            x->entries = new entry();
+            x->entries[0].key = (char*)pData;
+            PageNum next=-1;
+            addToBucket(next, rid,-1);
+            x->entries[0].child = next;
+
+            
+        }
         while(i>=1 && ((comp = compare(pData,x->entries[i].key))==-1))
         {
                 x->entries[i+1].key=x->entries[i].key;
@@ -295,7 +306,7 @@ void IX_IndexHandle::insertNonFull(node* x, void*  pData,const RID &rid)
         
         if(childi->numberOfKeys==2*t-1)
         {
-            splitChild(x,i);
+            splitChild(x,i,childi);
             if(compare(pData,x->entries[i].key))
                 i++;
         }
@@ -326,7 +337,7 @@ void IX_IndexHandle::insert(node* x, void* pData, const RID &rid)
         x->leaf = true;
         x->isRoot=false;
         s->entries= new entry[t-1];//allocate entries for new root.
-        splitChild(s,-1);
+        splitChild(s,-1,x);
         insertNonFull(s,pData,rid);
         filehdr.treeLayerNums++;
         filehdr.rootPageNum=s->pageNumber;
@@ -363,7 +374,27 @@ IX_IndexHandle::~IX_IndexHandle()
 // Insert a new index entry
 RC IX_IndexHandle::InsertEntry(void *pData, const RID &rid)
 {
-    
+    if(filehdr.rootPageNum==IX_EMPTY_TREE)
+    {
+        node * root = new node();
+        root->leaf = true;
+        root->isRoot=  true;
+        filehdr.treeLayerNums++;
+        root->numberOfKeys=0;
+        root->previous=-1;
+        writeNodeOnNewPage(root);
+        filehdr.rootPageNum=root->pageNumber;
+        insertNonFull(root, pData, rid);
+        filehandler.ForcePages();
+        delete root->entries;
+        delete root;
+        
+    }
+    else
+    {
+        node* root = readNodeFromPageNum(filehdr.rootPageNum);
+        insert(root, pData, rid);
+    }
 }
 
 
