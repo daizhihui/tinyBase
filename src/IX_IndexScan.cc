@@ -333,7 +333,7 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
     if(!endScan)
         return 0;
     else
-        return IX_EOF;
+        return -1;//IX_EOF
 
 }
 
