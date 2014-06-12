@@ -59,7 +59,7 @@ struct nodeInfoInPath{
     PageNum neighborL;
     PageNum neighborR;
     PageNum anchor;
-    AttrType key; //key value
+    void* key; //key value
     int entryNum; //position of this entry
 };
 
@@ -96,7 +96,7 @@ private:
     void insertNonFull(indexNode* x, void*  pData,const RID &rid);
     void insert(indexNode* x, void* pData, const RID &rid);
     void collapseRoot(indexNode * oldRoot);
-    void merge (indexNode * thisNode , indexNode *neighborNode, indexNode *anchorNode, int keyNum, int depthInPath);
+    void merge (indexNode * thisNode , indexNode *neighborNode, indexNode *anchorNode, nodeInfoInPath *path, int keyNum, int depthInPath);
     void shift (indexNode * thisNode , indexNode *neighborNode, indexNode *anchorNode, int keyNum, bool isRight );
     void deleteEntryInNode(indexNode* x, int keyNum, nodeInfoInPath * path, int depthInPath);
     RC deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * path, int pathDepth);

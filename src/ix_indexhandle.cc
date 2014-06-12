@@ -623,7 +623,7 @@ void IX_IndexHandle::deleteEntryInNode(indexNode* x, int keyNum, nodeInfoInPath 
                 return;
         }
         //check immediate neighbors
-        nodeInfoInPath = path[depthInPath];
+        nodeInfoInPath nodeInfo = path[depthInPath];
         PageNum neighborR = path[depthInPath].neighborR;
         PageNum neighborL = path[depthInPath].neighborL;
 
@@ -636,31 +636,31 @@ void IX_IndexHandle::deleteEntryInNode(indexNode* x, int keyNum, nodeInfoInPath 
             indexNode * nodeL = readNodeFromPageNum(neighborL);
             if(nodeR->numberOfKeys >= nodeL->numberOfKeys){
                 nodeNeighbor = nodeR;
-                entryNum = nodeInfoInPath.entryNum;
+                entryNum = nodeInfo.entryNum;
                 isRight = true;
 
             }
             else{
                 nodeNeighbor = nodeL;
-                entryNum = nodeInfoInPath.entryNum - 1;
+                entryNum = nodeInfo.entryNum - 1;
                 isRight = false;
             }
 
         }
         else if(neighborR!= -1 && neighborL==-1) {
             nodeNeighbor = readNodeFromPageNum(neighborR);
-            entryNum = nodeInfoInPath.entryNum;
+            entryNum = nodeInfo.entryNum;
             isRight = true;
         }
         else if(neighborR == -1 && neighborL!=-1) {
             nodeNeighbor = readNodeFromPageNum(neighborL);
-            entryNum = nodeInfoInPath.entryNum -1;
+            entryNum = nodeInfo.entryNum -1;
             isRight = false;
         }
         else return; //TODO shouldn't happen
 
 
-        indexNode *anchorNode = readNodeFromPageNum(nodeInfoInPath.anchor);
+        indexNode *anchorNode = readNodeFromPageNum(nodeInfo.anchor);
 
         //both neighbors are minimum size
         if(nodeNeighbor->numberOfKeys==t){
@@ -683,23 +683,23 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
     PF_PageHandle pageHandle;
     filehandler.GetThisPage(bucket, pageHandle);
     pageHandle.GetData(data);
-    IX_BucketHdr bucketHdr = (IX_BucketHdr)data[sizeof(IX_BucketHdr)];
+    IX_BucketHdr *bucketHdr = (IX_BucketHdr*)data;
 
-    PageNum before = bucketHdr.before;
-    PageNum next = bucketHdr.next;
+    PageNum before = bucketHdr->before;
+    PageNum next = bucketHdr->next;
 
     int ridNum=0;
-    RID ridi;
+    RID *ridi;
     //iterate for all non-empty rids
-    for(; ridNum< size && GetBitmap(pData + sizeof(IX_BucketHdr), ridNum); ++ridNum){
-        ridi = data[filehdr.bucketHeaderSize+ridNum*sizeof(RID)];
+    for(; ridNum< filehdr.numRidsPerBucket && GetBitmap(data + sizeof(IX_BucketHdr), ridNum); ++ridNum){
+        ridi = (RID*)data+filehdr.bucketHeaderSize+ridNum*sizeof(RID);
         //found in this page
-        if(ridi==rid) {
+        if(*ridi==rid) {
             // Clear bit
-            ClrBitmap(pData + sizeof(IX_BucketHdr), ridNum);
+            ClrBitmap(data + sizeof(IX_BucketHdr), ridNum);
             // Find a non-free rid
             for ( ridNum = 0; ridNum < filehdr.numRidsPerBucket; ridNum++)
-               if (GetBitmap(pData + sizeof(IX_BucketHdr), ridNum))
+               if (GetBitmap(data + sizeof(IX_BucketHdr), ridNum))
                   break;
 
             // Dispose the bucket if empty (the deleted rid was the last one)
@@ -718,19 +718,19 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
                     PageNum leafPage = path[pathDepth].anchor;
                     int entryNum = path[pathDepth].entryNum;
                     indexNode * leaf = readNodeFromPageNum(leafPage);
-                    if(bucketHdr.next == -1) {
+                    if(bucketHdr->next == -1) {
                         //delete the entry in leaf
                         deleteEntryInNode(leaf,entryNum,path,pathDepth-1);
 
                     }
                     else{
                         //replace pageNum in leaf, change IX_BucketHdr.before in next bucket
-                        filehandler.GetThisPage(bucketHdr.next,pageHandle);
+                        filehandler.GetThisPage(bucketHdr->next,pageHandle);
                         pageHandle.GetData(data);
                         ((IX_BucketHdr *) data)->before = -1; //this bucket becomes the first bucket in the chain list
-                        leaf->children[entryNum] = bucketHdr.next;
+                        leaf->entries[entryNum].child = bucketHdr->next;
                         pfFileHandle.MarkDirty(leafPage);
-                        pfFileHandle.MarkDirty(bucketHdr.next);
+                        pfFileHandle.MarkDirty(bucketHdr->next);
 
                     }
 
@@ -739,16 +739,16 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
                 else{
 
                     //modify IX_BucketHdr.after in last bucket
-                    filehandler.GetThisPage(bucketHdr.before,pageHandle);
+                    filehandler.GetThisPage(bucketHdr->before,pageHandle);
                     pageHandle.GetData(data);
-                    ((IX_BucketHdr *) data)->next = bucketHdr.next; //
-                    pfFileHandle.MarkDirty(bucketHdr.before);
-                    if(bucketHdr.next!=-1){
+                    ((IX_BucketHdr *) data)->next = bucketHdr->next; //
+                    pfFileHandle.MarkDirty(bucketHdr->before);
+                    if(bucketHdr->next!=-1){
                         //modify IX_BucketHdr.before in next bucket
-                        filehandler.GetThisPage(bucketHdr.next,pageHandle);
+                        filehandler.GetThisPage(bucketHdr->next,pageHandle);
                         pageHandle.GetData(data);
-                        ((IX_BucketHdr *) data)->before = bucketHdr.before; //
-                        pfFileHandle.MarkDirty(bucketHdr.next);
+                        ((IX_BucketHdr *) data)->before = bucketHdr->before; //
+                        pfFileHandle.MarkDirty(bucketHdr->next);
                     }
                 }
 
@@ -758,7 +758,7 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
     }
 
     //not found in this page, find the next
-    if(bucketHdr.next == -1) return IX_INDEX_NOTFOUND;
+    if(bucketHdr->next == -1) return IX_INDEX_NOTFOUND;
     return deleteRID(next,rid,path,pathDepth);
 }
 
@@ -777,7 +777,7 @@ RC IX_IndexHandle::DeleteEntry(void *pData, const RID &rid){
     path[0].anchor=-1; //implicit root
     path[0].neighborL=-1;
     path[0].neighborR=-1;
-    path[0].key = -1;
+    path[0].key = (void*)-1;
     path[0].entryNum = -1;
 
     int pathDepth = 0;
@@ -843,7 +843,7 @@ RC IX_IndexHandle::traversalTree(indexNode *x, void *pData, nodeInfoInPath *path
 
     if(0<i<x->numberOfKeys) {
         if(i==1)    path[pathDepth].neighborL = x->previous;
-        else    path[pathDepth].neighborL = x->children[i-2];
+        else    path[pathDepth].neighborL = x->entries[i-2].child;
         path[pathDepth].neighborR = x->entries[i].child;
     }
 
@@ -874,12 +874,12 @@ RC IX_IndexHandle::ForcePages()
        char* pData;
 
        // Get the header page
-       if (rc = pfFileHandle.GetFirstPage(pageHandle))
+       if ((rc = pfFileHandle.GetFirstPage(pageHandle)))
           // Test: unopened(closed) fileHandle, invalid file
           goto err_return;
 
        // Get a pointer where header information will be written
-       if (rc = pageHandle.GetData(pData))
+       if ((rc = pageHandle.GetData(pData)))
           // Should not happen
           goto err_unpin;
 
