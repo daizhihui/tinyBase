@@ -21,8 +21,8 @@ struct IX_FileHdr {
     AttrType attrType; //attribute type
     int attrLength; //attribute length
     int indexNo; //indexNo
-    //int numMaxEntries; // max number of entries in a node
-    int orderOfTree;  //every node contains m entries, where order<=m<=2order except for the root, corresponding to t
+    //int numMaxEntries; // max number of entries in a indexNode
+    int orderOfTree;  //every indexNode contains m entries, where order<=m<=2order except for the root, corresponding to t
     PageNum rootPageNum; // page number of the root in the B+ tree
     //add by dzh
     int numRidsPerBucket; //# of rids in each bucket
@@ -38,10 +38,10 @@ struct entry
     char* key;
 };
 
-struct node
+struct indexNode
 {
     PageNum pageNumber;
-    PageNum previous;//previous node for leaves, first child for intermediary nodes.
+    PageNum previous;//previous indexNode for leaves, first child for intermediary nodes.
     PageNum next;
     bool leaf;
 
@@ -90,18 +90,18 @@ public:
 private:
 
     int compare(void* k1,void* k2);
-    node* readNodeFromPageNum(PageNum pn);
-    void writeNodeOnNewPage(node* x);
+    indexNode* readNodeFromPageNum(PageNum pn);
+    void writeNodeOnNewPage(indexNode* x);
     void addToBucket(PageNum& bucket, const RID &rid, PageNum prev);
-    void splitChild(node * x, int i,node * y);
-    void insertNonFull(node* x, void*  pData,const RID &rid);
-    void insert(node* x, void* pData, const RID &rid);
-    void collapseRoot(node * oldRoot);
-    void merge (node * thisNode , node *neighborNode, node *anchorNode, int keyNum, int depthInPath);
-    void shift (node * thisNode , node *neighborNode, node *anchorNode, int keyNum, bool isRight );
-    void deleteEntryInNode(node* x, int keyNum, nodeInfoInPath * path, int depthInPath);
+    void splitChild(indexNode * x, int i,indexNode * y);
+    void insertNonFull(indexNode* x, void*  pData,const RID &rid);
+    void insert(indexNode* x, void* pData, const RID &rid);
+    void collapseRoot(indexNode * oldRoot);
+    void merge (indexNode * thisNode , indexNode *neighborNode, indexNode *anchorNode, int keyNum, int depthInPath);
+    void shift (indexNode * thisNode , indexNode *neighborNode, indexNode *anchorNode, int keyNum, bool isRight );
+    void deleteEntryInNode(indexNode* x, int keyNum, nodeInfoInPath * path, int depthInPath);
     RC deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * path, int pathDepth);
-    RC traversalTree(node *x, void *pData, nodeInfoInPath *path,int &pathDepth);
+    RC traversalTree(indexNode *x, void *pData, nodeInfoInPath *path,int &pathDepth);
     // Bitmap Manipulation
     int GetBitmap  (char *map, int idx) const;
     void SetBitmap (char *map, int idx) const;
@@ -135,7 +135,7 @@ private:
     bool endScan;
     SlotNum curSlotNum;
     PageNum currentBucket;
-    node* currentLeaf;
+    indexNode* currentLeaf;
     PageNum nextLeaf;
     PageNum prevLeaf;
     int currentPosInLeaf;
