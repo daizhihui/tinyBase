@@ -205,7 +205,7 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
             if(gBucket==-1){
                 if(compOp==EQ_OP){
 
-                    return IX_EOF;
+                    endScan=true;
                 }
                 if(compOp==GE_OP){
                     currentBucket=nBucket;
