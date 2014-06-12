@@ -240,10 +240,10 @@ void IX_IndexHandle::splitChild(indexNode * x, int i,indexNode * y)
     pfFileHandle.MarkDirty(x->pageNumber);
     writeNodeOnNewPage(z);
     pfFileHandle.ForcePages();
-    for(int i =0;i<z->numberOfKeys;i++)
-        delete z->entries[i].key;
-    delete z->entries;
-    delete z;
+//    for(int i =0;i<z->numberOfKeys;i++)
+//        delete z->entries[i].key;
+//    delete z->entries;
+//    delete z;
     
 }
 
@@ -271,10 +271,14 @@ void IX_IndexHandle::insertNonFull(indexNode* x, void*  pData,const RID &rid)
             addToBucket(next, rid,-1);
             x->entries[0].child = next;
 
+            pfFileHandle.MarkDirty(x->pageNumber);
+            return;
             
         }
-        while(i>=1 && ((comp = compare(pData,x->entries[i].key))==-1))
+        i--;
+        while(i>=0 && ((comp = compare(pData,x->entries[i].key))==-1))
         {
+
                 x->entries[i+1].key=x->entries[i].key;
                 i--;
         }
@@ -298,8 +302,11 @@ void IX_IndexHandle::insertNonFull(indexNode* x, void*  pData,const RID &rid)
     }
     else
     {
-        while(i>=1 && !compare(pData,x->entries[i].key))
+        i--;
+        while(i>=0 && !compare(pData,x->entries[i].key))
+        {
             i--;
+        }
         i++;
         //read x->children[i];
         indexNode* childi = readNodeFromPageNum(x->entries[i].child);
@@ -327,7 +334,6 @@ void IX_IndexHandle::insert(indexNode* x, void* pData, const RID &rid)
     //x is the root indexNode
     if(x->numberOfKeys==2*t-1)
     {
-
         indexNode* s = new indexNode();//s becomes the root
         //allocate and write s?
         s->leaf = false;
@@ -353,8 +359,10 @@ void IX_IndexHandle::insert(indexNode* x, void* pData, const RID &rid)
     
     }
     else
+    {
         insertNonFull(x,pData,rid);
-   
+    }
+
     
 }
 
@@ -365,6 +373,7 @@ IX_IndexHandle::IX_IndexHandle()
     memset(&fileHdr, 0, sizeof(fileHdr));
     fileHdr.rootPageNum = IX_EMPTY_TREE;
     t = fileHdr.orderOfTree;
+    printf("constructor\n");
 }
 
 IX_IndexHandle::~IX_IndexHandle()
@@ -375,6 +384,7 @@ IX_IndexHandle::~IX_IndexHandle()
 // Insert a new index entry
 RC IX_IndexHandle::InsertEntry(void *pData, const RID &rid)
 {
+
     if(pData==NULL)
         return 5;
     if(fileHdr.rootPageNum==IX_EMPTY_TREE)
