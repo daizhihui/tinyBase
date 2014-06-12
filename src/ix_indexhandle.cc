@@ -450,7 +450,7 @@ void IX_IndexHandle::merge (node * thisNode , node *neighborNode, node *anchorNo
     //to get right node and left node
     node * leftN = NULL;
     node * rightN = NULL;
-    if(compare(thisNode->keys[0],neighborNode->keys[0]) >=0) {
+    if(compare(thisNode->entries[0].key,neighborNode->entries[0].key) >=0) {
         leftN = neighborNode;
         rightN = thisNode;
     }
@@ -604,19 +604,10 @@ void deleteEntryInNode(node* x, int keyNum, nodeInfoInPath * path, int depthInPa
 {
     //remove the entry and move its following entries forward
     // TODO make more efficient
-    if(x->leaf){
-        for(int i=keyNum; i < x->numberOfKeys ; ++i){
-            x->keys[i] = x->keys[i+1];
-            x->children[i] = x->children[i+1];
-        }
+    for(int i=keyNum; i < x->numberOfKeys ; ++i){
+        x->entries[i] = x->entries[i+1];
     }
-    else{
-        for(int i=keyNum; i < x->numberOfKeys ; ++i){
-            x->keys[i] = x->keys[i+1];
-            x->children[i+1] = x->children[i+2];
-        }
-    }
-    --(x->numberOfKeys);
+     --(x->numberOfKeys);
 
     //underflow
     if(x->numberOfKeys < t){
