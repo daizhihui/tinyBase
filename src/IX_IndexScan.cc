@@ -40,7 +40,7 @@ RC IX_IndexScan::OpenScan(const IX_IndexHandle &indexHandle,CompOp _compOp, void
     // Sanity Check: 'this' should not be open yet
     if (bScanOpen)
        // Test: opened IX_IndexScan, c'est à dire paramètres deja initialisés
-       return (1);//IX_SCANOPEN
+       return (0);//IX_SCANOPEN
 
     //verifier si indexHandle est deja ouvert, je peux faire le test sur attributeLenght return (IX_CLOSEDFILE);
 
@@ -76,6 +76,7 @@ RC IX_IndexScan::OpenScan(const IX_IndexHandle &indexHandle,CompOp _compOp, void
 
     // Return ok
     return (0);
+    printf( "End Of Open SCAN");
 }
 
 
