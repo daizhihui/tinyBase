@@ -75,7 +75,7 @@ RC PrintIndex(IX_IndexHandle &ih);
 //
 // Array of pointers to the test functions
 //
-#define NUM_TESTS       3               // number of tests
+#define NUM_TESTS       4               // number of tests
 int (*tests[])() =                      // RC doesn't work on some compilers
 {
    Test1,
@@ -232,6 +232,7 @@ RC InsertIntEntries(IX_IndexHandle &ih, int nEntries)
    }
    printf("\r\t%d%%      \n", (int)(i*100L/nEntries));
 
+   printf("Return ok\n");
    // Return ok
    return (0);
 }
@@ -533,7 +534,8 @@ RC Test2(void)
 
          // ensure an entry not inserted is not there
          (rc = VerifyIntIndex(ih, FEW_ENTRIES, 1, FALSE)) ||
-         (rc = ixm.CloseIndex(ih)))
+         (rc = ixm.CloseIndex(ih))
+           )
       return (rc);
 
    LsFiles(FILENAME);

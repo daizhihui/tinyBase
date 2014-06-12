@@ -261,12 +261,12 @@ RC IX_Manager::CloseIndex(IX_IndexHandle &indexHandle){
         char* pData;
         
         // Get the header page
-        if (rc = indexHandle.pfFileHandle.GetFirstPage(pageHandle))
+        if ((rc = indexHandle.pfFileHandle.GetFirstPage(pageHandle)))
             // Test: unopened(closed) fileHandle, invalid file
             goto err_return;
         
         // Get a pointer where header information will be written
-        if (rc = pageHandle.GetData(pData))
+        if ((rc = pageHandle.GetData(pData)))
             // Should not happen
             goto err_unpin;
         
@@ -274,19 +274,19 @@ RC IX_Manager::CloseIndex(IX_IndexHandle &indexHandle){
         memcpy(pData, &indexHandle.fileHdr, sizeof(indexHandle.fileHdr));
         
         // Mark the header page as dirty
-        if (rc = indexHandle.pfFileHandle.MarkDirty(IX_HEADER_PAGE_NUM))
+        if ((rc = indexHandle.pfFileHandle.MarkDirty(IX_HEADER_PAGE_NUM)))
             // Should not happen
             goto err_unpin;
         
         // Unpin the header page
-        if (rc = indexHandle.pfFileHandle.UnpinPage(IX_HEADER_PAGE_NUM))
+        if ((rc = indexHandle.pfFileHandle.UnpinPage(IX_HEADER_PAGE_NUM)))
             // Should not happen
             goto err_return;
         
         // Set file header to be not changed
         indexHandle.bHdrChanged = FALSE;
     }
-    
+
     // Call PF_Manager::CloseFile()
     if (rc = pPfm->CloseFile(indexHandle.pfFileHandle))
         // Test: unopened(closed) fileHandle
