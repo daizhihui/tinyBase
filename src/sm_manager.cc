@@ -137,11 +137,14 @@ RC SM_Manager::CreateTable(const char *relName,
     
     // new Relation record
     RID rid;
-    char * data;
+    char data[sizeof(Relation)];
+    Relation relation=Relation();
+    relation.relName=relName;
     strcpy(data,relName);
-    data[MAXNAME]=tuplelength;
-    data[MAXNAME+sizeof(int)]=attrCount;
-    data[MAXNAME+sizeof(int)+sizeof(int)]=0;
+    relation.tupleLength=tuplelength;
+    relation.attrCount=attrCount;
+    relation.indexCount=0;
+    memcpy(data,&relation,sizeof(Relation));
     
     //store new Relation record to Catalog relcat
     if((rc=fileHandle_Relcat.InsertRec(data, rid))) return (rc);
@@ -151,19 +154,20 @@ RC SM_Manager::CreateTable(const char *relName,
     
     //Attr_Relation records
     for (int i=0;i<attrCount;i++){
-        char * data;
-        strcpy(data,relName);
-        data[MAXNAME]=*attributes[i].attrName;
+        char data[sizeof(Attr_Relation)];
+        Attr_Relation attr_relation[attrCount];
+        attr_relation[i].attrName=attributes[i].attrName;
         //calculate offset
         int offset=0;
         for (int j=0;j<i;i++){
             offset+=attributes[j].attrLength;
         }
-        data[2*MAXNAME]=offset;
-        data[2*MAXNAME+sizeof(int)]=attributes[i].attrType;
-        data[2*MAXNAME+sizeof(int)+sizeof(AttrType)]=attributes[i].attrLength;
-        data[2*MAXNAME+2*sizeof(int)+sizeof(AttrType)]=-1;
+        attr_relation[i].offset=offset;
+        attr_relation[i].attrType=attributes[i].attrType;
+        attr_relation[i].attrLength=attributes[i].attrLength;
+        attr_relation[i].indexNo=-1;
         
+        memcpy(data,&attr_relation[i],sizeof(Attr_Relation));
         //store new Attr_Relation record to Catalog attrcat
         if((rc=fileHandle_Attrcat.InsertRec(data, rid))) return (rc);
     }
@@ -213,29 +217,22 @@ RC SM_Manager::CreateIndex(const char *relName,
     bool flag_rel_attr_exist=false;
     // check if the index already exists
     int max_index=0;
-    char * data;
-    char * relname;
-    char * attrname;
-    char * index;
-    AttrType attrtype;
-    int attrlength;
+    Attr_Relation attr_relation;
     while(filescan.GetNextRec(rec)!=RM_EOF){
         //get records until the end
         if((rc=filescan.GetNextRec(rec))) return (rc);
-        rec.GetData(data);
-        strncpy(relname,data,MAXNAME);
-        strncpy(attrname,data+MAXNAME,MAXNAME);
-        strncpy(index,data+2*MAXNAME+2*sizeof(int)+sizeof(AttrType),sizeof(int));
-        
+        //char data[sizeof(Attr_Relation)];
+        memcpy(&attr_relation,&rec,sizeof(Attr_Relation));
+
         //calculate the max index already exists, then create index max_index+1
-        if(atoi(index)>max_index) max_index=atoi(index);
+        if(attr_relation.indexNo>max_index) max_index=attr_relation.indexNo;
         
         // the index already exists, return error SM_INDEXEXIST
-        if(relname==relName && attrname==attrName && atoi(index)!=-1) {
+        if(attr_relation.relName==relName && attr_relation.attrName==attrName && attr_relation.indexNo!=-1) {
             flag_rel_attr_exist=true;
             return (SM_INDEXEXIST);
         }
-        if(relname==relName && attrname==attrName && atoi(index)==-1) {
+        if(attr_relation.relName==relName && attr_relation.attrName==attrName && attr_relation.indexNo==-1) {
             flag_rel_attr_exist=true;
             break;
         }
@@ -251,7 +248,10 @@ RC SM_Manager::CreateIndex(const char *relName,
     strcpy(filename, relName);
     strcat(filename,".");
     strcat(filename, attrName);
-    Ixm->CreateIndex(filename, max_index+1, <#AttrType attrType#>, <#int attrLength#>)
+    
+    // Call IX_IndexHandle::CreateIndex to create a index file
+    if((rc=Ixm->CreateIndex(filename, max_index+1, attr_relation.attrType, attr_relation.attrLength))) return (rc);
+    
     
     cout << "CreateIndex\n"
          << "   relName =" << relName << "\n"
