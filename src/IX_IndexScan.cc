@@ -19,9 +19,9 @@ IX_IndexScan::IX_IndexScan()
     prevLeaf=-1;
     currentPosInLeaf=-1;
     pIndexHandle= NULL;
-    compOp=-1;
+    compOp=NO_OP;
     value=NULL;
-    pinHint=-1;
+    pinHint=NO_HINT;
 
 }
 
@@ -67,7 +67,7 @@ RC IX_IndexScan::OpenScan(const IX_IndexHandle &indexHandle,CompOp _compOp, void
     compOp= _compOp;
     value =  _value;
     pinHint= _pinHint;
-   pIndexHandle=(IX_IndexHandle *) &indexHandle;
+  // pIndexHandle=(IX_IndexHandle *) &indexHandle;
 
     // Set local state variables
     bScanOpen = TRUE;
@@ -93,13 +93,13 @@ int searchLeaf(PageNum startPageNum,void* value, PageNum &leaf){ // Penser à ge
  }else{
      while( pos< numberOfKeys){
 
-         if(pIndexHandle->compare(value,(currentNode->entries[pos])->key)<0){ // value < current Key
+         if(indexHandle.compare(value,(currentNode->entries[pos]).key)<0){ // value < current Key
             // appel recursif à partir du nouveau noeud
-             searchLeaf((currentNode->entries[pos])->child,value,leaf);
+             searchLeaf((currentNode->entries[pos]).child,value,leaf);
          }
          else{
              if(pos+1==numberOfKeys){  // je suis sur la derniere entrée du noeud
-                 searchLeaf((currentNode->entries[pos])->child,value,leaf);
+                 searchLeaf((currentNode->entries[pos]).child,value,leaf);
              }
 
          }
@@ -181,22 +181,22 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
     if(bScanOpen){
 
         if(currentBucket == -1 && endScan !=true){ //  First access
-            searchLeaf(pIndexHandle->fileHdr.rootPageNum,value,leaf);
-            currentLeaf= pIndexHandle->pIndexHandle->readNodeFromPageNum(leaf);
+            searchLeaf(pIndexHandle->fileHdr.rootPageNum,value,leaf,indexHandle);
+            currentLeaf= pIndexHandle->readNodeFromPageNum(leaf);
 
 
             while(pos<currentLeaf->numberOfKeys){
-                if(pIndexHandle->compare(value,(currentLeaf->entries[pos])->key)==0 && gBucket==-1){
+                if(pIndexHandle->compare(value,(currentLeaf->entries[pos]).key)==0 && gBucket==-1){
 
-                    gBucket= (currentLeaf->entries[pos])->child;
+                    gBucket= (currentLeaf->entries[pos]).child;
                     pos_g=pos;
                 }
-                if(pIndexHandle->compare(value,(currentleaf->entries[pos])->key)>0 ){
-                    pBucket= (currentLeaf->entries[pos])->child;
+                if(pIndexHandle->compare(value,(currentleaf->entries[pos]).key)>0 ){
+                    pBucket= (currentLeaf->entries[pos]).child;
                     pos_p=pos;
                 }
-                if(pIndexHandle->compare(value,(currentLeaf->entries[pos])->key)<0 && nBucket==-1){ //correspond au premier element inferieur à value
-                    nBucket= (currentLeaf->entries[pos])->child;
+                if(pIndexHandle->compare(value,(currentLeaf->entries[pos]).key)<0 && nBucket==-1){ //correspond au premier element inferieur à value
+                    nBucket= (currentLeaf->entries[pos]).child;
                     pos_n=pos;
                 }
                 pos++;
@@ -281,9 +281,9 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
                                 if(currentLeaf->previous !=-1){
                                     int tempLeaf;
                                     tempLeaf=currentLeaf->previous;
-                                    currentLeaf= pIndexHandle->pIndexHandle->readNodeFromPageNum(tempLeaf);
+                                    currentLeaf= pIndexHandle->readNodeFromPageNum(tempLeaf);
                                     currentPosInLeaf=currentLeaf->numberOfKeys -1;
-                                    currentBucket=(currentLeaf->entries[currentPosInLeaf])->child;
+                                    currentBucket=(currentLeaf->entries[currentPosInLeaf]).child;
                                     curSlotNum=-1;
 
                                 }else{ // end of the list of leaves
@@ -296,16 +296,16 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
                         if(compOp== GT_OP || compOp== GE_OP){
                             if(currentPosInLeaf +1 <currentLeaf->numberOfKeys){
                                 currentPosInLeaf=currentPosInLeaf+1;
-                                currentBucket=(currentLeaf->entries[currentPosInLeaf])->child;
+                                currentBucket=(currentLeaf->entries[currentPosInLeaf]).child;
                                 curSlotNum=-1;
 
                             }else{
                                 if(currentLeaf->next !=-1){
                                     int tempLeaf;
                                     tempLeaf=currentLeaf->next;
-                                    currentLeaf= pIndexHandle->pIndexHandle->readNodeFromPageNum(tempLeaf);
+                                    currentLeaf= pIndexHandle->readNodeFromPageNum(tempLeaf);
                                     currentPosInLeaf=0;
-                                    currentBucket=(currentLeaf->entries[currentPosInLeaf])->child;
+                                    currentBucket=(currentLeaf->entries[currentPosInLeaf]).child;
                                     curSlotNum=-1;
 
                                 }else{ // end of the list of leaves
@@ -361,9 +361,9 @@ RC IX_IndexScan::CloseScan()
     prevLeaf=-1;
     currentPosInLeaf=-1;
     pIndexHandle= NULL;
-    compOp=-1;
+    compOp=NO_OP;
     value=NULL;
-    pinHint=-1;
+    pinHint=NO_HINT;
 
     // Return ok
     return (0);
