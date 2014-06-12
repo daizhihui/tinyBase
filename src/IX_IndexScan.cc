@@ -94,7 +94,7 @@ int IX_IndexScan::searchLeaf(PageNum startPageNum,void* value, PageNum &leaf ){ 
  }else{
      while( pos< numberOfKeys){
 
-         if(pIndexHandle.compare(value,(currentNode->entries[pos]).key)<0){ // value < current Key
+         if(pIndexHandle->compare(value,(currentNode->entries[pos]).key)<0){ // value < current Key
             // appel recursif à partir du nouveau noeud
              searchLeaf((currentNode->entries[pos]).child,value,leaf);
          }
@@ -247,7 +247,7 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
             stop=false;
             while(!stop){
 
-                pIndexHandle->fileHandler.GetThisPage(currentBucket,pageHandler);
+                pIndexHandle->pfFileHandle.GetThisPage(currentBucket,pageHandler);
                 pageHandler.GetData(pdata);
                 memcpy(&bucketHdr,(IX_BucketHdr*)pdata, sizeof(IX_BucketHdr));
              //find nextSlot in bitmap
