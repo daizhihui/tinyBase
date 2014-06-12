@@ -88,8 +88,9 @@ public:
     int bHdrChanged;                                      // dirty flag for file
 
     int compare(void* k1,void* k2);
-private:   
     indexNode* readNodeFromPageNum(PageNum pn);
+private:   
+    
     void writeNodeOnNewPage(indexNode* x);
     void addToBucket(PageNum& bucket, const RID &rid, PageNum prev);
     void splitChild(indexNode * x, int i,indexNode * y);
@@ -126,7 +127,9 @@ public:
     // Get the next matching entry return IX_EOF if no more matching
     // entries.
     RC GetNextEntry(RID &rid);
-
+    int searchLeaf(PageNum startPageNum,void* value, PageNum &leaf );
+int testBitValue(unsigned char bitmap[],int bit);
+int getNextFullSlot(int start,unsigned char bitmap[],int maxrecnumber);
     // Close index scan
     RC CloseScan();
 
