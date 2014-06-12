@@ -374,6 +374,8 @@ IX_IndexHandle::~IX_IndexHandle()
 // Insert a new index entry
 RC IX_IndexHandle::InsertEntry(void *pData, const RID &rid)
 {
+    if(pData==NULL)
+        return 5;
     if(filehdr.rootPageNum==IX_EMPTY_TREE)
     {
         indexNode * root = new indexNode();
@@ -395,6 +397,7 @@ RC IX_IndexHandle::InsertEntry(void *pData, const RID &rid)
         indexNode* root = readNodeFromPageNum(filehdr.rootPageNum);
         insert(root, pData, rid);
     }
+    return 0;
     
 }
 
