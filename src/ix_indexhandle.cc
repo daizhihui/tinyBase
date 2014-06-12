@@ -159,6 +159,8 @@ void IX_IndexHandle::addToBucket(PageNum& bucket, const RID &rid, PageNum prev)
         data[sizeof(IX_BucketHdr)+bytes+sizeof(PageNum)]=ridSN;
 
         pfFileHandle.MarkDirty(bucket);
+        pfFileHandle.ForcePages();
+        pfFileHandle.UnpinPage(bucket);
     }
     else //bucket exists
     {
@@ -178,6 +180,10 @@ void IX_IndexHandle::addToBucket(PageNum& bucket, const RID &rid, PageNum prev)
             data[sizeof(IX_BucketHdr)+bytes + ridnum*(sizeof(PageNum)+sizeof(SlotNum))] = ridPN;
             data[sizeof(IX_BucketHdr)+bytes + ridnum*(sizeof(PageNum)+sizeof(SlotNum))+sizeof(PageNum)] = ridSN;
             SetBitmap(data+sizeof(IX_BucketHdr),ridnum);
+            pfFileHandle.MarkDirty(bucket);
+            pfFileHandle.ForcePages();
+            pfFileHandle.UnpinPage(bucket);
+
             
         }
         else//bucket full
@@ -186,11 +192,15 @@ void IX_IndexHandle::addToBucket(PageNum& bucket, const RID &rid, PageNum prev)
             if(next!=-1)
             {//bucket full and already has next
                 addToBucket(next,rid,-1);
+                pfFileHandle.UnpinPage(bucket);
+
             }
             else
             {//allocate new bucket
                 addToBucket(next, rid,bucket);
                 data[sizeof(PageNum)]=next;
+                pfFileHandle.UnpinPage(bucket);
+
             }
         }
     }
@@ -240,6 +250,7 @@ void IX_IndexHandle::splitChild(indexNode * x, int i,indexNode * y)
     pfFileHandle.MarkDirty(x->pageNumber);
     writeNodeOnNewPage(z);
     pfFileHandle.ForcePages();
+    pfFileHandle.UnpinPage(z->pageNumber);
 //    for(int i =0;i<z->numberOfKeys;i++)
 //        delete z->entries[i].key;
 //    delete z->entries;
@@ -318,11 +329,12 @@ void IX_IndexHandle::insertNonFull(indexNode* x, void*  pData,const RID &rid)
                 i++;
         }
         insertNonFull(childi,pData,rid);
-        
-        for(int i =0;i<childi->numberOfKeys;i++)
-            delete childi->entries[i].key;
-        delete childi->entries;
-        delete childi;
+        pfFileHandle.UnpinPage(childi->pageNumber);
+
+//        for(int i =0;i<childi->numberOfKeys;i++)
+//            delete childi->entries[i].key;
+//        delete childi->entries;
+//        delete childi;
     }
     
     
@@ -347,20 +359,25 @@ void IX_IndexHandle::insert(indexNode* x, void* pData, const RID &rid)
         insertNonFull(s,pData,rid);
         fileHdr.treeLayerNums++;
         fileHdr.rootPageNum=s->pageNumber;
+        bHdrChanged = 1;
         writeNodeOnNewPage(s);
         pfFileHandle.MarkDirty(x->pageNumber);
         //point T->root = s; if we put the root in memory
         pfFileHandle.ForcePages();
-        
-        for(int i =0;i<x->numberOfKeys;i++)
-            delete x->entries[i].key;
-        delete x->entries;
-        delete x;
+        pfFileHandle.UnpinPage(x->pageNumber);
+        pfFileHandle.UnpinPage(s->pageNumber);
+
+//        for(int i =0;i<x->numberOfKeys;i++)
+//            delete x->entries[i].key;
+//        delete x->entries;
+//        delete x;
     
     }
     else
     {
         insertNonFull(x,pData,rid);
+        pfFileHandle.UnpinPage(x->pageNumber);
+
     }
 
     
@@ -397,8 +414,10 @@ RC IX_IndexHandle::InsertEntry(void *pData, const RID &rid)
         root->previous=-1;
         writeNodeOnNewPage(root);
         fileHdr.rootPageNum=root->pageNumber;
+        bHdrChanged = 1;
         insertNonFull(root, pData, rid);
-        pfFileHandle.ForcePages();
+        pfFileHandle.MarkDirty(root->pageNumber);
+        pfFileHandle.UnpinPage(root->pageNumber);
         delete root->entries;
         delete root;
         
@@ -443,7 +462,7 @@ void IX_IndexHandle::collapseRoot(indexNode * oldRoot){
     ((IX_FileHdr *)data)->rootPageNum = fileHdr.rootPageNum;
     //number of layers in the tree decrease by 1
     ((IX_FileHdr *)data)->treeLayerNums--;
-
+    bHdrChanged = 1;
     pfFileHandle.MarkDirty(fileHeaderPage);
 
     //dispose of oldRoot page
@@ -783,6 +802,8 @@ RC IX_IndexHandle::DeleteEntry(void *pData, const RID &rid){
     indexNode *root = readNodeFromPageNum(rootPage);
     //an array of nodeInfo to save infos about neighors and anchors
     nodeInfoInPath path[fileHdr.treeLayerNums];
+    //for debugging
+    printf("treeLayer%d,order%d\n",fileHdr.treeLayerNums,fileHdr.orderOfTree);
     //for root
     path[0].self = rootPage;
     path[0].anchor=-1; //implicit root
@@ -793,7 +814,9 @@ RC IX_IndexHandle::DeleteEntry(void *pData, const RID &rid){
 
     int pathDepth = 0;
     //parcourir l'arbre et obtenir les donnees enregistrees dans path
+    printf("before traversal");
     traversalTree(root,pData,path,pathDepth);
+    printf("after traversal");
     //remove rid in bucket
     //get the first bucket page
     PageNum bucket = path[pathDepth].self;
