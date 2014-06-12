@@ -244,7 +244,6 @@ RC SM_Manager::CreateIndex(const char *relName,
     // relation name or attribute name not exist in attrcat
     if(flag_rel_attr_exist==false) return (SM_INVALIDRELNAME);
     
-    AttrType=strncpy(
     // close the filescan
     if((rc=filescan.CloseScan())) return (rc);
     
