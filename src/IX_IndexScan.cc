@@ -82,7 +82,7 @@ RC IX_IndexScan::OpenScan(const IX_IndexHandle &indexHandle,CompOp _compOp, void
  // search of leaf containing value
 
 int searchLeaf(PageNum startPageNum,void* value, PageNum &leaf){ // Penser à gerer les cas d'erreurs
- node* currentNode;
+ indexNode* currentNode;
  int numberOfKeys;
  int pos=0;
  currentNode=pIndexHandle->readNodeFromPageNum(startPageNum);
