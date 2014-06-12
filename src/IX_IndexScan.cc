@@ -40,7 +40,7 @@ RC IX_IndexScan::OpenScan(const IX_IndexHandle &indexHandle,CompOp _compOp, void
     // Sanity Check: 'this' should not be open yet
     if (bScanOpen)
        // Test: opened IX_IndexScan, c'est à dire paramètres deja initialisés
-       return (IX_SCANOPEN);
+       return (1);//IX_SCANOPEN
 
     //verifier si indexHandle est deja ouvert, je peux faire le test sur attributeLenght return (IX_CLOSEDFILE);
 
@@ -55,12 +55,12 @@ RC IX_IndexScan::OpenScan(const IX_IndexHandle &indexHandle,CompOp _compOp, void
        break;
 
     default:
-       return (IX_INVALIDCOMPOP);// to define
+       return (-1);// IX_INVALIDCOMPOP
     }
     if (_compOp != NO_OP && compOp != NE_OP) {
        // Sanity Check: value must not be NULL
        if (_value == NULL) 
-          return (IX_NULLPOINTER); //to define
+          return (-2); //IX_NULLPOINTER
 
        }
     // Copy parameters to local variable
@@ -349,7 +349,7 @@ RC IX_IndexScan::CloseScan()
 
     if (!bScanOpen)
         // Test: closed RM_FileScan
-        return (IX_CLOSEDSCAN);
+        return (2);//IX_CLOSEDSCAN
 
     // Reset member variables
     bScanOpen=FALSE;
