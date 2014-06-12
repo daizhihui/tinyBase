@@ -218,7 +218,9 @@ RC SM_Manager::CreateIndex(const char *relName,
     // check if the index already exists
     int max_index=0;
     Attr_Relation attr_relation;
-    while(filescan.GetNextRec(rec)!=RM_EOF){
+    RC rc_scan;
+    while(rc_scan!=RM_EOF){
+        if((rc_scan=filescan.GetNextRec(rec))) return (rc_scan);
         //get records until the end
         if((rc=filescan.GetNextRec(rec))) return (rc);
         //char data[sizeof(Attr_Relation)];
@@ -252,6 +254,39 @@ RC SM_Manager::CreateIndex(const char *relName,
     // Call IX_IndexHandle::CreateIndex to create a index file
     if((rc=Ixm->CreateIndex(filename, max_index+1, attr_relation.attrType, attr_relation.attrLength))) return (rc);
     
+    // Call IX_IndexHandle::OpenIndex to open the index file
+    IX_IndexHandle indexhandle;
+    if((rc=Ixm->OpenIndex(filename, max_index+1, indexhandle))) return (rc);
+    
+    RM_FileHandle filehandle_rel;
+    // Call RM_Manager::OpenFile to open relation file
+    if((rc=Rmm->OpenFile(relName, filehandle_rel))) return (rc);
+    
+    // Call RM_FileScan::OpenScan to scan all the tuples in the table
+    if((rc=filescan.OpenScan(filehandle_rel, attr_relation.attrType, attr_relation.attrLength, attr_relation.offset, NO_OP, (void *) NULL))) return (rc);
+    
+    // scan all the tuples in the table
+    while(rc_scan!=RM_EOF){
+        if((rc_scan=filescan.GetNextRec(rec))) return (rc_scan);
+        RID rid;
+        if((rc=rec.GetRid(rid))) return (rc);
+        char * data;
+        // get record data
+        if((rc=rec.GetData(data))) return (rc);
+        char data_rec[attr_relation.attrLength];
+        // get attribute value
+        strcpy(data_rec,data+attr_relation.offset);
+        if((rc=indexhandle.InsertEntry(data_rec, rid))) return (rc);
+    }
+    
+    //Close scan
+    if((rc=filescan.CloseScan())) return (rc);
+    
+    //close relation file
+    if((rc=Rmm->CloseFile(filehandle_rel))) return (rc);
+    
+    //close index file
+    if(Ixm->CloseIndex(indexhandle)) return (rc);
     
     cout << "CreateIndex\n"
          << "   relName =" << relName << "\n"
