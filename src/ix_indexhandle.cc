@@ -18,8 +18,8 @@ PF_PageHandle pageHandler;
 
 //TODO: make sure bucket logic is there.
 
-//node =data + child page numbers
-//t is the minimum degree of the Tree: every node other than the root must have t-1 keys at least.
+//indexNode =data + child page numbers
+//t is the minimum degree of the Tree: every indexNode other than the root must have t-1 keys at least.
 int t;
 
 
@@ -49,14 +49,14 @@ int IX_IndexHandle::compare(void* k1,void* k2)
     
 }
 
-//Will read and init a node from this page on the disk
+//Will read and init a indexNode from this page on the disk
 
-node* IX_IndexHandle::readNodeFromPageNum(PageNum pn)
+indexNode* IX_IndexHandle::readNodeFromPageNum(PageNum pn)
 {
     filehandler.GetThisPage(pn, pageHandler);
     char* pData;
     pageHandler.GetData(pData);
-    node* x = (node*)pData;
+    indexNode* x = (indexNode*)pData;
 //    x->pageNumber = pData[0];
 //    x->numberOfKeys = pData[sizeof(PageNum)];
 //    
@@ -103,9 +103,9 @@ node* IX_IndexHandle::readNodeFromPageNum(PageNum pn)
     return  x;
 }
 
-//will write a node on a new page
+//will write a indexNode on a new page
 //must write part by part because of dynamic allocation on entries.
-void IX_IndexHandle::writeNodeOnNewPage(node* x)
+void IX_IndexHandle::writeNodeOnNewPage(indexNode* x)
 {
     filehandler.AllocatePage(pageHandler);
     char* pData;
@@ -199,11 +199,11 @@ void IX_IndexHandle::addToBucket(PageNum& bucket, const RID &rid, PageNum prev)
 //x is father
 //y is child
 //i is index in x's entries, -1 if first
-void IX_IndexHandle::splitChild(node * x, int i,node * y)
+void IX_IndexHandle::splitChild(indexNode * x, int i,indexNode * y)
 {
     
-    //the new node to write
-    node *z = new node();
+    //the new indexNode to write
+    indexNode *z = new indexNode();
 
     //
     z->leaf = y->leaf;
@@ -248,11 +248,11 @@ void IX_IndexHandle::splitChild(node * x, int i,node * y)
 }
 
 
-//called recursively, if node x is a leaf, it adds the entry to the bucket
+//called recursively, if indexNode x is a leaf, it adds the entry to the bucket
 // if x is not a leaf, it goes to its children while splitting them if they have
 // the necessary amount of keys.
 
-void IX_IndexHandle::insertNonFull(node* x, void*  pData,const RID &rid)
+void IX_IndexHandle::insertNonFull(indexNode* x, void*  pData,const RID &rid)
 {
     //if same key, add to bucket and increment number of rids.
     //if new key create bucket and add.
@@ -302,7 +302,7 @@ void IX_IndexHandle::insertNonFull(node* x, void*  pData,const RID &rid)
             i--;
         i++;
         //read x->children[i];
-        node* childi = readNodeFromPageNum(x->entries[i].child);
+        indexNode* childi = readNodeFromPageNum(x->entries[i].child);
         
         if(childi->numberOfKeys==2*t-1)
         {
@@ -321,14 +321,14 @@ void IX_IndexHandle::insertNonFull(node* x, void*  pData,const RID &rid)
     
 }
 
-//start of recursion for the insert, x should be the root node
-void IX_IndexHandle::insert(node* x, void* pData, const RID &rid)
+//start of recursion for the insert, x should be the root indexNode
+void IX_IndexHandle::insert(indexNode* x, void* pData, const RID &rid)
 {
-    //x is the root node
+    //x is the root indexNode
     if(x->numberOfKeys==2*t-1)
     {
 
-        node* s = new node();//s becomes the root
+        indexNode* s = new indexNode();//s becomes the root
         //allocate and write s?
         s->leaf = false;
         s->isRoot=true;
@@ -376,7 +376,7 @@ RC IX_IndexHandle::InsertEntry(void *pData, const RID &rid)
 {
     if(filehdr.rootPageNum==IX_EMPTY_TREE)
     {
-        node * root = new node();
+        indexNode * root = new indexNode();
         root->leaf = true;
         root->isRoot=  true;
         filehdr.treeLayerNums++;
@@ -392,9 +392,10 @@ RC IX_IndexHandle::InsertEntry(void *pData, const RID &rid)
     }
     else
     {
-        node* root = readNodeFromPageNum(filehdr.rootPageNum);
+        indexNode* root = readNodeFromPageNum(filehdr.rootPageNum);
         insert(root, pData, rid);
     }
+    
 }
 
 
@@ -406,7 +407,7 @@ RC IX_IndexHandle::InsertEntry(void *pData, const RID &rid)
 //      treeLayerNums descrease by 1
 
 //input : oldRoot - old root
-void IX_IndexHandle::collapseRoot(node * oldRoot){
+void IX_IndexHandle::collapseRoot(indexNode * oldRoot){
     char* data;
     PF_PageHandle pageHandle;
 
@@ -437,19 +438,19 @@ void IX_IndexHandle::collapseRoot(node * oldRoot){
     filehandler.DisposePage(oldRoot->pageNumber);
 }
 
-//Desc: merge two nodes, copy all the entries in the right node to the leftnode
-//      delete the right node, that means call recusively the function deleteEntryInNode(node* x, int keyNum, nodeInfoInPath * path)
-//      where node x is replaced by the node anchorNode
+//Desc: merge two nodes, copy all the entries in the right indexNode to the leftnode
+//      delete the right indexNode, that means call recusively the function deleteEntryInNode(indexNode* x, int keyNum, nodeInfoInPath * path)
+//      where indexNode x is replaced by the indexNode anchorNode
 // 10/06/2014 deal with leaf linked list
 
-//input : keyNum - is the position of key that separates this node and neighorNode
-//        depthInPath - the depth of node thisNode in the path
+//input : keyNum - is the position of key that separates this indexNode and neighorNode
+//        depthInPath - the depth of indexNode thisNode in the path
 //
 
-void IX_IndexHandle::merge (node * thisNode , node *neighborNode, node *anchorNode, int keyNum, int depthInPath){
-    //to get right node and left node
-    node * leftN = NULL;
-    node * rightN = NULL;
+void IX_IndexHandle::merge (indexNode * thisNode , indexNode *neighborNode, indexNode *anchorNode, int keyNum, int depthInPath){
+    //to get right indexNode and left indexNode
+    indexNode * leftN = NULL;
+    indexNode * rightN = NULL;
     if(compare(thisNode->entries[0].key,neighborNode->entries[0].key) >=0) {
         leftN = neighborNode;
         rightN = thisNode;
@@ -459,16 +460,16 @@ void IX_IndexHandle::merge (node * thisNode , node *neighborNode, node *anchorNo
         rightN = neighborNode;
     }
 
-    //node is not leaf
+    //indexNode is not leaf
     if(!leftN->leaf){
         //copy keyNum key to leftN
         leftN->entries[leftN->numberOfKeys].key = anchorNode->entries[keyNum].key;
-        //copy the first pointer in the right node to the left node
+        //copy the first pointer in the right indexNode to the left indexNode
         leftN->entries[leftN->numberOfKeys].child = rightN->previous;
         leftN->numberOfKeys++;
     }
 
-    //copy all the entries in the right node to the leftnode
+    //copy all the entries in the right indexNode to the leftnode
     for(int i=0; i<rightN->numberOfKeys; i++){
         leftN->entries[leftN->numberOfKeys] = rightN->entries[i];
         leftN->numberOfKeys++;
@@ -481,11 +482,11 @@ void IX_IndexHandle::merge (node * thisNode , node *neighborNode, node *anchorNo
         readNodeFromPageNum(rightN->next)->previous = leftN->pageNumber;
     }
 
-    //dispose page in node rightN
+    //dispose page in indexNode rightN
     filehandler.UnpinPage(rightN->pageNumber);
     filehandler.DisposePage(rightN->pageNumber);
 
-    //write left node to buffer pool
+    //write left indexNode to buffer pool
     writeNodeOnNewPage(leftN);
 
      //delete keyNum in anchorNode, recursively
@@ -493,18 +494,18 @@ void IX_IndexHandle::merge (node * thisNode , node *neighborNode, node *anchorNo
 }
 
 
-//Desc: shift over half of a neighbor’s plus keys to this node
-//      update anchor : the key value in the index entry pointing to the second node must be changed to the the lowest search key in the second node
+//Desc: shift over half of a neighbor’s plus keys to this indexNode
+//      update anchor : the key value in the index entry pointing to the second indexNode must be changed to the the lowest search key in the second indexNode
 
-//input : keyNum - is the position of key that separates this node and neighorNode
+//input : keyNum - is the position of key that separates this indexNode and neighorNode
 //        isRight - true : neighbor is on the rightside; false : neighbor is on the leftside
 //
-void IX_IndexHandle::shift (node * thisNode , node *neighborNode, node *anchorNode, int keyNum, bool isRight ){
+void IX_IndexHandle::shift (indexNode * thisNode , indexNode *neighborNode, indexNode *anchorNode, int keyNum, bool isRight ){
 
     int numKeysShifted = (neighborNode->numberOfKeys - thisNode->numberOfKeys) / 2;
     // neighbor is on the rightside
     if(isRight){
-        //node is not leaf
+        //indexNode is not leaf
         if(!thisNode->leaf){
             //copy key in position keyNum to thisNode
             thisNode->entries[t-1].key = anchorNode->entries[keyNum].key;
@@ -526,7 +527,7 @@ void IX_IndexHandle::shift (node * thisNode , node *neighborNode, node *anchorNo
             anchorNode->entries[keyNum].key = neighborNode->entries[numKeysShifted-1].key;
         }
 
-        //node is leaf, shift numKeysShifted (k,p) to thisNode from neighborNode
+        //indexNode is leaf, shift numKeysShifted (k,p) to thisNode from neighborNode
         else{
             for(int i=0; i<numKeysShifted;i++){
                 thisNode->entries[thisNode->numberOfKeys] = neighborNode->entries[i];
@@ -538,7 +539,7 @@ void IX_IndexHandle::shift (node * thisNode , node *neighborNode, node *anchorNo
                 neighborNode->entries[i] = neighborNode->entries[i+numKeysShifted];
             }
 
-            //copy the the lowest search key in the second node to anchor's
+            //copy the the lowest search key in the second indexNode to anchor's
              anchorNode->entries[keyNum].key = neighborNode->entries[numKeysShifted].key;
         }
 
@@ -554,7 +555,7 @@ void IX_IndexHandle::shift (node * thisNode , node *neighborNode, node *anchorNo
         }
 
 
-        //node is not leaf
+        //indexNode is not leaf
         if(!thisNode->leaf){
             //shift the first pointer of thisNode
             thisNode->entries[numKeysShifted-1].child = thisNode->previous;
@@ -579,7 +580,7 @@ void IX_IndexHandle::shift (node * thisNode , node *neighborNode, node *anchorNo
             anchorNode->entries[keyNum].key = neighborNode->entries[neighborNode->numberOfKeys-1].key;
         }
 
-        //node is leaf, shift numKeysShifted (k,p) to thisNode from neighborNode
+        //indexNode is leaf, shift numKeysShifted (k,p) to thisNode from neighborNode
         else{
             for(int i=numKeysShifted-1; i>=0; i--){
                 thisNode->entries[i] = neighborNode->entries[neighborNode->numberOfKeys-1];
@@ -587,7 +588,7 @@ void IX_IndexHandle::shift (node * thisNode , node *neighborNode, node *anchorNo
                 neighborNode->numberOfKeys--;
             }
 
-            //copy the the lowest search key in the second node to anchor's
+            //copy the the lowest search key in the second indexNode to anchor's
              anchorNode->entries[keyNum].key = thisNode->entries[0].key;
         }
     }
@@ -598,9 +599,9 @@ void IX_IndexHandle::shift (node * thisNode , node *neighborNode, node *anchorNo
     writeNodeOnNewPage(anchorNode);
 }
 
-//desc : delete the entry in position keyNum in node x
-//input : depthInPath - the depth of node x in the path
-void deleteEntryInNode(node* x, int keyNum, nodeInfoInPath * path, int depthInPath)
+//desc : delete the entry in position keyNum in indexNode x
+//input : depthInPath - the depth of indexNode x in the path
+void deleteEntryInNode(indexNode* x, int keyNum, nodeInfoInPath * path, int depthInPath)
 {
     //remove the entry and move its following entries forward
     // TODO make more efficient
@@ -611,7 +612,7 @@ void deleteEntryInNode(node* x, int keyNum, nodeInfoInPath * path, int depthInPa
 
     //underflow
     if(x->numberOfKeys < t){
-        //this node is root
+        //this indexNode is root
         if(x->isRoot) {
             if(x->numberOfKeys==0) //root has no more keys after delete
                 collapseRoot(x);
@@ -624,12 +625,12 @@ void deleteEntryInNode(node* x, int keyNum, nodeInfoInPath * path, int depthInPa
         PageNum neighborL = path[depthInPath].neighborL;
 
         //choose a neighor with more keys
-        node * nodeNeighbor = NULL;
+        indexNode * nodeNeighbor = NULL;
         int entryNum = 0;
         bool isRight = false;
         if(neighborR!=-1 && neighborL!=-1){
-            node * nodeR = readNodeFromPageNum(neighborR);
-            node * nodeL = readNodeFromPageNum(neighborL);
+            indexNode * nodeR = readNodeFromPageNum(neighborR);
+            indexNode * nodeL = readNodeFromPageNum(neighborL);
             if(nodeR->numberOfKeys >= nodeL->numberOfKeys){
                 nodeNeighbor = nodeR;
                 entryNum = nodeInfoInPath.entryNum;
@@ -656,7 +657,7 @@ void deleteEntryInNode(node* x, int keyNum, nodeInfoInPath * path, int depthInPa
         else return; //TODO shouldn't happen
 
 
-        node *anchorNode = readNodeFromPageNum(nodeInfoInPath.anchor);
+        indexNode *anchorNode = readNodeFromPageNum(nodeInfoInPath.anchor);
 
         //both neighbors are minimum size
         if(nodeNeighbor->numberOfKeys==t){
@@ -713,7 +714,7 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
                 if(before == -1) {
                     PageNum leafPage = path[pathDepth].anchor;
                     int entryNum = path[pathDepth].entryNum;
-                    node * leaf = readNodeFromPageNum(leafPage);
+                    indexNode * leaf = readNodeFromPageNum(leafPage);
                     if(bucketHdr.next == -1) {
                         //delete the entry in leaf
                         deleteEntryInNode(leaf,entryNum,path,pathDepth-1);
@@ -765,7 +766,7 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
 //          rid - the rid to be deleted
 RC IX_IndexHandle::DeleteEntry(void *pData, const RID &rid){
     PageNum rootPage = filehdr.rootPageNum;
-    node *root = readNodeFromPageNum(rootPage);
+    indexNode *root = readNodeFromPageNum(rootPage);
     //an array of nodeInfo to save infos about neighors and anchors
     nodeInfoInPath path[fileHdr.treeLayerNums];
     //for root
@@ -789,13 +790,13 @@ RC IX_IndexHandle::DeleteEntry(void *pData, const RID &rid){
 }
 
 
-//desc : recurse to a leaf node from root to find deletable entry:
+//desc : recurse to a leaf indexNode from root to find deletable entry:
 //       for nodes in the search path, calculate immediate neighbors and their anchors
 //input : pData - the key value of index
-//          x - the node to
+//          x - the indexNode to
 //return : path - a pointer that points to a list of nodeInfoInPath
 //         pathDepth - the length of this list of nodeInfoInPath
-RC IX_IndexHandle::traversalTree(node *x, void *pData, nodeInfoInPath *path,int &pathDepth){
+RC IX_IndexHandle::traversalTree(indexNode *x, void *pData, nodeInfoInPath *path,int &pathDepth){
     pathDepth++;
     if(x->leaf){
         int i = 0;
@@ -817,7 +818,7 @@ RC IX_IndexHandle::traversalTree(node *x, void *pData, nodeInfoInPath *path,int 
     int i = 0;
     while(i<x->numberOfKeys && compare(pData,x->entries[i].key)!=-1)
         i++;
-    node* childi = NULL;
+    indexNode* childi = NULL;
     //pData is less than the first key, so childi is pointed by the first pointer in x
     if(i==0){
         childi = readNodeFromPageNum(x->previous);
