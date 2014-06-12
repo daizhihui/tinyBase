@@ -12,15 +12,13 @@
 #include <string.h>
 //temporary, just for algo.
 //we will need these
-struct IX_FileHdr filehdr;
-PF_FileHandle filehandler;
-PF_PageHandle pageHandler;
+
 
 //TODO: make sure bucket logic is there.
 
 //indexNode =data + child page numbers
 //t is the minimum degree of the Tree: every indexNode other than the root must have t-1 keys at least.
-int t;
+
 
 
 
@@ -29,7 +27,7 @@ int t;
 // if k1 and k2 are strings, it will return the one with the biggest first character that does not match.
 int IX_IndexHandle::compare(void* k1,void* k2)
 {
-    switch (filehdr.attrType) {
+    switch (fileHdr.attrType) {
         case FLOAT:
             if(*(float*)k1==(*(float*)k2))
                 return 0;
@@ -53,7 +51,8 @@ int IX_IndexHandle::compare(void* k1,void* k2)
 
 indexNode* IX_IndexHandle::readNodeFromPageNum(PageNum pn)
 {
-    filehandler.GetThisPage(pn, pageHandler);
+    PF_PageHandle pageHandler;
+    pfFileHandle.GetThisPage(pn, pageHandler);
     char* pData;
     pageHandler.GetData(pData);
     indexNode* x = (indexNode*)pData;
@@ -107,7 +106,8 @@ indexNode* IX_IndexHandle::readNodeFromPageNum(PageNum pn)
 //must write part by part because of dynamic allocation on entries.
 void IX_IndexHandle::writeNodeOnNewPage(indexNode* x)
 {
-    filehandler.AllocatePage(pageHandler);
+    PF_PageHandle pageHandler;
+    pfFileHandle.AllocatePage(pageHandler);
     char* pData;
     pageHandler.GetData(pData);
     pageHandler.GetPageNum(x->pageNumber);
@@ -117,9 +117,9 @@ void IX_IndexHandle::writeNodeOnNewPage(indexNode* x)
     //copy entries
     for(int i =0;i<x->numberOfKeys;i++)
     {
-        memcpy(&pData[3*sizeof(PageNum)+2*sizeof(bool)+2*sizeof(int)+i*(filehdr.attrLength+sizeof(PageNum))], &(x->entries[i]), filehdr.attrLength+sizeof(PageNum));
+        memcpy(&pData[3*sizeof(PageNum)+2*sizeof(bool)+2*sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum))], &(x->entries[i]), fileHdr.attrLength+sizeof(PageNum));
     }
-    filehandler.MarkDirty(x->pageNumber);
+    pfFileHandle.MarkDirty(x->pageNumber);
 }
 
 void IX_IndexHandle::addToBucket(PageNum& bucket, const RID &rid, PageNum prev)
@@ -129,10 +129,10 @@ void IX_IndexHandle::addToBucket(PageNum& bucket, const RID &rid, PageNum prev)
     rid.GetPageNum(ridPN);
     rid.GetSlotNum(ridSN);
     //use IX_BUCKETHEADER
-    
-    if(bucket == -1 || filehandler.GetThisPage(bucket, pageHandler)!=0)
+    PF_PageHandle pageHandler;
+    if(bucket == -1 || pfFileHandle.GetThisPage(bucket, pageHandler)!=0)
     {//bucket does not exist
-        filehandler.AllocatePage(pageHandler);
+        pfFileHandle.AllocatePage(pageHandler);
         pageHandler.GetPageNum(bucket);
         char* data;
         pageHandler.GetData(data);
@@ -141,7 +141,7 @@ void IX_IndexHandle::addToBucket(PageNum& bucket, const RID &rid, PageNum prev)
         data[0] = prev;//prev
         data[sizeof(PageNum)] = -1;//next
         //create bitmap: set all to 0 -- if bitmap isn't a multiple of bytes, uncomment following
-        int bytes =  filehdr.bucketHeaderSize - sizeof(IX_BucketHdr);
+        int bytes =  fileHdr.bucketHeaderSize - sizeof(IX_BucketHdr);
         memset(data+sizeof(IX_BucketHdr), 0, bytes);//set to 0
         
 //        int r = filehdr.numRidsPerBucket-bytes; //rest of bits
@@ -158,7 +158,7 @@ void IX_IndexHandle::addToBucket(PageNum& bucket, const RID &rid, PageNum prev)
         data[sizeof(IX_BucketHdr)+bytes]=ridPN;
         data[sizeof(IX_BucketHdr)+bytes+sizeof(PageNum)]=ridSN;
 
-        filehandler.MarkDirty(bucket);
+        pfFileHandle.MarkDirty(bucket);
     }
     else //bucket exists
     {
@@ -166,14 +166,14 @@ void IX_IndexHandle::addToBucket(PageNum& bucket, const RID &rid, PageNum prev)
         pageHandler.GetData(data);
         //find first empty rid num
         int ridnum;
-        for(ridnum=0;ridnum<filehdr.numRidsPerBucket;ridnum++)
+        for(ridnum=0;ridnum<fileHdr.numRidsPerBucket;ridnum++)
             if(GetBitmap(data+sizeof(IX_BucketHdr),ridnum))
                 break;
-        if(ridnum!=filehdr.numRidsPerBucket)
+        if(ridnum!=fileHdr.numRidsPerBucket)
         {
             //found empty one.
             //insert
-            int bytes =  filehdr.bucketHeaderSize - sizeof(IX_BucketHdr);
+            int bytes =  fileHdr.bucketHeaderSize - sizeof(IX_BucketHdr);
 
             data[sizeof(IX_BucketHdr)+bytes + ridnum*(sizeof(PageNum)+sizeof(SlotNum))] = ridPN;
             data[sizeof(IX_BucketHdr)+bytes + ridnum*(sizeof(PageNum)+sizeof(SlotNum))+sizeof(PageNum)] = ridSN;
@@ -236,10 +236,10 @@ void IX_IndexHandle::splitChild(indexNode * x, int i,indexNode * y)
         y->next=z->pageNumber;
         z->previous=y->pageNumber;
     }
-    filehandler.MarkDirty(y->pageNumber);
-    filehandler.MarkDirty(x->pageNumber);
+    pfFileHandle.MarkDirty(y->pageNumber);
+    pfFileHandle.MarkDirty(x->pageNumber);
     writeNodeOnNewPage(z);
-    filehandler.ForcePages();
+    pfFileHandle.ForcePages();
     for(int i =0;i<z->numberOfKeys;i++)
         delete z->entries[i].key;
     delete z->entries;
@@ -294,7 +294,7 @@ void IX_IndexHandle::insertNonFull(indexNode* x, void*  pData,const RID &rid)
         
         
         //x->children = new PageNum();
-        filehandler.MarkDirty(x->pageNumber);
+        pfFileHandle.MarkDirty(x->pageNumber);
     }
     else
     {
@@ -339,12 +339,12 @@ void IX_IndexHandle::insert(indexNode* x, void* pData, const RID &rid)
         s->entries= new entry[t-1];//allocate entries for new root.
         splitChild(s,-1,x);
         insertNonFull(s,pData,rid);
-        filehdr.treeLayerNums++;
-        filehdr.rootPageNum=s->pageNumber;
+        fileHdr.treeLayerNums++;
+        fileHdr.rootPageNum=s->pageNumber;
         writeNodeOnNewPage(s);
-        filehandler.MarkDirty(x->pageNumber);
+        pfFileHandle.MarkDirty(x->pageNumber);
         //point T->root = s; if we put the root in memory
-        filehandler.ForcePages();
+        pfFileHandle.ForcePages();
         
         for(int i =0;i<x->numberOfKeys;i++)
             delete x->entries[i].key;
@@ -364,6 +364,7 @@ IX_IndexHandle::IX_IndexHandle()
     bHdrChanged = FALSE;
     memset(&fileHdr, 0, sizeof(fileHdr));
     fileHdr.rootPageNum = IX_EMPTY_TREE;
+    t = fileHdr.orderOfTree;
 }
 
 IX_IndexHandle::~IX_IndexHandle()
@@ -376,25 +377,25 @@ RC IX_IndexHandle::InsertEntry(void *pData, const RID &rid)
 {
     if(pData==NULL)
         return 5;
-    if(filehdr.rootPageNum==IX_EMPTY_TREE)
+    if(fileHdr.rootPageNum==IX_EMPTY_TREE)
     {
         indexNode * root = new indexNode();
         root->leaf = true;
         root->isRoot=  true;
-        filehdr.treeLayerNums++;
+        fileHdr.treeLayerNums++;
         root->numberOfKeys=0;
         root->previous=-1;
         writeNodeOnNewPage(root);
-        filehdr.rootPageNum=root->pageNumber;
+        fileHdr.rootPageNum=root->pageNumber;
         insertNonFull(root, pData, rid);
-        filehandler.ForcePages();
+        pfFileHandle.ForcePages();
         delete root->entries;
         delete root;
         
     }
     else
     {
-        indexNode* root = readNodeFromPageNum(filehdr.rootPageNum);
+        indexNode* root = readNodeFromPageNum(fileHdr.rootPageNum);
         insert(root, pData, rid);
     }
     return 0;
@@ -417,28 +418,28 @@ void IX_IndexHandle::collapseRoot(indexNode * oldRoot){
 
     //tree becomes empty
     if(oldRoot->leaf) {
-        filehdr.rootPageNum = IX_EMPTY_TREE;
+        fileHdr.rootPageNum = IX_EMPTY_TREE;
     }
     else{ //generate new root
-        filehdr.rootPageNum = oldRoot->previous;
+        fileHdr.rootPageNum = oldRoot->previous;
     }
 
 
     //write back to buffer pool fileHeader
-    filehandler.GetFirstPage(pageHandle);
+    pfFileHandle.GetFirstPage(pageHandle);
     pageHandle.GetData(data);
     PageNum fileHeaderPage;
     pageHandle.GetPageNum(fileHeaderPage);
-    ((IX_FileHdr *)data)->rootPageNum = filehdr.rootPageNum;
+    ((IX_FileHdr *)data)->rootPageNum = fileHdr.rootPageNum;
     //number of layers in the tree decrease by 1
     ((IX_FileHdr *)data)->treeLayerNums--;
 
-    filehandler.MarkDirty(fileHeaderPage);
+    pfFileHandle.MarkDirty(fileHeaderPage);
 
     //dispose of oldRoot page
-    filehandler.MarkDirty(oldRoot->pageNumber);
-    filehandler.UnpinPage(oldRoot->pageNumber);
-    filehandler.DisposePage(oldRoot->pageNumber);
+    pfFileHandle.MarkDirty(oldRoot->pageNumber);
+    pfFileHandle.UnpinPage(oldRoot->pageNumber);
+    pfFileHandle.DisposePage(oldRoot->pageNumber);
 }
 
 //Desc: merge two nodes, copy all the entries in the right indexNode to the leftnode
@@ -486,8 +487,8 @@ void IX_IndexHandle::merge (indexNode * thisNode , indexNode *neighborNode, inde
     }
 
     //dispose page in indexNode rightN
-    filehandler.UnpinPage(rightN->pageNumber);
-    filehandler.DisposePage(rightN->pageNumber);
+    pfFileHandle.UnpinPage(rightN->pageNumber);
+    pfFileHandle.DisposePage(rightN->pageNumber);
 
     //write left indexNode to buffer pool
     writeNodeOnNewPage(leftN);
@@ -681,7 +682,7 @@ void IX_IndexHandle::deleteEntryInNode(indexNode* x, int keyNum, nodeInfoInPath 
 RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * path, int pathDepth){
     char* data;
     PF_PageHandle pageHandle;
-    filehandler.GetThisPage(bucket, pageHandle);
+    pfFileHandle.GetThisPage(bucket, pageHandle);
     pageHandle.GetData(data);
     IX_BucketHdr *bucketHdr = (IX_BucketHdr*)data;
 
@@ -691,14 +692,14 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
     int ridNum=0;
     RID *ridi;
     //iterate for all non-empty rids
-    for(; ridNum< filehdr.numRidsPerBucket && GetBitmap(data + sizeof(IX_BucketHdr), ridNum); ++ridNum){
-        ridi = (RID*)data+filehdr.bucketHeaderSize+ridNum*sizeof(RID);
+    for(; ridNum< fileHdr.numRidsPerBucket && GetBitmap(data + sizeof(IX_BucketHdr), ridNum); ++ridNum){
+        ridi = (RID*)data+fileHdr.bucketHeaderSize+ridNum*sizeof(RID);
         //found in this page
         if(*ridi==rid) {
             // Clear bit
             ClrBitmap(data + sizeof(IX_BucketHdr), ridNum);
             // Find a non-free rid
-            for ( ridNum = 0; ridNum < filehdr.numRidsPerBucket; ridNum++)
+            for ( ridNum = 0; ridNum < fileHdr.numRidsPerBucket; ridNum++)
                if (GetBitmap(data + sizeof(IX_BucketHdr), ridNum))
                   break;
 
@@ -706,7 +707,7 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
             // This will help the total number of occupied pages to be remained
             // as small as possible
 
-            if (ridNum == filehdr.numRidsPerBucket) {
+            if (ridNum == fileHdr.numRidsPerBucket) {
                //TODO change insert (rid space be free, can be reused, add freeSlot in bucket page header)
                 //dispose of page bucket
                 pfFileHandle.MarkDirty(bucket);
@@ -725,7 +726,7 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
                     }
                     else{
                         //replace pageNum in leaf, change IX_BucketHdr.before in next bucket
-                        filehandler.GetThisPage(bucketHdr->next,pageHandle);
+                        pfFileHandle.GetThisPage(bucketHdr->next,pageHandle);
                         pageHandle.GetData(data);
                         ((IX_BucketHdr *) data)->before = -1; //this bucket becomes the first bucket in the chain list
                         leaf->entries[entryNum].child = bucketHdr->next;
@@ -739,13 +740,13 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
                 else{
 
                     //modify IX_BucketHdr.after in last bucket
-                    filehandler.GetThisPage(bucketHdr->before,pageHandle);
+                    pfFileHandle.GetThisPage(bucketHdr->before,pageHandle);
                     pageHandle.GetData(data);
                     ((IX_BucketHdr *) data)->next = bucketHdr->next; //
                     pfFileHandle.MarkDirty(bucketHdr->before);
                     if(bucketHdr->next!=-1){
                         //modify IX_BucketHdr.before in next bucket
-                        filehandler.GetThisPage(bucketHdr->next,pageHandle);
+                        pfFileHandle.GetThisPage(bucketHdr->next,pageHandle);
                         pageHandle.GetData(data);
                         ((IX_BucketHdr *) data)->before = bucketHdr->before; //
                         pfFileHandle.MarkDirty(bucketHdr->next);
@@ -768,7 +769,7 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
 //input : pData - the key value of index
 //          rid - the rid to be deleted
 RC IX_IndexHandle::DeleteEntry(void *pData, const RID &rid){
-    PageNum rootPage = filehdr.rootPageNum;
+    PageNum rootPage = fileHdr.rootPageNum;
     indexNode *root = readNodeFromPageNum(rootPage);
     //an array of nodeInfo to save infos about neighors and anchors
     nodeInfoInPath path[fileHdr.treeLayerNums];

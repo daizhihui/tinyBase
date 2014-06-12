@@ -87,8 +87,8 @@ public:
     IX_FileHdr fileHdr;                                   // file header
     int bHdrChanged;                                      // dirty flag for file
 
-private:
     int compare(void* k1,void* k2);
+private:   
     indexNode* readNodeFromPageNum(PageNum pn);
     void writeNodeOnNewPage(indexNode* x);
     void addToBucket(PageNum& bucket, const RID &rid, PageNum prev);
@@ -105,6 +105,7 @@ private:
     int GetBitmap  (char *map, int idx) const;
     void SetBitmap (char *map, int idx) const;
     void ClrBitmap (char *map, int idx) const;
+    int t;
 
 };
 
@@ -182,4 +183,5 @@ void IX_PrintError(RC rc);
 
 #define  IX_INVALIDATTR (START_IX_WARN + 0) //invalid attribute parameters
 #define IX_INDEX_NOTFOUND (START_IX_WARN + 1) //index not found
+#define IX_EOF (START_IX_WARN + 2)
 #endif
