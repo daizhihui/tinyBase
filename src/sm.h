@@ -81,5 +81,6 @@ void SM_PrintError(RC rc);
 #define SM_INVALIDATTRNAME     (START_SM_WARN + 1) // invalid attribute name
 #define SM_EXCEEDMAXATTRS     (START_SM_WARN + 2) //too much attributes
 #define SM_INVALIDATTR        (START_SM_WARN + 3) // invalid attribute
+#define SM_INDEXEXIST       (START_SM_WARN + 4) //index already exists
 
 #endif

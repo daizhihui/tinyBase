@@ -84,10 +84,10 @@ RC SM_Manager::CreateTable(const char *relName,
     // define de RM_FileScan
     RM_FileScan filescan;
     RM_Record rec;
-    filescan.OpenScan(fileHandle_Relcat, STRING, (unsigned)strlen(relName), 0, EQ_OP, (void *)relName);
+    if((rc=filescan.OpenScan(fileHandle_Relcat, STRING, (unsigned)strlen(relName), 0, EQ_OP, (void *)relName))) return (rc);
     // check if exists the same attribute name in relcat
     if(filescan.GetNextRec(rec)!=RM_EOF) return (SM_INVALIDRELNAME);
-    filescan.CloseScan();
+    if((rc=filescan.CloseScan())) return (rc);
     
     // check number of attributes
     if(!(attrCount>=1 && attrCount<=MAXATTRS)) return (SM_EXCEEDMAXATTRS);
@@ -146,7 +146,7 @@ RC SM_Manager::CreateTable(const char *relName,
     //store new Relation record to Catalog relcat
     if((rc=fileHandle_Relcat.InsertRec(data, rid))) return (rc);
     
-    //force page
+    //call RM_Manager::ForcePage to force page relcat
     if((rc=fileHandle_Relcat.ForcePages())) return (rc);
     
     //Attr_Relation records
@@ -168,7 +168,7 @@ RC SM_Manager::CreateTable(const char *relName,
         if((rc=fileHandle_Attrcat.InsertRec(data, rid))) return (rc);
     }
     
-    //force page
+    //call RM_FileHandle::ForcePages to force page attrcat
     if((rc=fileHandle_Attrcat.ForcePages())) return (rc);
     
     
@@ -201,6 +201,58 @@ RC SM_Manager::DropTable(const char *relName)
 RC SM_Manager::CreateIndex(const char *relName,
                            const char *attrName)
 {
+    RC rc;
+    
+    // define de RM_FileScan
+    RM_FileScan filescan;
+    RM_Record rec;
+    
+    // scan all the records in attrcat
+    if((rc=filescan.OpenScan(fileHandle_Attrcat, STRING, (unsigned)strlen(relName), 0, EQ_OP, (void *)NULL))) return (rc);
+    
+    bool flag_rel_attr_exist=false;
+    // check if the index already exists
+    int max_index=0;
+    char * data;
+    char * relname;
+    char * attrname;
+    char * index;
+    AttrType attrtype;
+    int attrlength;
+    while(filescan.GetNextRec(rec)!=RM_EOF){
+        //get records until the end
+        if((rc=filescan.GetNextRec(rec))) return (rc);
+        rec.GetData(data);
+        strncpy(relname,data,MAXNAME);
+        strncpy(attrname,data+MAXNAME,MAXNAME);
+        strncpy(index,data+2*MAXNAME+2*sizeof(int)+sizeof(AttrType),sizeof(int));
+        
+        //calculate the max index already exists, then create index max_index+1
+        if(atoi(index)>max_index) max_index=atoi(index);
+        
+        // the index already exists, return error SM_INDEXEXIST
+        if(relname==relName && attrname==attrName && atoi(index)!=-1) {
+            flag_rel_attr_exist=true;
+            return (SM_INDEXEXIST);
+        }
+        if(relname==relName && attrname==attrName && atoi(index)==-1) {
+            flag_rel_attr_exist=true;
+            break;
+        }
+    }
+    
+    // relation name or attribute name not exist in attrcat
+    if(flag_rel_attr_exist==false) return (SM_INVALIDRELNAME);
+    
+    // close the filescan
+    if((rc=filescan.CloseScan())) return (rc);
+    
+    char filename[(unsigned)strlen(relName)+(unsigned)strlen(attrName)+1];//filename = relname.attribute name as the new filename
+    strcpy(filename, relName);
+    strcat(filename,".");
+    strcat(filename, attrName);
+    Ixm->CreateIndex(filename, max_index+1, <#AttrType attrType#>, <#int attrLength#>)
+    
     cout << "CreateIndex\n"
          << "   relName =" << relName << "\n"
          << "   attrName=" << attrName << "\n";
