@@ -88,8 +88,9 @@ public:
     int bHdrChanged;                                      // dirty flag for file
 
     int compare(void* k1,void* k2);
-private:   
     indexNode* readNodeFromPageNum(PageNum pn);
+private:   
+    
     void writeNodeOnNewPage(indexNode* x);
     void addToBucket(PageNum& bucket, const RID &rid, PageNum prev);
     void splitChild(indexNode * x, int i,indexNode * y);
