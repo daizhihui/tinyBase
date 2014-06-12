@@ -67,7 +67,7 @@ RC IX_IndexScan::OpenScan(const IX_IndexHandle &indexHandle,CompOp _compOp, void
     compOp= _compOp;
     value =  _value;
     pinHint= _pinHint;
-  // pIndexHandle=(IX_IndexHandle *) &indexHandle;
+   pIndexHandle=(IX_IndexHandle *) &indexHandle;
 
     // Set local state variables
     bScanOpen = TRUE;
@@ -165,7 +165,7 @@ int getNextFullSlot(int start,unsigned char bitmap[],int maxrecnumber)
 RC IX_IndexScan::GetNextEntry(RID &rid){
 
     RC rc;
-    PageNumber leaf;
+    PageNumb leaf;
 
    PageNum gBucket=-1,pBucket=-1, nBucket=-1;
    int pos_g=-1,pos_p=-1,pos_n=-1;  // Positions linked to  entries
@@ -174,7 +174,7 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
    int pos=0;
    char * pdata;
    IX_BucketHdr bucketHdr;
-   boolean stop;
+   bool stop;
 
    PF_PageHandle pageHandler;
 
@@ -191,7 +191,7 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
                     gBucket= (currentLeaf->entries[pos]).child;
                     pos_g=pos;
                 }
-                if(pIndexHandle->compare(value,(currentleaf->entries[pos]).key)>0 ){
+                if(pIndexHandle->compare(value,(currentLeaf->entries[pos]).key)>0 ){
                     pBucket= (currentLeaf->entries[pos]).child;
                     pos_p=pos;
                 }
