@@ -37,12 +37,14 @@ PF_SOURCES     = pf_buffermgr.cc pf_error.cc pf_filehandle.cc \
                  pf_pagehandle.cc pf_hashtable.cc pf_manager.cc \
                  pf_statistics.cc statistics.cc
 RM_SOURCES     = rm_rid.cc rm_record.cc rm_manager.cc rm_filescan.cc rm_filehandle.cc rm_error.cc
-IX_SOURCES     = ix_manager.cc ix_indexhandle.cc ix_error.cc #IX_IndexScan.cc
+
+IX_SOURCES     = ix_manager.cc ix_indexhandle.cc ix_error.cc IX_IndexScan.cc
+
 SM_SOURCES     = #sm_manager.cc printer.cc
-QL_SOURCES     = #ql_manager_stub.cc
+QL_SOURCES     = #ql_manager.cc
 UTILS_SOURCES  = #dbcreate.cc dbdestroy.cc redbase.cc
 PARSER_SOURCES = #scan.cc parse.cc nodes.cc interp.cc
-TESTER_SOURCES = pf_test1.cc pf_test2.cc pf_test3.cc ix_test.cc rm_test.cc  #parser_test.cc parser_test.cc
+TESTER_SOURCES = pf_test1.cc pf_test2.cc pf_test3.cc  rm_test.cc  ix_test.cc # parser_test.cc  parser_test.cc
 
 PF_OBJECTS     = $(addprefix $(BUILD_DIR), $(PF_SOURCES:.cc=.o))
 RM_OBJECTS     = $(addprefix $(BUILD_DIR), $(RM_SOURCES:.cc=.o))
@@ -97,15 +99,15 @@ $(LIBRARY_IX): $(IX_OBJECTS)
 	$(RANLIB) $(LIBRARY_IX)
 
 $(LIBRARY_SM): $(SM_OBJECTS)
-	$(AR) $(LIBRARY_SM) $(SM_OBJECTS)
+	$(AR) $(LIBRARY_SM) $(PF_OBJECTS)
 	$(RANLIB) $(LIBRARY_SM)
 
 $(LIBRARY_QL): $(QL_OBJECTS)
-	$(AR) $(LIBRARY_QL) $(QL_OBJECTS)
+	$(AR) $(LIBRARY_QL) $(PF_OBJECTS)
 	$(RANLIB) $(LIBRARY_QL)
 
 $(LIBRARY_PARSER): $(PARSER_OBJECTS)
-	$(AR) $(LIBRARY_PARSER) $(PARSER_OBJECTS)
+	$(AR) $(LIBRARY_PARSER) $(PF_OBJECTS)
 	$(RANLIB) $(LIBRARY_PARSER)
 
 #
