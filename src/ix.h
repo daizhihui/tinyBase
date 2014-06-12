@@ -128,8 +128,8 @@ public:
     // entries.
     RC GetNextEntry(RID &rid);
     int searchLeaf(PageNum startPageNum,void* value, PageNum &leaf );
-int testBitValue(unsigned char bitmap[],int bit);
-int getNextFullSlot(int start,unsigned char bitmap[],int maxrecnumber);
+int testBitValue(char bitmap[],int bit);
+int getNextFullSlot(int start,char bitmap[],int maxrecnumber);
     // Close index scan
     RC CloseScan();
 
