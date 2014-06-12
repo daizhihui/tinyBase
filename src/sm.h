@@ -58,18 +58,18 @@ private:
 // Print-error function
 //
 
-//struct for Catelog relcat
+//struct for Catalog relcat
 struct Relation{
-    char * relName; //relation name
+    char relName[MAXNAME]; //relation name
     int tupleLength; //tuple length in bytes
     int attrCount; //number of attributes
     int indexCount; //number of indexed attributes
 };
 
-//struct for Catelog attrcat
+//struct for Catalog attrcat
 struct Attr_Relation{
-    char * relName; //this attribute's relation
-    char * attrName; //attribute name
+    char relName[MAXNAME]; //this attribute's relation
+    char attrName[MAXNAME]; //attribute name
     int offset; //offset in bytes from beginning
     AttrType attrType; //attribute type
     int attrLength; //attribute length
@@ -78,6 +78,8 @@ struct Attr_Relation{
 void SM_PrintError(RC rc);
 
 #define SM_INVALIDRELNAME     (START_SM_WARN + 0) // invalid relation name
-#define SM_INVALIATTRNAME     (START_SM_WARN + 1) // invalid attribute name
+#define SM_INVALIDATTRNAME     (START_SM_WARN + 1) // invalid attribute name
+#define SM_EXCEEDMAXATTRS     (START_SM_WARN + 2) //too much attributes
+#define SM_INVALIDATTR        (START_SM_WARN + 3) // invalid attribute
 
 #endif

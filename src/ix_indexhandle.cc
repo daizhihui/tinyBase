@@ -420,7 +420,7 @@ void IX_IndexHandle::collapseRoot(indexNode * oldRoot){
         filehdr.rootPageNum = IX_EMPTY_TREE;
     }
     else{ //generate new root
-        filehdr.rootPageNum = oldRoot->children[0];
+        filehdr.rootPageNum = oldRoot->previous;
     }
 
 
@@ -450,7 +450,7 @@ void IX_IndexHandle::collapseRoot(indexNode * oldRoot){
 //        depthInPath - the depth of indexNode thisNode in the path
 //
 
-void IX_IndexHandle::merge (indexNode * thisNode , indexNode *neighborNode, indexNode *anchorNode, int keyNum, int depthInPath){
+void IX_IndexHandle::merge (indexNode * thisNode , indexNode *neighborNode, indexNode *anchorNode, nodeInfoInPath * path,int keyNum, int depthInPath){
     //to get right indexNode and left indexNode
     indexNode * leftN = NULL;
     indexNode * rightN = NULL;
@@ -604,7 +604,7 @@ void IX_IndexHandle::shift (indexNode * thisNode , indexNode *neighborNode, inde
 
 //desc : delete the entry in position keyNum in indexNode x
 //input : depthInPath - the depth of indexNode x in the path
-void deleteEntryInNode(indexNode* x, int keyNum, nodeInfoInPath * path, int depthInPath)
+void IX_IndexHandle::deleteEntryInNode(indexNode* x, int keyNum, nodeInfoInPath * path, int depthInPath)
 {
     //remove the entry and move its following entries forward
     // TODO make more efficient
@@ -664,7 +664,7 @@ void deleteEntryInNode(indexNode* x, int keyNum, nodeInfoInPath * path, int dept
 
         //both neighbors are minimum size
         if(nodeNeighbor->numberOfKeys==t){
-            merge(x,nodeNeighbor,anchorNode,entryNum, depthInPath-1);
+            merge(x,nodeNeighbor,anchorNode,path,entryNum, depthInPath-1);
         }
         else {
             shift(x,nodeNeighbor,anchorNode,entryNum,isRight);

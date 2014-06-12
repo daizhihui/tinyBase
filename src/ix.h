@@ -88,7 +88,6 @@ public:
     int bHdrChanged;                                      // dirty flag for file
 
 private:
-
     int compare(void* k1,void* k2);
     indexNode* readNodeFromPageNum(PageNum pn);
     void writeNodeOnNewPage(indexNode* x);
