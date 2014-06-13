@@ -198,6 +198,86 @@ err_return:
 
 RC SM_Manager::DropTable(const char *relName)
 {
+    RC rc;
+    RM_FileScan filescan;
+    
+    // Call RM_Manager::DestroyFile to destroy the relation file
+    if((rc=Rmm->DestroyFile(relName))) return (rc);
+    
+    //open scan of relcat
+    if((rc=filescan.OpenScan(fileHandle_Relcat,STRING, (unsigned)strlen(relName), 0, NO_OP , (void *) NULL))) return (rc);
+    
+    RC rc_scan=0;
+    Relation relation_r;
+    RM_Record rec;
+    
+    bool flag=false;
+    //scan all the records in relcat
+    while(rc_scan!=RM_EOF){
+        //get records until the end
+        if((rc_scan=filescan.GetNextRec(rec))) return (rc_scan);
+        
+        //copy record to relation
+        memcpy(&relation_r,&rec,sizeof(Relation));
+        
+        if(relation_r.relName==relName) {
+            
+            flag=true;
+            RID rid;
+            // get record RID
+            if((rc=rec.GetRid(rid))) return (rc);
+            
+            //delete relation record in relcat
+            if((rc=fileHandle_Relcat.DeleteRec(rid))) return (rc);
+            
+            //update relcat in disk
+            if((rc=fileHandle_Relcat.ForcePages())) return (rc);
+            break;
+        }
+    }
+   
+    // if no relation records in relcat, return invalid relation name
+    if(!flag) return (SM_INVALIDRELNAME);
+    
+    // close the scan
+    if((rc=filescan.CloseScan())) return (rc);
+    
+    //open scan of attrcat
+    if((rc=filescan.OpenScan(fileHandle_Attrcat,STRING, (unsigned)strlen(relName), 0, NO_OP , (void *) NULL))) return (rc);
+    
+    //pointer to the attribute record in attrcat
+    Attr_Relation a_r;
+    //scan all the records in attrcat
+    while(rc_scan!=RM_EOF){
+        //get records until the end
+        if((rc_scan=filescan.GetNextRec(rec))) return (rc_scan);
+        
+        //copy record to relation
+        memcpy(&a_r,&rec,sizeof(Attr_Relation));
+        
+        if(a_r.relName==relName) {
+            
+            RID rid;
+            // get record RID
+            if((rc=rec.GetRid(rid))) return (rc);
+            
+            //delete attribute record in attrcat
+            if((rc=fileHandle_Attrcat.DeleteRec(rid))) return (rc);
+            
+            //update relcat in disk
+            if((rc=fileHandle_Attrcat.ForcePages())) return (rc);
+            
+            int index=a_r.indexNo;
+            /*char filename[(unsigned)strlen(relName)+(unsigned)strlen(a_r.attrName)+1];//filename = relname.attribute name as the new filename
+            strcpy(filename, relName);
+            strcat(filename,".");
+            strcat(filename, a_r.attrName);*/
+            // destroy index file
+            if((rc=Ixm->DestroyIndex(relName, index))) return (rc);
+        }
+    }
+
+    
     cout << "DropTable\n   relName=" << relName << "\n";
     return (0);
 }
@@ -217,13 +297,14 @@ RC SM_Manager::CreateIndex(const char *relName,
     bool flag_rel_attr_exist=false;
     // check if the index already exists
     int max_index=0;
+    //pointer to the record
     Attr_Relation attr_relation;
     RC rc_scan;
     while(rc_scan!=RM_EOF){
-        if((rc_scan=filescan.GetNextRec(rec))) return (rc_scan);
         //get records until the end
-        if((rc=filescan.GetNextRec(rec))) return (rc);
-        //char data[sizeof(Attr_Relation)];
+        if((rc_scan=filescan.GetNextRec(rec))) return (rc_scan);
+        
+        // copy record to attr_relation
         memcpy(&attr_relation,&rec,sizeof(Attr_Relation));
 
         //calculate the max index already exists, then create index max_index+1
@@ -246,17 +327,17 @@ RC SM_Manager::CreateIndex(const char *relName,
     // close the filescan
     if((rc=filescan.CloseScan())) return (rc);
     
-    char filename[(unsigned)strlen(relName)+(unsigned)strlen(attrName)+1];//filename = relname.attribute name as the new filename
+    /*char filename[(unsigned)strlen(relName)+(unsigned)strlen(attrName)+1];//filename = relname.attribute name as the new filename
     strcpy(filename, relName);
     strcat(filename,".");
-    strcat(filename, attrName);
+    strcat(filename, attrName);*/
     
     // Call IX_IndexHandle::CreateIndex to create a index file
-    if((rc=Ixm->CreateIndex(filename, max_index+1, attr_relation.attrType, attr_relation.attrLength))) return (rc);
+    if((rc=Ixm->CreateIndex(relName, max_index+1, attr_relation.attrType, attr_relation.attrLength))) return (rc);
     
     // Call IX_IndexHandle::OpenIndex to open the index file
     IX_IndexHandle indexhandle;
-    if((rc=Ixm->OpenIndex(filename, max_index+1, indexhandle))) return (rc);
+    if((rc=Ixm->OpenIndex(relName, max_index+1, indexhandle))) return (rc);
     
     RM_FileHandle filehandle_rel;
     // Call RM_Manager::OpenFile to open relation file
@@ -275,9 +356,15 @@ RC SM_Manager::CreateIndex(const char *relName,
         if((rc=rec.GetData(data))) return (rc);
         char data_rec[attr_relation.attrLength];
         // get attribute value
-        strcpy(data_rec,data+attr_relation.offset);
+        memcpy(data_rec,data+attr_relation.offset,attr_relation.attrLength);
         if((rc=indexhandle.InsertEntry(data_rec, rid))) return (rc);
     }
+    
+    // update information in attrcat
+    attr_relation.indexNo=max_index+1;
+    
+    // update attrcat to disk
+    if((rc=fileHandle_Attrcat.ForcePages())) return (rc);
     
     //Close scan
     if((rc=filescan.CloseScan())) return (rc);
