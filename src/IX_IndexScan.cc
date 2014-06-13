@@ -265,7 +265,7 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
                     stop=true; // Sortie de la boucle While
                     //temp =pdata;
                     pdata=pdata+sizeof(IX_BucketHdr)+ pIndexHandle->fileHdr.bucketHeaderSize - sizeof(IX_BucketHdr);
-                    printf("NextSlot:%d ",nextSlot);
+                    printf("NextSlot:%d \n",nextSlot);
                     PageNum ridPN = pdata[0];
                     SlotNum ridSN = pdata[sizeof(PageNum)];
                     RID ridnew(ridPN,ridSN);
