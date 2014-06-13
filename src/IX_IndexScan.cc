@@ -261,10 +261,15 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
                 nextSlot= getNextFullSlot(curSlotNum, pdata+sizeof(IX_BucketHdr),pIndexHandle->fileHdr.numRidsPerBucket);
 
                  if(nextSlot!=-2){
+                    
                     stop=true; // Sortie de la boucle While
                     //temp =pdata;
                     pdata=pdata+(nextSlot*sizeof(RID));
-                    memcpy(&rid,(RID*)pdata,sizeof(RID));
+                    Pagenum ridPN = pData[0];
+                    Slotnum ridSN = pData[sizeof(pagenum)];
+                    RID ridnew= new RID(ridPN,ridSN);
+                    rid = ridnew;
+                    //memcpy(&rid,(RID*)pdata,sizeof(RID));
                     /*rid.pageNum=pdata[0];
                     rid.slotNum=pdata[sizeof(PageNum)];*/
                     curSlotNum=nextSlot;
