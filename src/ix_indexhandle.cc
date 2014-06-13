@@ -210,8 +210,9 @@ void IX_IndexHandle::reOrderDataInPage(indexNode* x)
     pfFileHandle.GetThisPage(x->pageNumber, pageHandler);
     char* data;
     int rc=pageHandler.GetData(data);
-    printf("Got data with rc: %d\n",rc);
-    printf("Writing %d number of keys\n",x->numberOfKeys);
+    printf("pin page: %d\n",x->pageNumber);
+    //printf("Got data with rc: %d\n",rc);
+    //printf("Writing %d number of keys\n",x->numberOfKeys);
     data[0] = x->pageNumber;
     data[sizeof(PageNum)]=x->previous;
     data[2*sizeof(PageNum)]=x->next;
@@ -587,6 +588,8 @@ void IX_IndexHandle::merge (indexNode * thisNode , indexNode *neighborNode, inde
     if(leftN->leaf){
         leftN->next = rightN->next;
         readNodeFromPageNum(rightN->next)->previous = leftN->pageNumber;
+        //unpin
+        pfFileHandle.UnpinPage(rightN->next);
     }
 
     //dispose page in indexNode rightN
@@ -704,6 +707,7 @@ void IX_IndexHandle::shift (indexNode * thisNode , indexNode *neighborNode, inde
     reOrderDataInPage(thisNode);
     reOrderDataInPage(neighborNode);
     reOrderDataInPage(anchorNode);
+
 }
 
 //desc : delete the entry in position keyNum in indexNode x
@@ -754,14 +758,17 @@ void IX_IndexHandle::deleteEntryInNode(indexNode* x, int keyNum, nodeInfoInPath 
                 nodeNeighbor = nodeR;
                 entryNum = nodeInfo.entryNum;
                 isRight = true;
+                //unpin the one not used
+                pfFileHandle.UnpinPage(nodeL->pageNumber);
 
             }
             else{
                 nodeNeighbor = nodeL;
                 entryNum = nodeInfo.entryNum - 1;
                 isRight = false;
+                  //unpin the one not used
+                pfFileHandle.UnpinPage(nodeR->pageNumber);
             }
-
         }
         else if(neighborR!= -1 && neighborL==-1) {
             nodeNeighbor = readNodeFromPageNum(neighborR);
@@ -782,11 +789,15 @@ void IX_IndexHandle::deleteEntryInNode(indexNode* x, int keyNum, nodeInfoInPath 
 
         //both neighbors are minimum size
         if(nodeNeighbor->numberOfKeys==fileHdr.orderOfTree){
-            merge(x,nodeNeighbor,anchorNode,path,entryNum, depthInPath-1);
+            merge(x,nodeNeighbor,anchorNode,path,entryNum, depthInPath-1);           
         }
         else {
             shift(x,nodeNeighbor,anchorNode,entryNum,isRight);
         }
+        //unpin the pages
+        pfFileHandle.UnpinPage(anchorNode->pageNumber);
+        pfFileHandle.UnpinPage(nodeNeighbor->pageNumber);
+
     }
 
 }
@@ -848,12 +859,14 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
                     PageNum leafPage = path[pathDepth].anchor;
                     int entryNum = path[pathDepth].entryNum;
                     indexNode * leaf = readNodeFromPageNum(leafPage);
-                    if(fileHdr.rootPageNum == leafPage) printf("leafPage is Root PAGE\n");
-                    if(leaf->pageNumber == leafPage) printf("node leaf Page is Root PAGE\n");
+
+//                    if(fileHdr.rootPageNum == leafPage) printf("leafPage is Root PAGE\n");
+//                    if(leaf->pageNumber == leafPage) printf("node leaf Page is Root PAGE\n");
                     if(next == -1) {
                          printf("no nextbucket,delete the entry in leaf\n");
                         //delete the entry in leaf
                         deleteEntryInNode(leaf,entryNum,path,pathDepth-1);
+                        pfFileHandle.UnpinPage(leafPage);
 
                     }
                     else{
@@ -943,7 +956,7 @@ RC IX_IndexHandle::DeleteEntry(void *pData, const RID &rid){
 RC IX_IndexHandle::traversalTree(indexNode *x, void *pData, nodeInfoInPath *path,int &pathDepth){
     RC rc;
     pathDepth++;
-    printf("pdata%d\nnumberofKeys%d\n",*(int*)pData,x->numberOfKeys);
+    //printf("pdata%d\nnumberofKeys%d\n",*(int*)pData,x->numberOfKeys);
     if(x->leaf){
         //printf("traversal leaf\n");
         int i = 0;
@@ -1061,7 +1074,6 @@ RC IX_IndexHandle::ForcePages()
     }
 
     // Call PF_FileHandle::ForcePages()
-    printf("Force all pages\n");
     if (rc = pfFileHandle.ForcePages(ALL_PAGES))
        goto err_return;
 
