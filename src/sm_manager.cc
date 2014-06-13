@@ -8,6 +8,7 @@
 #include <iostream>
 #include <cstring>
 #include <unistd.h>
+#include <fstream>
 #include "redbase.h"
 #include "sm.h"
 #include "ix.h"
@@ -444,6 +445,81 @@ RC SM_Manager::DropIndex(const char *relName,
 RC SM_Manager::Load(const char *relName,
                     const char *fileName)
 {
+    
+    RC rc;
+    
+    RC rc_scan=0;
+    Attr_Relation a_r;
+    RM_Record rec;
+    RM_FileScan filescan;
+    bool flag_exist=false;
+    //store the attrlength of each attribute in relation relName
+    int attrlength[MAXATTRS];
+    int i=0;
+    
+    //open scan of attrcat
+    if((rc=filescan.OpenScan(fileHandle_Attrcat,STRING, (unsigned)strlen(relName), 0, NO_OP , (void *) NULL))) return (rc);
+    
+    //scan all the records in attrcat
+    while(rc_scan!=RM_EOF){
+        //get records until the end
+        if((rc_scan=filescan.GetNextRec(rec))) return (rc_scan);
+        
+        //copy record to a_r
+        memcpy(&a_r,&rec,sizeof(Attr_Relation));
+        
+        if(a_r.relName==relName) {
+            
+            flag_exist=true;
+            attrlength[i]=a_r.attrLength;
+            i++;
+        }
+    }
+    
+//close the scan
+    if((rc=filescan.CloseScan())) return (rc);
+    
+    if(!flag_exist) return (SM_INVALIDRELNAME);
+    
+    // open data file named fileName
+    ifstream myfile (fileName);
+    
+    RM_FileHandle filehandle_r;
+    
+    // open relation file to store records read from file
+    if((rc=Rmm->OpenFile(relName, filehandle_r))) return (rc);
+    
+    //load the file
+    while(!myfile.eof()){
+        int i=0;
+        string str;
+        //read file line by line
+        getline(myfile, str);
+        string delimiter = ",";
+        
+        size_t pos = 0;
+        char * record_data;
+        while ((pos = str.find(delimiter)) != string::npos) {
+            char token[attrlength[i]];
+            //ensure the length of attribute
+            strncpy(token,str.substr(0, pos).c_str(),attrlength[i]);
+            i++;
+            strcat(record_data,token);
+            //cout << token << endl;
+            str.erase(0, pos + delimiter.length());
+        }
+        RID rid;
+        //store the record to relation file
+        if((rc=filehandle_r.InsertRec(record_data, rid))) return (rc);
+
+    }
+    
+    //close the data file
+    myfile.close();
+    
+    //close the relation file
+    if((rc=Rmm->CloseFile(filehandle_r))) return (rc);
+
     cout << "Load\n"
          << "   relName =" << relName << "\n"
          << "   fileName=" << fileName << "\n";
