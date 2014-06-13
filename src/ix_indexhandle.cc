@@ -781,6 +781,8 @@ void IX_IndexHandle::deleteEntryInNode(indexNode* x, int keyNum, nodeInfoInPath 
 //          pathDepth - the length of array path
 
 RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * path, int pathDepth){
+    printf("begin deleteRID, entryNum in path %d\n", path[1].entryNum);
+
     char* data;
     PF_PageHandle pageHandle;
     pfFileHandle.GetThisPage(bucket, pageHandle);
@@ -789,14 +791,23 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
 
     PageNum before = bucketHdr->before;
     PageNum next = bucketHdr->next;
+    printf("bucketHdr %d, next %d \n",bucketHdr->before,bucketHdr->next);
+
 
     int ridNum=0;
     RID *ridi;
-    //iterate for all non-empty rids
+        //iterate for all non-empty rids
     for(; ridNum< fileHdr.numRidsPerBucket && GetBitmap(data + sizeof(IX_BucketHdr), ridNum); ++ridNum){
-        ridi = (RID*)data+fileHdr.bucketHeaderSize+ridNum*sizeof(RID);
+        ridi = (RID*)(data+fileHdr.bucketHeaderSize+ridNum*sizeof(RID));
+        PageNum ridPN;
+        SlotNum ridSN;
+        ridi->GetPageNum(ridPN);
+        ridi->GetSlotNum(ridSN);
+        printf(" rid: pN %d, SN %d\n", ridPN,ridSN);
+
         //found in this page
-        if(*ridi==rid) {
+        if((*ridi)==rid) {
+            printf("found in this bucket\n");
             // Clear bit
             ClrBitmap(data + sizeof(IX_BucketHdr), ridNum);
             // Find a non-free rid
@@ -807,8 +818,8 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
             // Dispose the bucket if empty (the deleted rid was the last one)
             // This will help the total number of occupied pages to be remained
             // as small as possible
-
             if (ridNum == fileHdr.numRidsPerBucket) {
+                printf("after deletion, the bucket is empty\n");
                //TODO change insert (rid space be free, can be reused, add freeSlot in bucket page header)
                 //dispose of page bucket
                 pfFileHandle.MarkDirty(bucket);
@@ -817,15 +828,18 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
 
                //the first bucket to be removed
                 if(before == -1) {
+                    printf("the first bucket to be removed\n");
                     PageNum leafPage = path[pathDepth].anchor;
                     int entryNum = path[pathDepth].entryNum;
                     indexNode * leaf = readNodeFromPageNum(leafPage);
                     if(bucketHdr->next == -1) {
+                         printf("no nextbucket,delete the entry in leaf\n");
                         //delete the entry in leaf
                         deleteEntryInNode(leaf,entryNum,path,pathDepth-1);
 
                     }
                     else{
+                        printf("has nextbucket,replace pageNum in leaf\n");
                         //replace pageNum in leaf, change IX_BucketHdr.before in next bucket
                         pfFileHandle.GetThisPage(bucketHdr->next,pageHandle);
                         pageHandle.GetData(data);
@@ -839,7 +853,7 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
                 }
                 //rid not in the first bucket
                 else{
-
+                    printf("the non-first bucket to be removed\n");
                     //modify IX_BucketHdr.after in last bucket
                     pfFileHandle.GetThisPage(bucketHdr->before,pageHandle);
                     pageHandle.GetData(data);
@@ -861,6 +875,7 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
 
     //not found in this page, find the next
     if(bucketHdr->next == -1) return IX_INDEX_NOTFOUND;
+    printf("search rid in the next bucket\n");
     return deleteRID(next,rid,path,pathDepth);
 }
 
@@ -877,23 +892,22 @@ RC IX_IndexHandle::DeleteEntry(void *pData, const RID &rid){
     //for debugging
     printf("treeLayer%d,order%d\n",fileHdr.treeLayerNums,fileHdr.orderOfTree);
     //for root
-    path[0].self = rootPage;
+    path[0].nodeSelf = rootPage;
     path[0].anchor=-1; //implicit root
     path[0].neighborL=-1;
     path[0].neighborR=-1;
-    path[0].key = (void*)-1;
+    //path[0].key = (void*)-1;
     path[0].entryNum = -1;
 
     int pathDepth = 0;
     //parcourir l'arbre et obtenir les donnees enregistrees dans path
-    printf("before traversal");
+    printf("before traversal\n");
     traversalTree(root,pData,path,pathDepth);
-    printf("after traversal");
+    printf("after traversal\n");
     //remove rid in bucket
     //get the first bucket page
-    PageNum bucket = path[pathDepth].self;
-
-
+    printf("pathDepth%d\n",pathDepth);
+    PageNum bucket = path[pathDepth].nodeSelf;
     //delete rid in the buckets
     return deleteRID(bucket,rid,path,pathDepth);
 }
@@ -907,23 +921,33 @@ RC IX_IndexHandle::DeleteEntry(void *pData, const RID &rid){
 //         pathDepth - the length of this list of nodeInfoInPath
 RC IX_IndexHandle::traversalTree(indexNode *x, void *pData, nodeInfoInPath *path,int &pathDepth){
     pathDepth++;
+    printf("pdata%d\nnumberofKeys%d\n",*(int*)pData,x->numberOfKeys);
     if(x->leaf){
+        printf("traversal leaf\n");
         int i = 0;
         while(i<x->numberOfKeys && compare(pData,x->entries[i].key)!=0)
             i++;
+        //for debug
+        printf("print all the elements key in leaf\n");
+        int j=0;
+        while(j<x->numberOfKeys){
+            printf("%d\n",*(int*)x->entries[j].key);
+            j++;
+        }
         // if not found in leaf
         if(compare(pData,x->entries[i].key)!=0) return IX_INDEX_NOTFOUND; //TODO define ERROR
 
         //found in leaf, save neighbor infos for bucket page
-        path[pathDepth].self = x->entries[i].child;
+        path[pathDepth].nodeSelf = x->entries[i].child;
         path[pathDepth].anchor = x->pageNumber;
         path[pathDepth].neighborL = -1; //for bucket, no need to know its neighbors
         path[pathDepth].neighborR = -1;
-        path[pathDepth].key = x->entries[i].key;
+        //path[pathDepth].key = x->entries[i].key;
         path[pathDepth].entryNum = i;
         return 0;
     }
 
+    printf("traversal non-leaf\n");
     int i = 0;
     while(i<x->numberOfKeys && compare(pData,x->entries[i].key)!=-1)
         i++;
@@ -931,7 +955,7 @@ RC IX_IndexHandle::traversalTree(indexNode *x, void *pData, nodeInfoInPath *path
     //pData is less than the first key, so childi is pointed by the first pointer in x
     if(i==0){
         childi = readNodeFromPageNum(x->previous);
-        path[pathDepth].self = x->previous;
+        path[pathDepth].nodeSelf = x->previous;
         //if pointer to this page is the first pointer in its parent
         path[pathDepth].neighborL = -1; //doesn't have left neighbor
         path[pathDepth].neighborR = x->entries[0].child;
@@ -939,11 +963,11 @@ RC IX_IndexHandle::traversalTree(indexNode *x, void *pData, nodeInfoInPath *path
     }
     else{
         childi = readNodeFromPageNum(x->entries[i-1].child);
-        path[pathDepth].self = x->entries[i-1].child;
+        path[pathDepth].nodeSelf = x->entries[i-1].child;
     }
     //save immdediate neighors for childi
     path[pathDepth].anchor = x->pageNumber; //childi's anchor
-    path[pathDepth].key = x->entries[i].key;
+    //path[pathDepth].key = x->entries[i].key;
     path[pathDepth].entryNum = i;
 
 
@@ -965,6 +989,7 @@ RC IX_IndexHandle::traversalTree(indexNode *x, void *pData, nodeInfoInPath *path
     }
     return traversalTree(childi,pData,path,pathDepth);
 }
+
 
 
 
