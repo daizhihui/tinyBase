@@ -13,6 +13,7 @@
 #include "sm.h"
 #include "ix.h"
 #include "rm.h"
+#include "printer.h"
 
 using namespace std;
 
@@ -153,22 +154,23 @@ RC SM_Manager::CreateTable(const char *relName,
     //call RM_Manager::ForcePage to force page relcat
     if((rc=fileHandle_Relcat.ForcePages())) return (rc);
     
-    //Attr_Relation records
+    DataAttrInfo attr_relation;
+    //DataAttrInfo records
     for (int i=0;i<attrCount;i++){
-        char data[sizeof(Attr_Relation)];
-        Attr_Relation attr_relation[attrCount];
-        attr_relation[i].attrName=attributes[i].attrName;
+        char data[sizeof(DataAttrInfo)];
+        strcpy(attr_relation.relName,relName);
+        strcpy(attr_relation.attrName,attributes[i].attrName);
         //calculate offset
         int offset=0;
         for (int j=0;j<i;i++){
             offset+=attributes[j].attrLength;
         }
-        attr_relation[i].offset=offset;
-        attr_relation[i].attrType=attributes[i].attrType;
-        attr_relation[i].attrLength=attributes[i].attrLength;
-        attr_relation[i].indexNo=-1;
+        attr_relation.offset=offset;
+        attr_relation.attrType=attributes[i].attrType;
+        attr_relation.attrLength=attributes[i].attrLength;
+        attr_relation.indexNo=-1;
         
-        memcpy(data,&attr_relation[i],sizeof(Attr_Relation));
+        memcpy(data,&attr_relation,sizeof(DataAttrInfo));
         //store new Attr_Relation record to Catalog attrcat
         if((rc=fileHandle_Attrcat.InsertRec(data, rid))) return (rc);
     }
@@ -247,7 +249,7 @@ RC SM_Manager::DropTable(const char *relName)
     if((rc=filescan.OpenScan(fileHandle_Attrcat,STRING, (unsigned)strlen(relName), 0, NO_OP , (void *) NULL))) return (rc);
     
     //pointer to the attribute record in attrcat
-    Attr_Relation a_r;
+    DataAttrInfo a_r;
     
     rc_scan=NULL;
     //scan all the records in attrcat
@@ -256,7 +258,7 @@ RC SM_Manager::DropTable(const char *relName)
         if((rc_scan=filescan.GetNextRec(rec))) return (rc_scan);
         
         //copy record to a_r
-        memcpy(&a_r,&rec,sizeof(Attr_Relation));
+        memcpy(&a_r,&rec,sizeof(DataAttrInfo));
         
         if(a_r.relName==relName) {
             
@@ -303,14 +305,14 @@ RC SM_Manager::CreateIndex(const char *relName,
     // check if the index already exists
     int max_index=0;
     //pointer to the record
-    Attr_Relation attr_relation;
+    DataAttrInfo attr_relation;
     RC rc_scan;
     while(rc_scan!=RM_EOF){
         //get records until the end
         if((rc_scan=filescan.GetNextRec(rec))) return (rc_scan);
         
         // copy record to attr_relation
-        memcpy(&attr_relation,&rec,sizeof(Attr_Relation));
+        memcpy(&attr_relation,&rec,sizeof(DataAttrInfo));
 
         //calculate the max index already exists, then create index max_index+1
         if(attr_relation.indexNo>max_index) max_index=attr_relation.indexNo;
@@ -397,7 +399,7 @@ RC SM_Manager::DropIndex(const char *relName,
     if((rc=filescan.OpenScan(fileHandle_Attrcat,STRING, (unsigned)strlen(relName), 0, NO_OP , (void *) NULL))) return (rc);
     
     RC rc_scan=0;
-    Attr_Relation a_r;
+    DataAttrInfo a_r;
     RM_Record rec;
     
     bool flag_exist=false;
@@ -407,7 +409,7 @@ RC SM_Manager::DropIndex(const char *relName,
         if((rc_scan=filescan.GetNextRec(rec))) return (rc_scan);
         
         //copy record to a_r
-        memcpy(&a_r,&rec,sizeof(Attr_Relation));
+        memcpy(&a_r,&rec,sizeof(DataAttrInfo));
         
         if(a_r.relName==relName && a_r.attrName==attrName && a_r.indexNo!=-1) {
             
@@ -449,7 +451,7 @@ RC SM_Manager::Load(const char *relName,
     RC rc;
     
     RC rc_scan=0;
-    Attr_Relation a_r;
+    DataAttrInfo a_r;
     RM_Record rec;
     RM_FileScan filescan;
     bool flag_exist=false;
@@ -466,7 +468,7 @@ RC SM_Manager::Load(const char *relName,
         if((rc_scan=filescan.GetNextRec(rec))) return (rc_scan);
         
         //copy record to a_r
-        memcpy(&a_r,&rec,sizeof(Attr_Relation));
+        memcpy(&a_r,&rec,sizeof(DataAttrInfo));
         
         if(a_r.relName==relName) {
             

@@ -66,15 +66,8 @@ struct Relation{
     int indexCount; //number of indexed attributes
 };
 
-//struct for Catalog attrcat
-struct Attr_Relation{
-    const char *relName; //this attribute's relation
-    const char * attrName; //attribute name
-    int offset; //offset in bytes from beginning
-    AttrType attrType; //attribute type
-    int attrLength; //attribute length
-    int indexNo; //index number, or -1 if not indexed
-};
+//struct for Catalog attrcat in printer.h : DataAttrInfo
+
 void SM_PrintError(RC rc);
 
 #define SM_INVALIDRELNAME     (START_SM_WARN + 0) // invalid relation name
