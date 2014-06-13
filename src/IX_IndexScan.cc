@@ -264,7 +264,7 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
                     
                     stop=true; // Sortie de la boucle While
                     //temp =pdata;
-                    pdata=pdata+(nextSlot*sizeof(RID));
+                    printf("NextSlot:%d ",nextSlot);
                     PageNum ridPN = pdata[0];
                     SlotNum ridSN = pdata[sizeof(PageNum)];
                     RID ridnew(ridPN,ridSN);
