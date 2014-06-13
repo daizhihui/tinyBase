@@ -1055,6 +1055,7 @@ RC IX_IndexHandle::ForcePages()
     }
 
     // Call PF_FileHandle::ForcePages()
+    printf("Force all pages\n");
     if (rc = pfFileHandle.ForcePages(ALL_PAGES))
        goto err_return;
 
