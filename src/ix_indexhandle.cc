@@ -232,6 +232,10 @@ void IX_IndexHandle::reOrderDataInPage(indexNode* x)
         
     }
     pfFileHandle.MarkDirty(x->pageNumber);
+    ForcePages();
+    pfFileHandle.UnpinPage(x->pageNumber);
+    
+    
 
 }
 
@@ -318,6 +322,7 @@ void IX_IndexHandle::insertNonFull(indexNode* x, void*  pData,const RID &rid)
             addToBucket(next, rid,-1);
             x->entries[0].child = next;
             reOrderDataInPage(x);
+            
 //            pfFileHandle.MarkDirty(x->pageNumber);
             return;
             
@@ -417,10 +422,10 @@ void IX_IndexHandle::insert(indexNode* x, void* pData, const RID &rid)
         pfFileHandle.UnpinPage(x->pageNumber);
         pfFileHandle.UnpinPage(s->pageNumber);
 
-//        for(int i =0;i<x->numberOfKeys;i++)
-//            delete x->entries[i].key;
-//        delete x->entries;
-//        delete x;
+        for(int i =0;i<s->numberOfKeys;i++)
+            free(s->entries[i].key);
+        delete[] s->entries;
+        delete s;
     
     }
     else
@@ -471,15 +476,12 @@ RC IX_IndexHandle::InsertEntry(void *pData, const RID &rid)
         insertNonFull(root, pData, rid);
         
         pfFileHandle.MarkDirty(root->pageNumber);
-      int rc =  ForcePages();
+        int rc =  ForcePages();
         pfFileHandle.UnpinPage(root->pageNumber);
-//        delete root->entries;
-  //      delete root;
+        free(root->entries->key);
+        delete root->entries;
+        delete root;
         
-        for(int i =0;i<root->numberOfKeys;i++)
-        {
-            printf("Keys:%d %d\n",i,*(int*)(root->entries[i].key));
-        }
     }
     else
     {
@@ -487,8 +489,10 @@ RC IX_IndexHandle::InsertEntry(void *pData, const RID &rid)
         insert(root, pData, rid);
         for(int i =0;i<root->numberOfKeys;i++)
         {
-            printf("Keys:%d %d\n",i,*(int*)(root->entries[i].key));
+            free(root->entries[i].key);
         }
+        delete[] root->entries;
+        delete root;
         
     }
     printf("done insert entry \n");
