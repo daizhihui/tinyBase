@@ -725,15 +725,18 @@ void IX_IndexHandle::deleteEntryInNode(indexNode* x, int keyNum, nodeInfoInPath 
         printf("underFlow\n");
         //this indexNode is root
         if(x->isRoot) {
+            printf("IS root\n");
             if(x->numberOfKeys==0) //root has no more keys after delete
                 collapseRoot(x);
             else //root has still keys, do nothing
             {
+                printf("not collapse root\n");
                 writeNodeOnNewPage(x);
                 ForcePages();
                 return;
             }
         }
+        printf("NOT root\n");
         //check immediate neighbors
         nodeInfoInPath nodeInfo = path[depthInPath];
         PageNum neighborR = path[depthInPath].neighborR;

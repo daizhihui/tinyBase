@@ -265,11 +265,11 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
                     stop=true; // Sortie de la boucle While
                     //temp =pdata;
                     pdata=pdata+(nextSlot*sizeof(RID));
-                    Pagenum ridPN = pData[0];
-                    Slotnum ridSN = pData[sizeof(pagenum)];
-                    printf("ridPN : %d  ridSN : %d \n",ridPN, ridSN);
-                    RID ridnew= new RID(ridPN,ridSN);
+                    PageNum ridPN = pdata[0];
+                    SlotNum ridSN = pdata[sizeof(PageNum)];
+                    RID ridnew(ridPN,ridSN);
                     rid = ridnew;
+                    printf("ridPN : %d  ridSN : %d \n",ridPN, ridSN);
                     //memcpy(&rid,(RID*)pdata,sizeof(RID));
                     /*rid.pageNum=pdata[0];
                     rid.slotNum=pdata[sizeof(PageNum)];*/
