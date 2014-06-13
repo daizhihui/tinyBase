@@ -277,10 +277,10 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
                     curSlotNum=nextSlot;
                     pIndexHandle->pfFileHandle.UnpinPage(currentBucket);
 
-            //unpinpage currentBucket ??
+            
                  }else{ //I'm at the end of currentBucket
 
-        //unpinpage currentBucket??
+                    pIndexHandle->pfFileHandle.UnpinPage(currentBucket);
 
                     if(bucketHdr.next!=-1){// Next bucket if it exits
                         currentBucket=bucketHdr.next;
