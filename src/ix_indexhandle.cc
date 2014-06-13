@@ -56,13 +56,25 @@ indexNode* IX_IndexHandle::readNodeFromPageNum(PageNum pn)
     int rc = pfFileHandle.GetThisPage(pn, pageHandler);
     char* pData;
     pageHandler.GetData(pData);
-    indexNode* x = (indexNode*)pData;
-    printf("Node structure: PN: %d\nPrev: %d\nNext: %d\nLeaf: %c\nRoot: %c\nNumberKeys: %d\n",x->pageNumber,x->previous,x->next,x->leaf,x->isRoot,x->numberOfKeys);
+    indexNode* x = new indexNode();
+    x->pageNumber=(int)pData[0];
+    x->previous=(int)pData[sizeof(PageNum)];
+    x->next =(int)pData[2*sizeof(PageNum)];
+    x->leaf=(bool)pData[3*sizeof(PageNum)];
+    x->isRoot=(bool)pData[3*sizeof(PageNum)+sizeof(bool)];
+    x->numberOfKeys=(int)pData[3*sizeof(PageNum)+2*sizeof(bool)];
+
+    printf("Node structure: PN: %d\nPrev: %d\nNext: %d\nLeaf: %c\nRoot: %c\nNumberKeys: %d\n",(int)pData[0],(int)pData[sizeof(PageNum)],(int)pData[2*sizeof(PageNum)],(bool)pData[3*sizeof(PageNum)],(bool)pData[3*sizeof(PageNum)+sizeof(bool)],(int)pData[3*sizeof(PageNum)+2*sizeof(bool)]);
     printf("PN : %d\n",x->previous);
+    x->entries = new entry[x->numberOfKeys];
     for(int i =0;i<x->numberOfKeys;i++)
     {
+        x->entries[i].child = pData[3*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum))];
+        x->entries[i].key = (char*)malloc(sizeof(fileHdr.attrLength));
+        memcpy(x->entries[i].key,pData+4*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum)),fileHdr.attrLength);
+
         printf("Key %d: %d\n",i,*(int*)x->entries[i].key);
-        printf("PN %d: %d\n",i,x->entries[i].child);
+        printf("PN %d: %d\n",i,(int)x->entries[i].child);
         
     }
     return  x;
@@ -292,7 +304,7 @@ void IX_IndexHandle::insertNonFull(indexNode* x, void*  pData,const RID &rid)
     //Leaves point only to 1 bucket.
     
     int i = x->numberOfKeys;
-    int comp =0;
+    int comp =2;
     printf("%d keys\n",i);
     if(x->leaf)
     {
@@ -319,27 +331,28 @@ void IX_IndexHandle::insertNonFull(indexNode* x, void*  pData,const RID &rid)
         {
             
                 x->entries[i+1].key=x->entries[i].key;
+                x->entries[i+1].child=x->entries[i].child;
+            
                 i--;
         }
-        if(comp == 1)//new key
+        if(comp == 0)
+        {
+            printf("Adding to existing bucket\n");
+            addToBucket(x->entries[i].child, rid,-1);
+                   }
+        else
         {
             printf("Adding new key\n");
             x->entries[i+1].key=(char*)malloc(fileHdr.attrLength);
             memcpy(x->entries[i+1].key,pData,fileHdr.attrLength);
-//            x->entries[i+1].key=(char*)pData;
+            //            x->entries[i+1].key=(char*)pData;
             x->numberOfKeys++;
             PageNum next=-1;
             addToBucket(next, rid,-1);
             x->entries[i+1].child = next;
             //new bucket
         }
-        else
-        {// existing bucket
-            printf("Adding to existing bucket\n");
-            addToBucket(x->entries[i].child, rid,-1);
-        }
-        
-        
+        printf("$$COMP: %d\n",comp);
         //x->children = new PageNum();
         reOrderDataInPage(x);
 //        pfFileHandle.MarkDirty(x->pageNumber);
@@ -427,7 +440,7 @@ IX_IndexHandle::IX_IndexHandle()
     bHdrChanged = FALSE;
     memset(&fileHdr, 0, sizeof(fileHdr));
     fileHdr.rootPageNum = IX_EMPTY_TREE;
-    fileHdr.orderOfTree = fileHdr.orderOfTree;
+  //  fileHdr.orderOfTree = fileHdr.orderOfTree;
     printf("constructor\n");
 }
 
@@ -439,7 +452,6 @@ IX_IndexHandle::~IX_IndexHandle()
 // Insert a new index entry
 RC IX_IndexHandle::InsertEntry(void *pData, const RID &rid)
 {
-    printf("-------fileHdr.orderOfTree: %d\n",fileHdr.orderOfTree);
     
     printf("insertEntry %d\n",*(int*)pData);
 
@@ -460,7 +472,6 @@ RC IX_IndexHandle::InsertEntry(void *pData, const RID &rid)
         
         pfFileHandle.MarkDirty(root->pageNumber);
       int rc =  ForcePages();
-        printf("Paged forced: %d\n",rc);
         pfFileHandle.UnpinPage(root->pageNumber);
 //        delete root->entries;
   //      delete root;
@@ -478,6 +489,7 @@ RC IX_IndexHandle::InsertEntry(void *pData, const RID &rid)
         {
             printf("Keys:%d %d\n",i,*(int*)(root->entries[i].key));
         }
+        
     }
     printf("done insert entry \n");
    
