@@ -247,12 +247,14 @@ RC SM_Manager::DropTable(const char *relName)
     
     //pointer to the attribute record in attrcat
     Attr_Relation a_r;
+    
+    rc_scan=NULL;
     //scan all the records in attrcat
     while(rc_scan!=RM_EOF){
         //get records until the end
         if((rc_scan=filescan.GetNextRec(rec))) return (rc_scan);
         
-        //copy record to relation
+        //copy record to a_r
         memcpy(&a_r,&rec,sizeof(Attr_Relation));
         
         if(a_r.relName==relName) {
@@ -276,7 +278,9 @@ RC SM_Manager::DropTable(const char *relName)
             if((rc=Ixm->DestroyIndex(relName, index))) return (rc);
         }
     }
-
+    
+    //c(lose scan
+    if((rc=filescan.CloseScan())) return (rc);
     
     cout << "DropTable\n   relName=" << relName << "\n";
     return (0);
@@ -346,6 +350,7 @@ RC SM_Manager::CreateIndex(const char *relName,
     // Call RM_FileScan::OpenScan to scan all the tuples in the table
     if((rc=filescan.OpenScan(filehandle_rel, attr_relation.attrType, attr_relation.attrLength, attr_relation.offset, NO_OP, (void *) NULL))) return (rc);
     
+    rc_scan=NULL;
     // scan all the tuples in the table
     while(rc_scan!=RM_EOF){
         if((rc_scan=filescan.GetNextRec(rec))) return (rc_scan);
@@ -384,6 +389,52 @@ RC SM_Manager::CreateIndex(const char *relName,
 RC SM_Manager::DropIndex(const char *relName,
                          const char *attrName)
 {
+    RC rc;
+    RM_FileScan filescan;
+ 
+    //open scan of attrcat
+    if((rc=filescan.OpenScan(fileHandle_Attrcat,STRING, (unsigned)strlen(relName), 0, NO_OP , (void *) NULL))) return (rc);
+    
+    RC rc_scan=0;
+    Attr_Relation a_r;
+    RM_Record rec;
+    
+    bool flag_exist=false;
+    //scan all the records in attrcat
+    while(rc_scan!=RM_EOF){
+        //get records until the end
+        if((rc_scan=filescan.GetNextRec(rec))) return (rc_scan);
+        
+        //copy record to a_r
+        memcpy(&a_r,&rec,sizeof(Attr_Relation));
+        
+        if(a_r.relName==relName && a_r.attrName==attrName && a_r.indexNo!=-1) {
+            
+            flag_exist=true;
+            RID rid;
+            // get record RID
+            if((rc=rec.GetRid(rid))) return (rc);
+            
+            //delete attribute record in attrcat
+            if((rc=fileHandle_Attrcat.DeleteRec(rid))) return (rc);
+            
+            //update attrcat in disk
+            if((rc=fileHandle_Attrcat.ForcePages())) return (rc);
+            
+            int index=a_r.indexNo;
+            // destroy index file
+            if((rc=Ixm->DestroyIndex(relName, index))) return (rc);
+            break;
+        }
+    
+    }
+
+    // no attribute index record in attrcat
+    if(!flag_exist) return (SM_ATTRINDEX_NOT_EXIST);
+    
+    //close scan
+    if((rc=filescan.CloseScan())) return (rc);
+    
     cout << "DropIndex\n"
          << "   relName =" << relName << "\n"
          << "   attrName=" << attrName << "\n";
