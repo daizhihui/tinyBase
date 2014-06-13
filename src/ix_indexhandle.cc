@@ -64,7 +64,7 @@ indexNode* IX_IndexHandle::readNodeFromPageNum(PageNum pn)
     x->isRoot=(bool)pData[3*sizeof(PageNum)+sizeof(bool)];
     x->numberOfKeys=(int)pData[3*sizeof(PageNum)+2*sizeof(bool)];
 
-//    printf("Node structure: PN: %d\nPrev: %d\nNext: %d\nLeaf: %c\nRoot: %c\nNumberKeys: %d\n",(int)pData[0],(int)pData[sizeof(PageNum)],(int)pData[2*sizeof(PageNum)],(bool)pData[3*sizeof(PageNum)],(bool)pData[3*sizeof(PageNum)+sizeof(bool)],(int)pData[3*sizeof(PageNum)+2*sizeof(bool)]);
+    //printf("Node structure: PN: %d\nPrev: %d\nNext: %d\nLeaf: %c\nRoot: %c\nNumberKeys: %d\n",(int)pData[0],(int)pData[sizeof(PageNum)],(int)pData[2*sizeof(PageNum)],(bool)pData[3*sizeof(PageNum)],(bool)pData[3*sizeof(PageNum)+sizeof(bool)],(int)pData[3*sizeof(PageNum)+2*sizeof(bool)]);
 //    printf("PN : %d\n",x->previous);
     x->entries = new entry[x->numberOfKeys];
     for(int i =0;i<x->numberOfKeys;i++)
@@ -97,7 +97,7 @@ void IX_IndexHandle::writeNodeOnNewPage(indexNode* x)
     pData[3*sizeof(PageNum)]=x->leaf;
     pData[3*sizeof(PageNum)+sizeof(bool)]=x->isRoot;
     pData[3*sizeof(PageNum)+2*sizeof(bool)]=x->numberOfKeys;
-//    printf("Wrote number of keys: %d\n",pData[3*sizeof(PageNum)+2*sizeof(bool)]);
+    printf("Wrote number of keys: %d\n",pData[3*sizeof(PageNum)+2*sizeof(bool)]);
     //copy entries
     for(int i =0;i<x->numberOfKeys;i++)
     {
@@ -594,8 +594,7 @@ void IX_IndexHandle::merge (indexNode * thisNode , indexNode *neighborNode, inde
     pfFileHandle.DisposePage(rightN->pageNumber);
 
     //write left indexNode to buffer pool
-    writeNodeOnNewPage(leftN);
-    ForcePages();
+    reOrderDataInPage(leftN);
 
      //delete keyNum in anchorNode, recursively
     deleteEntryInNode(anchorNode,keyNum,path,depthInPath);
@@ -702,10 +701,9 @@ void IX_IndexHandle::shift (indexNode * thisNode , indexNode *neighborNode, inde
     }
 
     //write these changes to buffer pool
-    writeNodeOnNewPage(thisNode);
-    writeNodeOnNewPage(neighborNode);
-    writeNodeOnNewPage(anchorNode);  
-    ForcePages();
+    reOrderDataInPage(thisNode);
+    reOrderDataInPage(neighborNode);
+    reOrderDataInPage(anchorNode);
 }
 
 //desc : delete the entry in position keyNum in indexNode x
@@ -719,7 +717,7 @@ void IX_IndexHandle::deleteEntryInNode(indexNode* x, int keyNum, nodeInfoInPath 
     }
      --(x->numberOfKeys);
     printf("numberKeys:%d\n",x->numberOfKeys);
-
+    if(fileHdr.rootPageNum == x->pageNumber) printf("is Root PAGE\n");
     //underflow
     if(x->numberOfKeys < fileHdr.orderOfTree){
         printf("underFlow\n");
@@ -731,8 +729,11 @@ void IX_IndexHandle::deleteEntryInNode(indexNode* x, int keyNum, nodeInfoInPath 
             else //root has still keys, do nothing
             {
                 printf("not collapse root\n");
-                writeNodeOnNewPage(x);
-                ForcePages();
+                reOrderDataInPage(x);
+                //for test
+//                if(fileHdr.rootPageNum == x->pageNumber) printf("afterWrite,is Root PAGE\n");
+//                else printf("afterWrite,is NOT Root PAGE\n");
+                //pfFileHandle.MarkDirty(x->pageNumber);
                 return;
             }
         }
@@ -773,8 +774,7 @@ void IX_IndexHandle::deleteEntryInNode(indexNode* x, int keyNum, nodeInfoInPath 
             isRight = false;
         }
         else {
-            writeNodeOnNewPage(x);
-            ForcePages();
+            reOrderDataInPage(x);
             return; //TODO shouldn't happen
         }
 
@@ -848,6 +848,8 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
                     PageNum leafPage = path[pathDepth].anchor;
                     int entryNum = path[pathDepth].entryNum;
                     indexNode * leaf = readNodeFromPageNum(leafPage);
+                    if(fileHdr.rootPageNum == leafPage) printf("leafPage is Root PAGE\n");
+                    if(leaf->pageNumber == leafPage) printf("node leaf Page is Root PAGE\n");
                     if(next == -1) {
                          printf("no nextbucket,delete the entry in leaf\n");
                         //delete the entry in leaf
@@ -939,6 +941,7 @@ RC IX_IndexHandle::DeleteEntry(void *pData, const RID &rid){
 //return : path - a pointer that points to a list of nodeInfoInPath
 //         pathDepth - the length of this list of nodeInfoInPath
 RC IX_IndexHandle::traversalTree(indexNode *x, void *pData, nodeInfoInPath *path,int &pathDepth){
+    RC rc;
     pathDepth++;
     printf("pdata%d\nnumberofKeys%d\n",*(int*)pData,x->numberOfKeys);
     if(x->leaf){
@@ -963,6 +966,7 @@ RC IX_IndexHandle::traversalTree(indexNode *x, void *pData, nodeInfoInPath *path
         path[pathDepth].neighborR = -1;
         //path[pathDepth].key = x->entries[i].key;
         path[pathDepth].entryNum = i;
+        pfFileHandle.UnpinPage(x->pageNumber);
         return 0;
     }
 
@@ -1006,7 +1010,9 @@ RC IX_IndexHandle::traversalTree(indexNode *x, void *pData, nodeInfoInPath *path
         path[pathDepth].neighborL = -1;
         path[pathDepth].neighborR = -1;
     }
-    return traversalTree(childi,pData,path,pathDepth);
+    rc = traversalTree(childi,pData,path,pathDepth);
+    pfFileHandle.UnpinPage(x->pageNumber);
+    return rc;
 }
 
 
