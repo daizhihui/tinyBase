@@ -86,9 +86,32 @@ RC SM_Manager::CreateTable(const char *relName,
     // define de RM_FileScan
     RM_FileScan filescan;
     RM_Record rec;
-    if((rc=filescan.OpenScan(fileHandle_Relcat, STRING, (unsigned)strlen(relName), 0, EQ_OP, (void *)relName))) return (rc);
+    if((rc=filescan.OpenScan(fileHandle_Relcat, INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
     // check if exists the same attribute name in relcat
-    if(filescan.GetNextRec(rec)!=RM_EOF) return (SM_INVALIDRELNAME);
+    bool flag=false;
+    Relation relation_r;
+    char * data_r;
+    //scan all the records in relcat
+    while(rc!=RM_EOF){
+        //get records until the end
+        rc=filescan.GetNextRec(rec);
+        if(rc!=0 && rc!=RM_EOF) return (rc);
+        if(rc!=RM_EOF){
+            //copy record to relation
+            if((rc=rec.GetData(data_r))) return (rc);
+            memcpy(&relation_r,data_r,sizeof(Relation));
+            
+            if(relation_r.relName==relName) {
+                flag=true;
+                break;
+            }
+        }
+        
+    }
+    
+    //if relName already exists
+    if(flag) return (SM_INVALIDRELNAME);
+    
     if((rc=filescan.CloseScan())) return (rc);
     
     // check number of attributes
@@ -208,20 +231,24 @@ RC SM_Manager::DropTable(const char *relName)
     if((rc=Rmm->DestroyFile(relName))) return (rc);
     
     //open scan of relcat
-    if((rc=filescan.OpenScan(fileHandle_Relcat,STRING, (unsigned)strlen(relName), 0, NO_OP , (void *) NULL))) return (rc);
+    if((rc=filescan.OpenScan(fileHandle_Relcat,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
     
     RC rc_scan=0;
     Relation relation_r;
     RM_Record rec;
-    
+    char * data;
     bool flag=false;
     //scan all the records in relcat
-    while(rc_scan!=RM_EOF){
+    while(rc!=RM_EOF){
         //get records until the end
-        if((rc_scan=filescan.GetNextRec(rec))) return (rc_scan);
-        
-        //copy record to relation
-        memcpy(&relation_r,&rec,sizeof(Relation));
+        rc=filescan.GetNextRec(rec);
+        if(rc!=0 && rc!=RM_EOF){
+            return (rc);
+        }
+        if(rc!=RM_EOF){
+            rec.GetData(data);
+            //copy record to relation
+        memcpy(&relation_r,data,sizeof(Relation));
         
         if(relation_r.relName==relName) {
             
@@ -237,7 +264,9 @@ RC SM_Manager::DropTable(const char *relName)
             if((rc=fileHandle_Relcat.ForcePages())) return (rc);
             break;
         }
-    }
+
+        }
+            }
    
     // if no relation records in relcat, return invalid relation name
     if(!flag) return (SM_INVALIDRELNAME);
@@ -246,39 +275,40 @@ RC SM_Manager::DropTable(const char *relName)
     if((rc=filescan.CloseScan())) return (rc);
     
     //open scan of attrcat
-    if((rc=filescan.OpenScan(fileHandle_Attrcat,STRING, (unsigned)strlen(relName), 0, NO_OP , (void *) NULL))) return (rc);
+    if((rc=filescan.OpenScan(fileHandle_Attrcat,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
     
     //pointer to the attribute record in attrcat
     DataAttrInfo a_r;
     
-    rc_scan=NULL;
     //scan all the records in attrcat
-    while(rc_scan!=RM_EOF){
+    while(rc!=RM_EOF){
         //get records until the end
-        if((rc_scan=filescan.GetNextRec(rec))) return (rc_scan);
-        
-        //copy record to a_r
-        memcpy(&a_r,&rec,sizeof(DataAttrInfo));
-        
-        if(a_r.relName==relName) {
-            
-            RID rid;
-            // get record RID
-            if((rc=rec.GetRid(rid))) return (rc);
-            
-            //delete attribute record in attrcat
-            if((rc=fileHandle_Attrcat.DeleteRec(rid))) return (rc);
-            
-            //update relcat in disk
-            if((rc=fileHandle_Attrcat.ForcePages())) return (rc);
-            
-            int index=a_r.indexNo;
-            /*char filename[(unsigned)strlen(relName)+(unsigned)strlen(a_r.attrName)+1];//filename = relname.attribute name as the new filename
-            strcpy(filename, relName);
-            strcat(filename,".");
-            strcat(filename, a_r.attrName);*/
-            // destroy index file
-            if((rc=Ixm->DestroyIndex(relName, index))) return (rc);
+        rc_scan=filescan.GetNextRec(rec);
+        if(rc!=0 && rc!=RM_EOF) return (rc);
+        if(rc!=RM_EOF){
+            rec.GetData(data);
+            //copy record to a_r
+            memcpy(&a_r,data,sizeof(DataAttrInfo));
+            if(a_r.relName==relName) {
+                
+                RID rid;
+                // get record RID
+                if((rc=rec.GetRid(rid))) return (rc);
+                
+                //delete attribute record in attrcat
+                if((rc=fileHandle_Attrcat.DeleteRec(rid))) return (rc);
+                
+                //update relcat in disk
+                if((rc=fileHandle_Attrcat.ForcePages())) return (rc);
+                
+                int index=a_r.indexNo;
+                /*char filename[(unsigned)strlen(relName)+(unsigned)strlen(a_r.attrName)+1];//filename = relname.attribute name as the new filename
+                 strcpy(filename, relName);
+                 strcat(filename,".");
+                 strcat(filename, a_r.attrName);*/
+                // destroy index file
+                if((rc=Ixm->DestroyIndex(relName, index))) return (rc);
+            }
         }
     }
     
@@ -299,32 +329,36 @@ RC SM_Manager::CreateIndex(const char *relName,
     RM_Record rec;
     
     // scan all the records in attrcat
-    if((rc=filescan.OpenScan(fileHandle_Attrcat, STRING, (unsigned)strlen(relName), 0, EQ_OP, (void *)NULL))) return (rc);
+    if((rc=filescan.OpenScan(fileHandle_Attrcat, INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
     
     bool flag_rel_attr_exist=false;
     // check if the index already exists
     int max_index=0;
     //pointer to the record
     DataAttrInfo attr_relation;
-    RC rc_scan;
-    while(rc_scan!=RM_EOF){
+    char * data;
+    while(rc!=RM_EOF){
         //get records until the end
-        if((rc_scan=filescan.GetNextRec(rec))) return (rc_scan);
-        
-        // copy record to attr_relation
-        memcpy(&attr_relation,&rec,sizeof(DataAttrInfo));
-
-        //calculate the max index already exists, then create index max_index+1
-        if(attr_relation.indexNo>max_index) max_index=attr_relation.indexNo;
-        
-        // the index already exists, return error SM_INDEXEXIST
-        if(attr_relation.relName==relName && attr_relation.attrName==attrName && attr_relation.indexNo!=-1) {
-            flag_rel_attr_exist=true;
-            return (SM_INDEXEXIST);
-        }
-        if(attr_relation.relName==relName && attr_relation.attrName==attrName && attr_relation.indexNo==-1) {
-            flag_rel_attr_exist=true;
-            break;
+        rc=filescan.GetNextRec(rec);
+        if(rc!=0 && rc!=RM_EOF) return (rc);
+        if(rc!=RM_EOF){
+            if((rc=rec.GetData(data))) return (rc);
+            // copy record to attr_relation
+            memcpy(&attr_relation,data,sizeof(DataAttrInfo));
+            
+            //calculate the max index already exists, then create index max_index+1
+            if(attr_relation.indexNo>max_index) max_index=attr_relation.indexNo;
+            
+            // the index already exists, return error SM_INDEXEXIST
+            if(attr_relation.relName==relName && attr_relation.attrName==attrName && attr_relation.indexNo!=-1) {
+                flag_rel_attr_exist=true;
+                return (SM_INDEXEXIST);
+            }
+            if(attr_relation.relName==relName && attr_relation.attrName==attrName && attr_relation.indexNo==-1) {
+                flag_rel_attr_exist=true;
+                break;
+            }
+            
         }
     }
     
@@ -351,21 +385,23 @@ RC SM_Manager::CreateIndex(const char *relName,
     if((rc=Rmm->OpenFile(relName, filehandle_rel))) return (rc);
     
     // Call RM_FileScan::OpenScan to scan all the tuples in the table
-    if((rc=filescan.OpenScan(filehandle_rel, attr_relation.attrType, attr_relation.attrLength, attr_relation.offset, NO_OP, (void *) NULL))) return (rc);
+    if((rc=filescan.OpenScan(filehandle_rel, INT, sizeof(int), 0, NO_OP, NULL))) return (rc);
     
-    rc_scan=NULL;
     // scan all the tuples in the table
-    while(rc_scan!=RM_EOF){
-        if((rc_scan=filescan.GetNextRec(rec))) return (rc_scan);
-        RID rid;
-        if((rc=rec.GetRid(rid))) return (rc);
-        char * data;
-        // get record data
-        if((rc=rec.GetData(data))) return (rc);
-        char data_rec[attr_relation.attrLength];
-        // get attribute value
-        memcpy(data_rec,data+attr_relation.offset,attr_relation.attrLength);
-        if((rc=indexhandle.InsertEntry(data_rec, rid))) return (rc);
+    while(rc!=RM_EOF){
+        rc=filescan.GetNextRec(rec);
+        if(rc!=0 && rc!=RM_EOF) return (rc);
+        if(rc!=RM_EOF){
+            RID rid;
+            if((rc=rec.GetRid(rid))) return (rc);
+            char * data;
+            // get record data
+            if((rc=rec.GetData(data))) return (rc);
+            char data_rec[attr_relation.attrLength];
+            // get attribute value
+            memcpy(data_rec,data+attr_relation.offset,attr_relation.attrLength);
+            if((rc=indexhandle.InsertEntry(data_rec, rid))) return (rc);
+        }
     }
     
     // update information in attrcat
@@ -396,40 +432,42 @@ RC SM_Manager::DropIndex(const char *relName,
     RM_FileScan filescan;
  
     //open scan of attrcat
-    if((rc=filescan.OpenScan(fileHandle_Attrcat,STRING, (unsigned)strlen(relName), 0, NO_OP , (void *) NULL))) return (rc);
+    if((rc=filescan.OpenScan(fileHandle_Attrcat,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
     
-    RC rc_scan=0;
     DataAttrInfo a_r;
     RM_Record rec;
     
     bool flag_exist=false;
     //scan all the records in attrcat
-    while(rc_scan!=RM_EOF){
+    char * data;
+    while(rc!=RM_EOF){
         //get records until the end
-        if((rc_scan=filescan.GetNextRec(rec))) return (rc_scan);
-        
-        //copy record to a_r
-        memcpy(&a_r,&rec,sizeof(DataAttrInfo));
-        
-        if(a_r.relName==relName && a_r.attrName==attrName && a_r.indexNo!=-1) {
+        rc=filescan.GetNextRec(rec);
+        if(rc!=0 && rc!=RM_EOF)return (rc);
+        if(rc!=RM_EOF){
+            if((rc=rec.GetData(data))) return (rc);
+            //copy record to a_r
+            memcpy(&a_r,data,sizeof(DataAttrInfo));
             
-            flag_exist=true;
-            RID rid;
-            // get record RID
-            if((rc=rec.GetRid(rid))) return (rc);
-            
-            //delete attribute record in attrcat
-            if((rc=fileHandle_Attrcat.DeleteRec(rid))) return (rc);
-            
-            //update attrcat in disk
-            if((rc=fileHandle_Attrcat.ForcePages())) return (rc);
-            
-            int index=a_r.indexNo;
-            // destroy index file
-            if((rc=Ixm->DestroyIndex(relName, index))) return (rc);
-            break;
+            if(a_r.relName==relName && a_r.attrName==attrName && a_r.indexNo!=-1) {
+                
+                flag_exist=true;
+                RID rid;
+                // get record RID
+                if((rc=rec.GetRid(rid))) return (rc);
+                
+                //delete attribute record in attrcat
+                if((rc=fileHandle_Attrcat.DeleteRec(rid))) return (rc);
+                
+                //update attrcat in disk
+                if((rc=fileHandle_Attrcat.ForcePages())) return (rc);
+                
+                int index=a_r.indexNo;
+                // destroy index file
+                if((rc=Ixm->DestroyIndex(relName, index))) return (rc);
+                break;
+            }
         }
-    
     }
 
     // no attribute index record in attrcat
@@ -449,8 +487,7 @@ RC SM_Manager::Load(const char *relName,
 {
     
     RC rc;
-    
-    RC rc_scan=0;
+
     DataAttrInfo a_r;
     RM_Record rec;
     RM_FileScan filescan;
@@ -460,21 +497,25 @@ RC SM_Manager::Load(const char *relName,
     int i=0;
     
     //open scan of attrcat
-    if((rc=filescan.OpenScan(fileHandle_Attrcat,STRING, (unsigned)strlen(relName), 0, NO_OP , (void *) NULL))) return (rc);
+    if((rc=filescan.OpenScan(fileHandle_Attrcat,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
     
     //scan all the records in attrcat
-    while(rc_scan!=RM_EOF){
+    char * data;
+    while(rc!=RM_EOF){
         //get records until the end
-        if((rc_scan=filescan.GetNextRec(rec))) return (rc_scan);
-        
-        //copy record to a_r
-        memcpy(&a_r,&rec,sizeof(DataAttrInfo));
-        
-        if(a_r.relName==relName) {
+        rc=filescan.GetNextRec(rec);
+        if(rc!=0 && rc!=RM_EOF) return (rc);
+        if(rc!=RM_EOF){
+            if((rc=rec.GetData(data))) return (rc);
+            //copy record to a_r
+            memcpy(&a_r,data,sizeof(DataAttrInfo));
             
-            flag_exist=true;
-            attrlength[i]=a_r.attrLength;
-            i++;
+            if(a_r.relName==relName) {
+                
+                flag_exist=true;
+                attrlength[i]=a_r.attrLength;
+                i++;
+            }
         }
     }
     
@@ -532,6 +573,77 @@ RC SM_Manager::Print(const char *relName)
 {
     cout << "Print\n"
          << "   relName=" << relName << "\n";
+    
+    DataAttrInfo * attributes;
+    
+    RC rc;
+    RM_FileScan filescan;
+    //open scan of attrcat
+    if((rc=filescan.OpenScan(fileHandle_Attrcat,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
+    
+    //scan all the records in attrcat
+    DataAttrInfo a_r;
+    bool flag_exist=false;
+    RM_Record rec;
+    int i=0;
+    int attr_count=0;
+    char * data;
+    while(rc!=RM_EOF){
+        //get records until the end
+        rc=filescan.GetNextRec(rec);
+        if(rc!=0 && rc!=RM_EOF)return (rc);
+        if(rc!=RM_EOF){
+            //copy record to a_r
+            rc=rec.GetData(data);
+            memcpy(&a_r,data,sizeof(DataAttrInfo));
+            if(a_r.relName==relName) {
+                // take all the DataAttrInfo of the relation relName
+                attributes[i]=a_r;
+                flag_exist=true;
+                i++;
+                attr_count++;
+            }
+        }
+    }
+    
+    //close the scan
+    if((rc=filescan.CloseScan())) return (rc);
+    
+    if(!flag_exist) return (SM_INVALIDRELNAME);
+    
+    //define a printer
+    Printer p(attributes,attr_count);
+    
+    //print header;
+    p.PrintHeader(cout);
+    
+    RM_FileHandle filehandle_r;
+    if((rc=Rmm->OpenFile(relName, filehandle_r))) return (rc);
+    
+    //open scan of relation file
+    if((rc=filescan.OpenScan(filehandle_r,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
+
+    while(rc!=RM_EOF){
+        //get records until the end
+        rc=filescan.GetNextRec(rec);
+        if(rc!=0 && rc!=RM_EOF)return (rc);
+        if(rc!=RM_EOF){
+            //get record data
+            if((rc=rec.GetData(data))) return (rc);
+            
+            //print record
+            p.Print(cout, data);
+        }
+    }
+    
+    //print footer
+    p.PrintFooter(cout);
+    
+    //close the sccan
+    if((rc=filescan.CloseScan())) return (rc);
+    
+    //close relation file
+    if((rc=Rmm->CloseFile(filehandle_r))) return (rc);
     return (0);
 }
 
