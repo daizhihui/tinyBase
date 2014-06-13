@@ -269,6 +269,7 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
                     SlotNum ridSN = pdata[sizeof(PageNum)];
                     RID ridnew(ridPN,ridSN);
                     rid = ridnew;
+                    printf("ridPN : %d  ridSN : %d \n",ridPN, ridSN);
                     //memcpy(&rid,(RID*)pdata,sizeof(RID));
                     /*rid.pageNum=pdata[0];
                     rid.slotNum=pdata[sizeof(PageNum)];*/
