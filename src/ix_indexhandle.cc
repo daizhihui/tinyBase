@@ -14,10 +14,10 @@
 //we will need these
 
 
-//TODO: make sure bucket logic is there.
+//TODO: make sure bucket logic is there.m
 
 //indexNode =data + child page numbers
-//t is the minimum degree of the Tree: every indexNode other than the root must have t-1 keys at least.
+//fileHdr.orderOfTree is the minimum degree of the Tree: every indexNode other than the root must have fileHdr.orderOfTree-1 keys at least.
 
 
 
@@ -53,58 +53,18 @@ indexNode* IX_IndexHandle::readNodeFromPageNum(PageNum pn)
 {
     printf("Reading node from page\n");
     PF_PageHandle pageHandler;
-   int rc = pfFileHandle.GetThisPage(pn, pageHandler);
-    printf("Got page: %d\n",rc);
+    int rc = pfFileHandle.GetThisPage(pn, pageHandler);
     char* pData;
     pageHandler.GetData(pData);
-    
-    printf("got data\n");
     indexNode* x = (indexNode*)pData;
-    printf("keys of node x we just read %d\n",x->numberOfKeys);
-//    x->pageNumber = pData[0];
-//    x->numberOfKeys = pData[sizeof(PageNum)];
-//    
-//    x->keys = new char*[x->numberOfKeys];
-//    x->children = new PageNum[x->numberOfKeys+1];
-//    for(int i =0;i<x->numberOfKeys;i++)
-//        memcpy(x->keys[i], &pData[sizeof(PageNum)+sizeof(int)+i*filehdr.attrLength], filehdr.attrLength);
-    
-    //in case we want the exact length of the strings:
-    //    switch (filehdr.attrType) {
-    //        case STRING:
-    //        {
-    //            x->keys = new char*[x->numberOfKeys];
-    //            int count=0;
-    //            for(int i =0;i<x->numberOfKeys;i++)
-    //            {
-    //                x->keys[i]=new char[MAXSTRINGLEN];
-    //                int j =0;
-    //                while(true)
-    //                {
-    //                    x->keys[i][j] = pData[sizeof(PageNum)+1+count];
-    //                    if(x->keys[i][j]=='\0' || j==MAXSTRINGLEN)
-    //                        break;
-    //                    j++;
-    //                    count++;
-    //                }
-    //            }
-    //            break;
-    //        }
-    //        default:
-    //        {
-    //            x->keys = new char*[x->numberOfKeys];
-    //            for(int i =0;i<x->numberOfKeys;i++)
-    //                x->keys[i]=&pData[sizeof(PageNum)+sizeof(int)+i*filehdr.attrLength];
-    //            break;
-    //        }
-    //    }
-    
-//    for(int i =0;i<=x->numberOfKeys;i++)
-//    {
-//        x->children[i] = (PageNum)pData[sizeof(PageNum)+sizeof(int)+x->numberOfKeys*filehdr.attrLength+i*sizeof(PageNum)];
-//    }
-//    x->leaf = (bool)pData[sizeof(PageNum)+sizeof(int)+x->numberOfKeys*filehdr.attrLength+(x->numberOfKeys+1)*sizeof(PageNum)];
-    printf("Done reading node from page\n");
+    printf("Node structure: PN: %d\nPrev: %d\nNext: %d\nLeaf: %c\nRoot: %c\nNumberKeys: %d\n",x->pageNumber,x->previous,x->next,x->leaf,x->isRoot,x->numberOfKeys);
+    printf("PN : %d\n",x->previous);
+    for(int i =0;i<x->numberOfKeys;i++)
+    {
+        printf("Key %d: %d\n",i,*(int*)x->entries[i].key);
+        printf("PN %d: %d\n",i,x->entries[i].child);
+        
+    }
     return  x;
 }
 
@@ -118,15 +78,21 @@ void IX_IndexHandle::writeNodeOnNewPage(indexNode* x)
     char* pData;
     pageHandler.GetData(pData);
     pageHandler.GetPageNum(x->pageNumber);
-    printf("Writing %d number of keys",x->numberOfKeys);
-    memcpy(pData,x,3*sizeof(PageNum)+2*sizeof(bool)+sizeof(int));
-    
+    printf("Writing %d number of keys\n",x->numberOfKeys);
+    pData[0] = x->pageNumber;
+    pData[sizeof(PageNum)]=x->previous;
+    pData[2*sizeof(PageNum)]=x->next;
+    pData[3*sizeof(PageNum)]=x->leaf;
+    pData[3*sizeof(PageNum)+sizeof(bool)]=x->isRoot;
+    pData[3*sizeof(PageNum)+2*sizeof(bool)]=x->numberOfKeys;
+    printf("Wrote number of keys: %d\n",pData[3*sizeof(PageNum)+2*sizeof(bool)]);
     //copy entries
     for(int i =0;i<x->numberOfKeys;i++)
     {
         pData[3*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum))]=x->entries[i].child;
         memcpy(pData+4*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum)),x->entries[i].key,fileHdr.attrLength);
-                     
+        printf("Writing Key %d: %d\n",i,pData[4*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum))]);
+        printf("Writing PN %d: %d\n",i,pData[3*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum))]);
 //        memcpy(&pData[3*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum))], &(x->entries[i]), fileHdr.attrLength+sizeof(PageNum));
     }
     pfFileHandle.MarkDirty(x->pageNumber);
@@ -141,7 +107,6 @@ void IX_IndexHandle::addToBucket(PageNum& bucket, const RID &rid, PageNum prev)
     SlotNum ridSN;
     rid.GetPageNum(ridPN);
     rid.GetSlotNum(ridSN);
-    //use IX_BUCKETHEADER
     PF_PageHandle pageHandler;
     if(bucket == -1 || pfFileHandle.GetThisPage(bucket, pageHandler)!=0)
     {//bucket does not exist
@@ -223,6 +188,41 @@ void IX_IndexHandle::addToBucket(PageNum& bucket, const RID &rid, PageNum prev)
 
     
 }
+
+void IX_IndexHandle::reOrderDataInPage(indexNode* x)
+{
+    printf("Reordering data in page %d\n",x->pageNumber);
+    PF_PageHandle pageHandler;
+    pfFileHandle.GetThisPage(x->pageNumber, pageHandler);
+    char* data;
+    int rc=pageHandler.GetData(data);
+    printf("Got data with rc: %d\n",rc);
+    printf("Writing %d number of keys\n",x->numberOfKeys);
+    data[0] = x->pageNumber;
+    data[sizeof(PageNum)]=x->previous;
+    data[2*sizeof(PageNum)]=x->next;
+    data[3*sizeof(PageNum)]=x->leaf;
+    data[3*sizeof(PageNum)+sizeof(bool)]=x->isRoot;
+    data[3*sizeof(PageNum)+2*sizeof(bool)]=x->numberOfKeys;
+    
+    
+//    memcpy(data,x,3*sizeof(PageNum)+2*sizeof(bool)+sizeof(int));
+    //copy entries
+    printf("Wrote number of keys: %d\n",data[3*sizeof(PageNum)+2*sizeof(bool)]);
+
+    for(int i =0;i<x->numberOfKeys;i++)
+    {
+        printf("writing %d key+child of %d\n",i,x->numberOfKeys);
+        data[3*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum))]=x->entries[i].child;
+        memcpy(data+4*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum)),x->entries[i].key,fileHdr.attrLength);
+        printf("Writing Key %d: %d\n",i,data[4*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum))]);
+        printf("Writing PN %d: %d\n",i,data[3*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum))]);
+        
+    }
+    pfFileHandle.MarkDirty(x->pageNumber);
+
+}
+
 //x is father
 //y is child
 //i is index in x's entries, -1 if first
@@ -235,16 +235,16 @@ void IX_IndexHandle::splitChild(indexNode * x, int i,indexNode * y)
 
     //
     z->leaf = y->leaf;
-    z->numberOfKeys=t-1;
-    z->entries = new entry[t-1];
-    for(int j = 0;j<=t-2;j++)//largest t-1 keys of y
-        z->entries[j].key = y->entries[j+t].key;
+    z->numberOfKeys=fileHdr.orderOfTree-1;
+    z->entries = new entry[fileHdr.orderOfTree-1];
+    for(int j = 0;j<=fileHdr.orderOfTree-2;j++)//largest fileHdr.orderOfTree-1 keys of y
+        z->entries[j].key = y->entries[j+fileHdr.orderOfTree].key;
     if(!y->leaf)
-    {   z->previous=y->entries[t-1].child;//1 child +
-        for(int j =0;j<=t-2;j++)//t-1 children
-            z->entries[j].child=y->entries[j+t].child;
+    {   z->previous=y->entries[fileHdr.orderOfTree-1].child;//1 child +
+        for(int j =0;j<=fileHdr.orderOfTree-2;j++)//fileHdr.orderOfTree-1 children
+            z->entries[j].child=y->entries[j+fileHdr.orderOfTree].child;
     }
-    y->numberOfKeys=t-1;
+    y->numberOfKeys=fileHdr.orderOfTree-1;
     if(i!=-1)
     {
         
@@ -254,7 +254,7 @@ void IX_IndexHandle::splitChild(indexNode * x, int i,indexNode * y)
             x->entries[j].key=x->entries[j-1].key;
         }
         x->entries[i+1].child=z->pageNumber;
-        x->entries[i].key=y->entries[t-1].key;
+        x->entries[i].key=y->entries[fileHdr.orderOfTree-1].key;
     }
     x->numberOfKeys=x->numberOfKeys+1;
     
@@ -301,24 +301,23 @@ void IX_IndexHandle::insertNonFull(indexNode* x, void*  pData,const RID &rid)
             x->numberOfKeys++;
             x->entries = new entry();
             x->entries->key = (char*)malloc(fileHdr.attrLength);
-            printf("memcpy\n");
-
             memcpy(x->entries->key,pData,fileHdr.attrLength);
-            printf("memcpydone\n");
-
-          //  x->entries[0].key = (char*)pData;
             PageNum next=-1;
             addToBucket(next, rid,-1);
             x->entries[0].child = next;
-
-            pfFileHandle.MarkDirty(x->pageNumber);
+            reOrderDataInPage(x);
+//            pfFileHandle.MarkDirty(x->pageNumber);
             return;
             
         }
         i--;
+        entry* tmp = x->entries;
+        x->entries = new entry[x->numberOfKeys+1];
+        memcpy(x->entries, tmp, x->numberOfKeys*sizeof(entry));
+        delete[] tmp;
         while(i>=0 && ((comp = compare(pData,x->entries[i].key))==-1))
         {
-
+            
                 x->entries[i+1].key=x->entries[i].key;
                 i--;
         }
@@ -342,7 +341,8 @@ void IX_IndexHandle::insertNonFull(indexNode* x, void*  pData,const RID &rid)
         
         
         //x->children = new PageNum();
-        pfFileHandle.MarkDirty(x->pageNumber);
+        reOrderDataInPage(x);
+//        pfFileHandle.MarkDirty(x->pageNumber);
     }
     else
     {
@@ -355,7 +355,7 @@ void IX_IndexHandle::insertNonFull(indexNode* x, void*  pData,const RID &rid)
         //read x->children[i];
         indexNode* childi = readNodeFromPageNum(x->entries[i].child);
         
-        if(childi->numberOfKeys==2*t-1)
+        if(childi->numberOfKeys==2*fileHdr.orderOfTree-1)
         {
             splitChild(x,i,childi);
             if(compare(pData,x->entries[i].key))
@@ -381,7 +381,7 @@ void IX_IndexHandle::insert(indexNode* x, void* pData, const RID &rid)
     printf("insert %d\n",*(int*)pData);
 
     //x is the root indexNode
-    if(x->numberOfKeys==2*t-1)
+    if(x->numberOfKeys==2*fileHdr.orderOfTree-1)
     {
         indexNode* s = new indexNode();//s becomes the root
         //allocate and write s?
@@ -391,7 +391,7 @@ void IX_IndexHandle::insert(indexNode* x, void* pData, const RID &rid)
         s->previous = x->previous;
         x->leaf = true;
         x->isRoot=false;
-        s->entries= new entry[t-1];//allocate entries for new root.
+        s->entries= new entry[fileHdr.orderOfTree-1];//allocate entries for new root.
         splitChild(s,-1,x);
         insertNonFull(s,pData,rid);
         fileHdr.treeLayerNums++;
@@ -427,7 +427,7 @@ IX_IndexHandle::IX_IndexHandle()
     bHdrChanged = FALSE;
     memset(&fileHdr, 0, sizeof(fileHdr));
     fileHdr.rootPageNum = IX_EMPTY_TREE;
-    t = fileHdr.orderOfTree;
+    fileHdr.orderOfTree = fileHdr.orderOfTree;
     printf("constructor\n");
 }
 
@@ -439,7 +439,8 @@ IX_IndexHandle::~IX_IndexHandle()
 // Insert a new index entry
 RC IX_IndexHandle::InsertEntry(void *pData, const RID &rid)
 {
-
+    printf("-------fileHdr.orderOfTree: %d\n",fileHdr.orderOfTree);
+    
     printf("insertEntry %d\n",*(int*)pData);
 
     if(pData==NULL)
@@ -456,7 +457,6 @@ RC IX_IndexHandle::InsertEntry(void *pData, const RID &rid)
         fileHdr.rootPageNum=root->pageNumber;
         bHdrChanged = 1;
         insertNonFull(root, pData, rid);
-        printf("KEYS: %d\n",root->numberOfKeys);
         
         pfFileHandle.MarkDirty(root->pageNumber);
       int rc =  ForcePages();
@@ -595,8 +595,8 @@ void IX_IndexHandle::shift (indexNode * thisNode , indexNode *neighborNode, inde
         //indexNode is not leaf
         if(!thisNode->leaf){
             //copy key in position keyNum to thisNode
-            thisNode->entries[t-1].key = anchorNode->entries[keyNum].key;
-            thisNode->entries[t-1].child = neighborNode->previous;
+            thisNode->entries[fileHdr.orderOfTree-1].key = anchorNode->entries[keyNum].key;
+            thisNode->entries[fileHdr.orderOfTree-1].child = neighborNode->previous;
             thisNode->numberOfKeys++;
             //shift numKeysShifted-1 (p,k) to thisNode from neighborNode
             for(int i=0; i<numKeysShifted-1;i++){
@@ -698,7 +698,7 @@ void IX_IndexHandle::deleteEntryInNode(indexNode* x, int keyNum, nodeInfoInPath 
      --(x->numberOfKeys);
 
     //underflow
-    if(x->numberOfKeys < t){
+    if(x->numberOfKeys < fileHdr.orderOfTree){
         //this indexNode is root
         if(x->isRoot) {
             if(x->numberOfKeys==0) //root has no more keys after delete
@@ -747,7 +747,7 @@ void IX_IndexHandle::deleteEntryInNode(indexNode* x, int keyNum, nodeInfoInPath 
         indexNode *anchorNode = readNodeFromPageNum(nodeInfo.anchor);
 
         //both neighbors are minimum size
-        if(nodeNeighbor->numberOfKeys==t){
+        if(nodeNeighbor->numberOfKeys==fileHdr.orderOfTree){
             merge(x,nodeNeighbor,anchorNode,path,entryNum, depthInPath-1);
         }
         else {

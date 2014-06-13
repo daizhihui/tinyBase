@@ -90,7 +90,7 @@ public:
     int compare(void* k1,void* k2);
     indexNode* readNodeFromPageNum(PageNum pn);
 private:   
-    
+    void reOrderDataInPage(indexNode* x);
     void writeNodeOnNewPage(indexNode* x);
     void addToBucket(PageNum& bucket, const RID &rid, PageNum prev);
     void splitChild(indexNode * x, int i,indexNode * y);
