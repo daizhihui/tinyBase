@@ -264,9 +264,9 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
                     stop=true; // Sortie de la boucle While
                     //temp =pdata;
                     pdata=pdata+(nextSlot*sizeof(RID));
-                    //memcpy(&rid,(RID*)pdata,sizeof(RID));
-                    rid.pageNum=pdata[0];
-                    rid.slotNum=pdata[sizeof(PageNum)];
+                    memcpy(&rid,(RID*)pdata,sizeof(RID));
+                    /*rid.pageNum=pdata[0];
+                    rid.slotNum=pdata[sizeof(PageNum)];*/
                     curSlotNum=nextSlot;
 
             //unpinpage currentBucket ??
