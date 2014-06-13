@@ -5,6 +5,7 @@
 //
 #include "ix.h"
 #include "ix_internal.h"
+#include<stdio.h>
 
 IX_IndexScan::IX_IndexScan()
 {
@@ -97,13 +98,13 @@ int IX_IndexScan::searchLeaf(PageNum startPageNum,void* value, PageNum &leaf ){ 
      while( pos< numberOfKeys){
 
          if(pIndexHandle->compare(value,(currentNode->entries[pos]).key)<0 && pos ==0){
-             searchLeaf((currentNode->previous,value,leaf));
+             searchLeaf(currentNode->previous,value,leaf);
          }else{
             if(pIndexHandle->compare(value,(currentNode->entries[pos]).key)<0 && pos!=0){ // value < current Key
                 // appel recursif à partir du nouveau noeud
                 searchLeaf((currentNode->entries[pos-1]).child,value,leaf);
             }else{
-                if( (pIndexHandle->compare(value,(currentNode->entries[pos]).key)>0 || pIndexHandle->compare(value,(currentNode->entries[pos]).key)=0) && pos+1==numberOfKeys ){  // je suis sur la derniere entrée du noeud
+                if( (pIndexHandle->compare(value,(currentNode->entries[pos]).key)>0 || pIndexHandle->compare(value,(currentNode->entries[pos]).key)==0) && pos+1==numberOfKeys ){  // je suis sur la derniere entrée du noeud
                     searchLeaf((currentNode->entries[pos]).child,value,leaf);
                 }
             }
