@@ -265,9 +265,9 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
                     stop=true; // Sortie de la boucle While
                     //temp =pdata;
                     pdata=pdata+(nextSlot*sizeof(RID));
-                    Pagenum ridPN = pData[0];
-                    Slotnum ridSN = pData[sizeof(pagenum)];
-                    RID ridnew= new RID(ridPN,ridSN);
+                    PageNum ridPN = pdata[0];
+                    SlotNum ridSN = pdata[sizeof(PageNum)];
+                    RID ridnew(ridPN,ridSN);
                     rid = ridnew;
                     //memcpy(&rid,(RID*)pdata,sizeof(RID));
                     /*rid.pageNum=pdata[0];
