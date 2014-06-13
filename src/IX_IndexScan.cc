@@ -275,6 +275,7 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
                     /*rid.pageNum=pdata[0];
                     rid.slotNum=pdata[sizeof(PageNum)];*/
                     curSlotNum=nextSlot;
+                    pIndexHandle->pfFileHandle.UnpinPage(currentBucket);
 
             //unpinpage currentBucket ??
                  }else{ //I'm at the end of currentBucket
