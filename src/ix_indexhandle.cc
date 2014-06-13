@@ -277,7 +277,8 @@ void IX_IndexHandle::insertNonFull(indexNode* x, void*  pData,const RID &rid)
         {
             x->numberOfKeys++;
             x->entries = new entry();
-            x->entries[0].key = (char*)pData;
+            memcpy(x->entries[0].key,pData,fileHdr.attrLength);
+          //  x->entries[0].key = (char*)pData;
             PageNum next=-1;
             addToBucket(next, rid,-1);
             x->entries[0].child = next;
@@ -295,7 +296,8 @@ void IX_IndexHandle::insertNonFull(indexNode* x, void*  pData,const RID &rid)
         }
         if(comp == 1)//new key
         {
-            x->entries[i+1].key=(char*)pData;
+            memcpy(x->entries[i+1].key,pData,fileHdr.attrLength);
+            //x->entries[i+1].key=(char*)pData;
             x->numberOfKeys++;
             PageNum next=-1;
             addToBucket(next, rid,-1);
