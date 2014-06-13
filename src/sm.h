@@ -60,7 +60,7 @@ private:
 
 //struct for Catalog relcat
 struct Relation{
-    const char * relName; //relation name
+    const char *relName; //relation name
     int tupleLength; //tuple length in bytes
     int attrCount; //number of attributes
     int indexCount; //number of indexed attributes
@@ -68,7 +68,7 @@ struct Relation{
 
 //struct for Catalog attrcat
 struct Attr_Relation{
-    const char * relName; //this attribute's relation
+    const char *relName; //this attribute's relation
     const char * attrName; //attribute name
     int offset; //offset in bytes from beginning
     AttrType attrType; //attribute type
