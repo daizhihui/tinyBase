@@ -83,7 +83,7 @@ RC IX_IndexScan::OpenScan(const IX_IndexHandle &indexHandle,CompOp _compOp, void
  // search of leaf containing value
 
 int IX_IndexScan::searchLeaf(PageNum startPageNum,void* value, PageNum &leaf ){ // Penser à gerer les cas d'erreurs
- 
+
  indexNode* currentNode;
  int numberOfKeys;
  int pos=0;
@@ -91,19 +91,22 @@ int IX_IndexScan::searchLeaf(PageNum startPageNum,void* value, PageNum &leaf ){ 
  numberOfKeys=currentNode->numberOfKeys;
 
  if(currentNode->leaf){
+     printf("Leaf found\n" );
      leaf=startPageNum;
  }else{
      while( pos< numberOfKeys){
 
-         if(pIndexHandle->compare(value,(currentNode->entries[pos]).key)<0){ // value < current Key
-            // appel recursif à partir du nouveau noeud
-             searchLeaf((currentNode->entries[pos]).child,value,leaf);
-         }
-         else{
-             if(pos+1==numberOfKeys){  // je suis sur la derniere entrée du noeud
-                 searchLeaf((currentNode->entries[pos]).child,value,leaf);
-             }
-
+         if(pIndexHandle->compare(value,(currentNode->entries[pos]).key)<0 && pos ==0){
+             searchLeaf((currentNode->previous,value,leaf));
+         }else{
+            if(pIndexHandle->compare(value,(currentNode->entries[pos]).key)<0 && pos!=0){ // value < current Key
+                // appel recursif à partir du nouveau noeud
+                searchLeaf((currentNode->entries[pos-1]).child,value,leaf);
+            }else{
+                if( (pIndexHandle->compare(value,(currentNode->entries[pos]).key)>0 || pIndexHandle->compare(value,(currentNode->entries[pos]).key)=0) && pos+1==numberOfKeys ){  // je suis sur la derniere entrée du noeud
+                    searchLeaf((currentNode->entries[pos]).child,value,leaf);
+                }
+            }
          }
          pos++;
      }
