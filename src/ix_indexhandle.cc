@@ -789,7 +789,7 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
 
     PageNum before = bucketHdr->before;
     PageNum next = bucketHdr->next;
-    printf("bucketHdr %d, next %d \n",bucketHdr->before,bucketHdr->next);
+    printf("bucketHdr %d, next %d \n",(int)bucketHdr->before,(int)bucketHdr->next);
 
 
     int ridNum=0;
