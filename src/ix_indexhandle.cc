@@ -57,14 +57,14 @@ indexNode* IX_IndexHandle::readNodeFromPageNum(PageNum pn)
     char* pData;
     pageHandler.GetData(pData);
     indexNode* x = new indexNode();
-    x->pageNumber=((int*)pData)[0];
-    x->previous=((int*)pData)[sizeof(PageNum)];
-    x->next =((int*)pData)[2*sizeof(PageNum)];
+    x->pageNumber=*(int*)pData;
+    x->previous=*(int*)(pData+sizeof(PageNum));
+    x->next =*(int*)(pData+2*sizeof(PageNum));
     x->leaf=(bool)pData[3*sizeof(PageNum)];
     x->isRoot=(bool)pData[3*sizeof(PageNum)+sizeof(bool)];
-    x->numberOfKeys=((int*)pData)[3*sizeof(PageNum)+2*sizeof(bool)];
+    x->numberOfKeys=*(int*)(pData+3*sizeof(PageNum)+2*sizeof(bool));
 
-    printf("Node structure: PN: %d\nPrev: %d\nNext: %d\nLeaf: %c\nRoot: %c\nNumberKeys: %d\n",(int)pData[0],(int)pData[sizeof(PageNum)],(int)pData[2*sizeof(PageNum)],(bool)pData[3*sizeof(PageNum)],(bool)pData[3*sizeof(PageNum)+sizeof(bool)],(int)pData[3*sizeof(PageNum)+2*sizeof(bool)]);
+    //printf("Node structure: PN: %d\nPrev: %d\nNext: %d\nLeaf: %c\nRoot: %c\nNumberKeys: %d\n",(int)pData[0],(int)pData[sizeof(PageNum)],(int)pData[2*sizeof(PageNum)],(bool)pData[3*sizeof(PageNum)],(bool)pData[3*sizeof(PageNum)+sizeof(bool)],(int)pData[3*sizeof(PageNum)+2*sizeof(bool)]);
 //    printf("PN : %d\n",x->previous);
     x->entries = new entry[x->numberOfKeys];
     for(int i =0;i<x->numberOfKeys;i++)
@@ -92,12 +92,12 @@ void IX_IndexHandle::writeNodeOnNewPage(indexNode* x)
     pageHandler.GetData(pData);
     pageHandler.GetPageNum(x->pageNumber);
 //    printf("Writing %d number of keys\n",x->numberOfKeys);
-    pData[0] = x->pageNumber;
-    pData[sizeof(PageNum)]=x->previous;
-    pData[2*sizeof(PageNum)]=x->next;
+    *((int*)pData) = x->pageNumber;
+    *(int*)(pData+sizeof(PageNum))=x->previous;
+    *(int*)(pData+2*sizeof(PageNum))=x->next;
     pData[3*sizeof(PageNum)]=x->leaf;
     pData[3*sizeof(PageNum)+sizeof(bool)]=x->isRoot;
-    pData[3*sizeof(PageNum)+2*sizeof(bool)]=x->numberOfKeys;
+    *(int*)(pData+3*sizeof(PageNum)+2*sizeof(bool))=x->numberOfKeys;
     printf("Wrote number of keys: %d\n",pData[3*sizeof(PageNum)+2*sizeof(bool)]);
     //copy entries
     for(int i =0;i<x->numberOfKeys;i++)
@@ -130,8 +130,8 @@ void IX_IndexHandle::addToBucket(PageNum& bucket, const RID &rid, PageNum prev)
         pageHandler.GetData(data);
 //        int maxEntries = (PF_PAGE_SIZE-sizeof(IX_BucketHdr))/(sizeof(RID)+1);
         
-        data[0] = prev;//prev
-        data[sizeof(PageNum)] = -1;//next
+        ((int*)data)[0] = prev;//prev
+        ((int*)data)[1] = -1;//next
         //create bitmap: set all to 0 -- if bitmap isn't a multiple of bytes, uncomment following
         int bytes =  fileHdr.bucketHeaderSize - sizeof(IX_BucketHdr);
         memset(data+sizeof(IX_BucketHdr), 0, bytes);//set to 0
@@ -818,8 +818,8 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
     //PageNum before = before;
     //PageNum next = next;
     //printf("bucketHdr prev%d, next %d \n",(int)data[0],(int)data[sizeof(int)]);
-    PageNum before = (int)data[0];
-    PageNum next = (int)data[sizeof(int)];
+    PageNum before = ((int*)data)[0];
+    PageNum next = ((int*)data)[1];
     printf("bucketHdr prev%d, next %d \n",before,next);
     int ridNum=0;
     RID *ridi;
@@ -874,8 +874,8 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
                         //replace pageNum in leaf, change IX_BucketHdr.before in next bucket
                         pfFileHandle.GetThisPage(next,pageHandle);
                         pageHandle.GetData(data);
-                        //((IX_BucketHdr *) data)->before = -1; //this bucket becomes the first bucket in the chain list
-                        data[0]=-1;
+                        ((IX_BucketHdr *) data)->before = -1; //this bucket becomes the first bucket in the chain list
+                        //data[0]=-1;
                         leaf->entries[entryNum].child = next;
                         pfFileHandle.MarkDirty(leafPage);
                         pfFileHandle.MarkDirty(next);
@@ -889,15 +889,15 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
                     //modify IX_BucketHdr.after in last bucket
                     pfFileHandle.GetThisPage(before,pageHandle);
                     pageHandle.GetData(data);
-                    //((IX_BucketHdr *) data)->next = next; //
-                    data[sizeof(PageNum)] = next;
+                    ((IX_BucketHdr *) data)->next = next; //
+                    //data[sizeof(PageNum)] = next;
                     pfFileHandle.MarkDirty(before);
                     if(next!=-1){
                         //modify IX_BucketHdr.before in next bucket
                         pfFileHandle.GetThisPage(next,pageHandle);
                         pageHandle.GetData(data);
-                        //((IX_BucketHdr *) data)->before = before; //
-                         data[0] = before;
+                        ((IX_BucketHdr *) data)->before = before; //
+                        //((int*)data)[0] = before;
                         pfFileHandle.MarkDirty(next);
                     }
                 }
