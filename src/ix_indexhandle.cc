@@ -57,14 +57,14 @@ indexNode* IX_IndexHandle::readNodeFromPageNum(PageNum pn)
     char* pData;
     pageHandler.GetData(pData);
     indexNode* x = new indexNode();
-    x->pageNumber=(int)pData[0];
-    x->previous=(int)pData[sizeof(PageNum)];
-    x->next =(int)pData[2*sizeof(PageNum)];
+    x->pageNumber=((int*)pData)[0];
+    x->previous=((int*)pData)[sizeof(PageNum)];
+    x->next =((int*)pData)[2*sizeof(PageNum)];
     x->leaf=(bool)pData[3*sizeof(PageNum)];
     x->isRoot=(bool)pData[3*sizeof(PageNum)+sizeof(bool)];
-    x->numberOfKeys=(int)pData[3*sizeof(PageNum)+2*sizeof(bool)];
+    x->numberOfKeys=((int*)pData)[3*sizeof(PageNum)+2*sizeof(bool)];
 
-    //printf("Node structure: PN: %d\nPrev: %d\nNext: %d\nLeaf: %c\nRoot: %c\nNumberKeys: %d\n",(int)pData[0],(int)pData[sizeof(PageNum)],(int)pData[2*sizeof(PageNum)],(bool)pData[3*sizeof(PageNum)],(bool)pData[3*sizeof(PageNum)+sizeof(bool)],(int)pData[3*sizeof(PageNum)+2*sizeof(bool)]);
+    printf("Node structure: PN: %d\nPrev: %d\nNext: %d\nLeaf: %c\nRoot: %c\nNumberKeys: %d\n",(int)pData[0],(int)pData[sizeof(PageNum)],(int)pData[2*sizeof(PageNum)],(bool)pData[3*sizeof(PageNum)],(bool)pData[3*sizeof(PageNum)+sizeof(bool)],(int)pData[3*sizeof(PageNum)+2*sizeof(bool)]);
 //    printf("PN : %d\n",x->previous);
     x->entries = new entry[x->numberOfKeys];
     for(int i =0;i<x->numberOfKeys;i++)
@@ -77,6 +77,7 @@ indexNode* IX_IndexHandle::readNodeFromPageNum(PageNum pn)
 //        printf("PN %d: %d\n",i,(int)x->entries[i].child);
         
     }
+    printf("end of Reading node from page\n");
     return  x;
 }
 
@@ -210,7 +211,6 @@ void IX_IndexHandle::reOrderDataInPage(indexNode* x)
     pfFileHandle.GetThisPage(x->pageNumber, pageHandler);
     char* data;
     int rc=pageHandler.GetData(data);
-    printf("pin page: %d\n",x->pageNumber);
     //printf("Got data with rc: %d\n",rc);
     //printf("Writing %d number of keys\n",x->numberOfKeys);
     data[0] = x->pageNumber;
@@ -360,7 +360,7 @@ void IX_IndexHandle::insertNonFull(indexNode* x, void*  pData,const RID &rid)
             x->entries[i+1].child = next;
             //new bucket
         }
-        printf("$$COMP: %d\n",comp);
+        //printf("$$COMP: %d\n",comp);
         //x->children = new PageNum();
         reOrderDataInPage(x);
 //        pfFileHandle.MarkDirty(x->pageNumber);
