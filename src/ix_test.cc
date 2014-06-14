@@ -568,7 +568,7 @@ RC Test3(void)
          // ensure deleted entries are gone
          (rc = VerifyIntIndex(ih, 0, nDelete, FALSE)) ||
          // ensure non-deleted entries still exist
-         (rc = VerifyIntIndex(ih, nDelete, FEW_ENTRIES - nDelete, TRUE)) ||
+         (rc = VerifyIntIndex(ih, nDelete, FEW_ENTRIES  - nDelete, TRUE)) ||
          (rc = ixm.CloseIndex(ih)))
       return (rc);
 
