@@ -51,7 +51,7 @@ int IX_IndexHandle::compare(void* k1,void* k2)
 
 indexNode* IX_IndexHandle::readNodeFromPageNum(PageNum pn)
 {
-    printf("Reading node from page\n");
+    ////printf("Reading node from page\n");
     PF_PageHandle pageHandler;
     int rc = pfFileHandle.GetThisPage(pn, pageHandler);
     char* pData;
@@ -64,8 +64,8 @@ indexNode* IX_IndexHandle::readNodeFromPageNum(PageNum pn)
     x->isRoot=(bool)pData[3*sizeof(PageNum)+sizeof(bool)];
     x->numberOfKeys=*(int*)(pData+3*sizeof(PageNum)+2*sizeof(bool));
 
-    //printf("Node structure: PN: %d\nPrev: %d\nNext: %d\nLeaf: %c\nRoot: %c\nNumberKeys: %d\n",(int)pData[0],(int)pData[sizeof(PageNum)],(int)pData[2*sizeof(PageNum)],(bool)pData[3*sizeof(PageNum)],(bool)pData[3*sizeof(PageNum)+sizeof(bool)],(int)pData[3*sizeof(PageNum)+2*sizeof(bool)]);
-//    printf("PN : %d\n",x->previous);
+    ////printf("Node structure: PN: %d\nPrev: %d\nNext: %d\nLeaf: %c\nRoot: %c\nNumberKeys: %d\n",(int)pData[0],(int)pData[sizeof(PageNum)],(int)pData[2*sizeof(PageNum)],(bool)pData[3*sizeof(PageNum)],(bool)pData[3*sizeof(PageNum)+sizeof(bool)],(int)pData[3*sizeof(PageNum)+2*sizeof(bool)]);
+//    //printf("PN : %d\n",x->previous);
     x->entries = new entry[x->numberOfKeys];
     for(int i =0;i<x->numberOfKeys;i++)
     {
@@ -73,11 +73,11 @@ indexNode* IX_IndexHandle::readNodeFromPageNum(PageNum pn)
         x->entries[i].key = (char*)malloc(sizeof(fileHdr.attrLength));
         memcpy(x->entries[i].key,pData+4*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum)),fileHdr.attrLength);
 
-//        printf("Key %d: %d\n",i,*(int*)x->entries[i].key);
-//        printf("PN %d: %d\n",i,(int)x->entries[i].child);
+//        //printf("Key %d: %d\n",i,*(int*)x->entries[i].key);
+//        //printf("PN %d: %d\n",i,(int)x->entries[i].child);
         
     }
-    printf("end of Reading node from page\n");
+    ////printf("end of Reading node from page\n");
     return  x;
 }
 
@@ -85,36 +85,36 @@ indexNode* IX_IndexHandle::readNodeFromPageNum(PageNum pn)
 //must write part by part because of dynamic allocation on entries.
 void IX_IndexHandle::writeNodeOnNewPage(indexNode* x)
 {
-    printf("Writing node on new page\n");
+    ////printf("Writing node on new page\n");
     PF_PageHandle pageHandler;
     pfFileHandle.AllocatePage(pageHandler);
     char* pData;
     pageHandler.GetData(pData);
     pageHandler.GetPageNum(x->pageNumber);
-//    printf("Writing %d number of keys\n",x->numberOfKeys);
+//    ////printf("Writing %d number of keys\n",x->numberOfKeys);
     *((int*)pData) = x->pageNumber;
     *(int*)(pData+sizeof(PageNum))=x->previous;
     *(int*)(pData+2*sizeof(PageNum))=x->next;
     pData[3*sizeof(PageNum)]=x->leaf;
     pData[3*sizeof(PageNum)+sizeof(bool)]=x->isRoot;
     *(int*)(pData+3*sizeof(PageNum)+2*sizeof(bool))=x->numberOfKeys;
-    printf("Wrote number of keys: %d\n",pData[3*sizeof(PageNum)+2*sizeof(bool)]);
+    //printf("Wrote number of keys: %d\n",pData[3*sizeof(PageNum)+2*sizeof(bool)]);
     //copy entries
     for(int i =0;i<x->numberOfKeys;i++)
     {
         pData[3*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum))]=x->entries[i].child;
         memcpy(pData+4*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum)),x->entries[i].key,fileHdr.attrLength);
-//        printf("Writing Key %d: %d\n",i,pData[4*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum))]);
-//        printf("Writing PN %d: %d\n",i,pData[3*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum))]);
+//        //printf("Writing Key %d: %d\n",i,pData[4*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum))]);
+//        //printf("Writing PN %d: %d\n",i,pData[3*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum))]);
 //        memcpy(&pData[3*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum))], &(x->entries[i]), fileHdr.attrLength+sizeof(PageNum));
     }
     pfFileHandle.MarkDirty(x->pageNumber);
-        printf("Done Writing node on new page\n");
+        //printf("Done Writing node on new page\n");
 }
 
 void IX_IndexHandle::addToBucket(PageNum& bucket, const RID &rid, PageNum prev)
 {
-    printf("Adding to bucket\n");
+    //printf("Adding to bucket\n");
 
     PageNum ridPN;
     SlotNum ridSN;
@@ -123,7 +123,7 @@ void IX_IndexHandle::addToBucket(PageNum& bucket, const RID &rid, PageNum prev)
     PF_PageHandle pageHandler;
     if(bucket == -1 || pfFileHandle.GetThisPage(bucket, pageHandler)!=0)
     {//bucket does not exist
-        printf("New bucket\n");
+        //printf("New bucket\n");
         pfFileHandle.AllocatePage(pageHandler);
         pageHandler.GetPageNum(bucket);
         char* data;
@@ -158,7 +158,7 @@ void IX_IndexHandle::addToBucket(PageNum& bucket, const RID &rid, PageNum prev)
     {
         char* data;
         int rc = pageHandler.GetData(data);
-        printf("rc: %d\n",rc);
+        //printf("rc: %d\n",rc);
         //find first empty rid num
         int ridnum;
         for(ridnum=0;ridnum<fileHdr.numRidsPerBucket;ridnum++)
@@ -199,20 +199,20 @@ void IX_IndexHandle::addToBucket(PageNum& bucket, const RID &rid, PageNum prev)
             }
         }
     }
-    printf("Done adding to bucket\n");
+    //printf("Done adding to bucket\n");
 
     
 }
 
 void IX_IndexHandle::reOrderDataInPage(indexNode* x)
 {
-    printf("Reordering data in page %d\n",x->pageNumber);
+    //printf("Reordering data in page %d\n",x->pageNumber);
     PF_PageHandle pageHandler;
     pfFileHandle.GetThisPage(x->pageNumber, pageHandler);
     char* data;
     int rc=pageHandler.GetData(data);
-    //printf("Got data with rc: %d\n",rc);
-    //printf("Writing %d number of keys\n",x->numberOfKeys);
+    ////printf("Got data with rc: %d\n",rc);
+    ////printf("Writing %d number of keys\n",x->numberOfKeys);
     data[0] = x->pageNumber;
     data[sizeof(PageNum)]=x->previous;
     data[2*sizeof(PageNum)]=x->next;
@@ -223,15 +223,15 @@ void IX_IndexHandle::reOrderDataInPage(indexNode* x)
     
 //    memcpy(data,x,3*sizeof(PageNum)+2*sizeof(bool)+sizeof(int));
     //copy entries
-//    printf("Wrote number of keys: %d\n",data[3*sizeof(PageNum)+2*sizeof(bool)]);
+//    //printf("Wrote number of keys: %d\n",data[3*sizeof(PageNum)+2*sizeof(bool)]);
 
     for(int i =0;i<x->numberOfKeys;i++)
     {
-//        printf("writing %d key+child of %d\n",i,x->numberOfKeys);
+//        //printf("writing %d key+child of %d\n",i,x->numberOfKeys);
         data[3*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum))]=x->entries[i].child;
         memcpy(data+4*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum)),x->entries[i].key,fileHdr.attrLength);
-//        printf("Writing Key %d: %d\n",i,data[4*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum))]);
-//        printf("Writing PN %d: %d\n",i,data[3*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum))]);
+//        //printf("Writing Key %d: %d\n",i,data[4*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum))]);
+//        //printf("Writing PN %d: %d\n",i,data[3*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum))]);
         
     }
     pfFileHandle.MarkDirty(x->pageNumber);
@@ -247,7 +247,7 @@ void IX_IndexHandle::reOrderDataInPage(indexNode* x)
 //i is index in x's entries, -1 if first
 void IX_IndexHandle::splitChild(indexNode * x, int i,indexNode * y)
 {
-    printf("Splitting child\n");
+    //printf("Splitting child\n");
 
     //the new indexNode to write
     indexNode *z = new indexNode();
@@ -292,7 +292,7 @@ void IX_IndexHandle::splitChild(indexNode * x, int i,indexNode * y)
         free(z->entries[i].key);
     delete[] z->entries;
     delete z;
-    printf("Done splitting child\n");
+    //printf("Done splitting child\n");
 
     
 }
@@ -304,7 +304,7 @@ void IX_IndexHandle::splitChild(indexNode * x, int i,indexNode * y)
 
 void IX_IndexHandle::insertNonFull(indexNode* x, void*  pData,const RID &rid)
 {
-    printf("insert non full\n");
+    //printf("insert non full\n");
 
     //if same key, add to bucket and increment number of rids.
     //if new key create bucket and add.
@@ -312,7 +312,7 @@ void IX_IndexHandle::insertNonFull(indexNode* x, void*  pData,const RID &rid)
     
     int i = x->numberOfKeys;
     int comp =2;
-    printf("%d keys\n",i);
+    //printf("%d keys\n",i);
     if(x->leaf)
     {
         if(i==0)
@@ -345,12 +345,12 @@ void IX_IndexHandle::insertNonFull(indexNode* x, void*  pData,const RID &rid)
         }
         if(comp == 0)
         {
-            printf("Adding to existing bucket\n");
+            //printf("Adding to existing bucket\n");
             addToBucket(x->entries[i].child, rid,-1);
         }
         else
         {
-            printf("Adding new key\n");
+            //printf("Adding new key\n");
             x->entries[i+1].key=(char*)malloc(fileHdr.attrLength);
             memcpy(x->entries[i+1].key,pData,fileHdr.attrLength);
             //            x->entries[i+1].key=(char*)pData;
@@ -360,7 +360,7 @@ void IX_IndexHandle::insertNonFull(indexNode* x, void*  pData,const RID &rid)
             x->entries[i+1].child = next;
             //new bucket
         }
-        //printf("$$COMP: %d\n",comp);
+        ////printf("$$COMP: %d\n",comp);
         //x->children = new PageNum();
         reOrderDataInPage(x);
 //        pfFileHandle.MarkDirty(x->pageNumber);
@@ -382,7 +382,7 @@ void IX_IndexHandle::insertNonFull(indexNode* x, void*  pData,const RID &rid)
             if(compare(pData,x->entries[i].key))
                 i++;
         }
-        printf("Inserting in child \n");
+        //printf("Inserting in child \n");
         insertNonFull(childi,pData,rid);
         pfFileHandle.UnpinPage(childi->pageNumber);
 
@@ -392,14 +392,14 @@ void IX_IndexHandle::insertNonFull(indexNode* x, void*  pData,const RID &rid)
         delete childi;
     }
     
-    printf("done insert non full\n");
+    //printf("done insert non full\n");
 
 }
 
 //start of recursion for the insert, x should be the root indexNode
 void IX_IndexHandle::insert(indexNode* x, void* pData, const RID &rid)
 {
-    printf("insert %d\n",*(int*)pData);
+    //printf("insert %d\n",*(int*)pData);
 
     //x is the root indexNode
     if(x->numberOfKeys==2*fileHdr.orderOfTree-1)
@@ -437,7 +437,7 @@ void IX_IndexHandle::insert(indexNode* x, void* pData, const RID &rid)
         pfFileHandle.UnpinPage(x->pageNumber);
 
     }
-    printf("done insert \n");
+    //printf("done insert \n");
 
     
 }
@@ -449,7 +449,7 @@ IX_IndexHandle::IX_IndexHandle()
     memset(&fileHdr, 0, sizeof(fileHdr));
     fileHdr.rootPageNum = IX_EMPTY_TREE;
   //  fileHdr.orderOfTree = fileHdr.orderOfTree;
-    printf("constructor\n");
+    //printf("constructor\n");
 }
 
 IX_IndexHandle::~IX_IndexHandle()
@@ -461,7 +461,7 @@ IX_IndexHandle::~IX_IndexHandle()
 RC IX_IndexHandle::InsertEntry(void *pData, const RID &rid)
 {
     
-    printf("insertEntry %d\n",*(int*)pData);
+    //printf("insertEntry %d\n",*(int*)pData);
 
     if(pData==NULL)
         return 5;
@@ -498,7 +498,7 @@ RC IX_IndexHandle::InsertEntry(void *pData, const RID &rid)
         delete root;
         
     }
-    printf("done insert entry \n");
+    //printf("done insert entry \n");
    
     return 0;
     
@@ -720,28 +720,28 @@ void IX_IndexHandle::deleteEntryInNode(indexNode* x, int keyNum, nodeInfoInPath 
         x->entries[i] = x->entries[i+1];
     }
      --(x->numberOfKeys);
-    printf("numberKeys:%d\n",x->numberOfKeys);
-    if(fileHdr.rootPageNum == x->pageNumber) printf("is Root PAGE\n");
+    //printf("numberKeys:%d\n",x->numberOfKeys);
+    if(fileHdr.rootPageNum == x->pageNumber) //printf("is Root PAGE\n");
     //underflow
     if(x->numberOfKeys < fileHdr.orderOfTree){
-        printf("underFlow\n");
+        //printf("underFlow\n");
         //this indexNode is root
         if(x->isRoot) {
-            printf("IS root\n");
+            //printf("IS root\n");
             if(x->numberOfKeys==0) //root has no more keys after delete
                 collapseRoot(x);
             else //root has still keys, do nothing
             {
-                printf("not collapse root\n");
+                //printf("not collapse root\n");
                 reOrderDataInPage(x);
                 //for test
-//                if(fileHdr.rootPageNum == x->pageNumber) printf("afterWrite,is Root PAGE\n");
-//                else printf("afterWrite,is NOT Root PAGE\n");
+//                if(fileHdr.rootPageNum == x->pageNumber) //printf("afterWrite,is Root PAGE\n");
+//                else //printf("afterWrite,is NOT Root PAGE\n");
                 //pfFileHandle.MarkDirty(x->pageNumber);
                 return;
             }
         }
-        printf("NOT root\n");
+        //printf("NOT root\n");
         //check immediate neighbors
         nodeInfoInPath nodeInfo = path[depthInPath];
         PageNum neighborR = path[depthInPath].neighborR;
@@ -808,7 +808,7 @@ void IX_IndexHandle::deleteEntryInNode(indexNode* x, int keyNum, nodeInfoInPath 
 //          pathDepth - the length of array path
 
 RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * path, int pathDepth){
-    printf("begin deleteRID, entryNum in path %d\n", path[1].entryNum);
+    //printf("begin deleteRID, entryNum in path %d\n", path[1].entryNum);
 
     char* data;
     PF_PageHandle pageHandle;
@@ -817,10 +817,10 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
     //IX_BucketHdr *bucketHdr = (IX_BucketHdr*)data;
     //PageNum before = before;
     //PageNum next = next;
-    //printf("bucketHdr prev%d, next %d \n",(int)data[0],(int)data[sizeof(int)]);
+    ////printf("bucketHdr prev%d, next %d \n",(int)data[0],(int)data[sizeof(int)]);
     PageNum before = ((int*)data)[0];
     PageNum next = ((int*)data)[1];
-    printf("bucketHdr prev%d, next %d \n",before,next);
+    //printf("bucketHdr prev%d, next %d \n",before,next);
     int ridNum=0;
     RID *ridi;
         //iterate for all non-empty rids
@@ -830,11 +830,11 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
         SlotNum ridSN;
         ridi->GetPageNum(ridPN);
         ridi->GetSlotNum(ridSN);
-        printf(" rid: pN %d, SN %d\n", ridPN,ridSN);
+        //printf(" rid: pN %d, SN %d\n", ridPN,ridSN);
 
         //found in this page
         if((*ridi)==rid) {
-            printf("found in this bucket\n");
+            //printf("found in this bucket\n");
             // Clear bit
             ClrBitmap(data + sizeof(IX_BucketHdr), ridNum);
             // Find a non-free rid
@@ -846,7 +846,7 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
             // This will help the total number of occupied pages to be remained
             // as small as possible
             if (ridNum == fileHdr.numRidsPerBucket) {
-                printf("after deletion, the bucket is empty\n");
+                //printf("after deletion, the bucket is empty\n");
                //TODO change insert (rid space be free, can be reused, add freeSlot in bucket page header)
                 //dispose of page bucket
                 pfFileHandle.MarkDirty(bucket);
@@ -855,22 +855,22 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
 
                //the first bucket to be removed
                 if(before == -1) {
-                    printf("the first bucket to be removed\n");
+                    //printf("the first bucket to be removed\n");
                     PageNum leafPage = path[pathDepth].anchor;
                     int entryNum = path[pathDepth].entryNum;
                     indexNode * leaf = readNodeFromPageNum(leafPage);
 
-//                    if(fileHdr.rootPageNum == leafPage) printf("leafPage is Root PAGE\n");
-//                    if(leaf->pageNumber == leafPage) printf("node leaf Page is Root PAGE\n");
+//                    if(fileHdr.rootPageNum == leafPage) //printf("leafPage is Root PAGE\n");
+//                    if(leaf->pageNumber == leafPage) //printf("node leaf Page is Root PAGE\n");
                     if(next == -1) {
-                         printf("no nextbucket,delete the entry in leaf\n");
+                         //printf("no nextbucket,delete the entry in leaf\n");
                         //delete the entry in leaf
                         deleteEntryInNode(leaf,entryNum,path,pathDepth-1);
                         pfFileHandle.UnpinPage(leafPage);
 
                     }
                     else{
-                        printf("has nextbucket,replace pageNum in leaf\n");
+                        //printf("has nextbucket,replace pageNum in leaf\n");
                         //replace pageNum in leaf, change IX_BucketHdr.before in next bucket
                         pfFileHandle.GetThisPage(next,pageHandle);
                         pageHandle.GetData(data);
@@ -885,7 +885,7 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
                 }
                 //rid not in the first bucket
                 else{
-                    printf("the non-first bucket to be removed\n");
+                    //printf("the non-first bucket to be removed\n");
                     //modify IX_BucketHdr.after in last bucket
                     pfFileHandle.GetThisPage(before,pageHandle);
                     pageHandle.GetData(data);
@@ -909,7 +909,7 @@ RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * p
 
     //not found in this page, find the next
     if(next == -1) return IX_INDEX_NOTFOUND;
-    printf("search rid in the next bucket\n");
+    //printf("search rid in the next bucket\n");
     return deleteRID(next,rid,path,pathDepth);
 }
 
@@ -924,7 +924,7 @@ RC IX_IndexHandle::DeleteEntry(void *pData, const RID &rid){
     //an array of nodeInfo to save infos about neighors and anchors
     nodeInfoInPath path[fileHdr.treeLayerNums];
     //for debugging
-    //printf("treeLayer%d,order%d\n",fileHdr.treeLayerNums,fileHdr.orderOfTree);
+    ////printf("treeLayer%d,order%d\n",fileHdr.treeLayerNums,fileHdr.orderOfTree);
     //for root
     path[0].nodeSelf = rootPage;
     path[0].anchor=-1; //implicit root
@@ -935,12 +935,12 @@ RC IX_IndexHandle::DeleteEntry(void *pData, const RID &rid){
 
     int pathDepth = 0;
     //parcourir l'arbre et obtenir les donnees enregistrees dans path
-    //printf("before traversal\n");
+    ////printf("before traversal\n");
     traversalTree(root,pData,path,pathDepth);
-    //printf("after traversal\n");
+    ////printf("after traversal\n");
     //remove rid in bucket
     //get the first bucket page
-    printf("pathDepth%d\n",pathDepth);
+    //printf("pathDepth%d\n",pathDepth);
     PageNum bucket = path[pathDepth].nodeSelf;
     //delete rid in the buckets
     return deleteRID(bucket,rid,path,pathDepth);
@@ -956,17 +956,17 @@ RC IX_IndexHandle::DeleteEntry(void *pData, const RID &rid){
 RC IX_IndexHandle::traversalTree(indexNode *x, void *pData, nodeInfoInPath *path,int &pathDepth){
     RC rc;
     pathDepth++;
-    //printf("pdata%d\nnumberofKeys%d\n",*(int*)pData,x->numberOfKeys);
+    ////printf("pdata%d\nnumberofKeys%d\n",*(int*)pData,x->numberOfKeys);
     if(x->leaf){
-        //printf("traversal leaf\n");
+        ////printf("traversal leaf\n");
         int i = 0;
         while(i<x->numberOfKeys && compare(pData,x->entries[i].key)!=0)
             i++;
         //for debug
-        //printf("print all the elements key in leaf\n");
+        ////printf("print all the elements key in leaf\n");
 //        int j=0;
 //        while(j<x->numberOfKeys){
-//            printf("%d\n",*(int*)x->entries[j].key);
+//            //printf("%d\n",*(int*)x->entries[j].key);
 //            j++;
 //        }
         // if not found in leaf
@@ -983,7 +983,7 @@ RC IX_IndexHandle::traversalTree(indexNode *x, void *pData, nodeInfoInPath *path
         return 0;
     }
 
-    printf("traversal non-leaf\n");
+    //printf("traversal non-leaf\n");
     int i = 0;
     while(i<x->numberOfKeys && compare(pData,x->entries[i].key)!=-1)
         i++;
