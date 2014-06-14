@@ -1,5 +1,5 @@
 //
-// File:        IX_indexscan.cc
+// File: IX_indexscan.cc
 // Description: IX_IndexScan class implementation
 // Author:
 //
@@ -60,24 +60,24 @@ RC IX_IndexScan::OpenScan(const IX_IndexHandle &indexHandle,CompOp _compOp, void
     }
     if (_compOp != NO_OP && compOp != NE_OP) {
        // Sanity Check: value must not be NULL
-       if (_value == NULL) 
+       if (_value == NULL)
           return (-2); //IX_NULLPOINTER
 
        }
     // Copy parameters to local variable
     compOp= _compOp;
-    value =  _value;
+    value = _value;
     pinHint= _pinHint;
    pIndexHandle=(IX_IndexHandle *) &indexHandle;
 
     // Set local state variables
     bScanOpen = TRUE;
-   // curPageNum =  pIndexHandle->fileHdr.rootPageNum; // valeur de la racine
+   // curPageNum = pIndexHandle->fileHdr.rootPageNum; // valeur de la racine
    // curSlotNum = pIndexHandle->fileHdr.numMaxEntries;
 
     // Return ok
     return (0);
-    printf( "End Of Open SCAN");
+   
 }
 
 
@@ -92,7 +92,7 @@ int IX_IndexScan::searchLeaf(PageNum startPageNum,void* value, PageNum &leaf ){ 
  numberOfKeys=currentNode->numberOfKeys;
 
  if(currentNode->leaf){
-     printf("Leaf found\n" );
+   
      leaf=startPageNum;
  }else{
      while( pos< numberOfKeys){
@@ -104,7 +104,7 @@ int IX_IndexScan::searchLeaf(PageNum startPageNum,void* value, PageNum &leaf ){ 
                 // appel recursif à partir du nouveau noeud
                 searchLeaf((currentNode->entries[pos-1]).child,value,leaf);
             }else{
-                if( (pIndexHandle->compare(value,(currentNode->entries[pos]).key)>0 || pIndexHandle->compare(value,(currentNode->entries[pos]).key)==0) && pos+1==numberOfKeys ){  // je suis sur la derniere entrée du noeud
+                if( (pIndexHandle->compare(value,(currentNode->entries[pos]).key)>0 || pIndexHandle->compare(value,(currentNode->entries[pos]).key)==0) && pos+1==numberOfKeys ){ // je suis sur la derniere entrée du noeud
                     searchLeaf((currentNode->entries[pos]).child,value,leaf);
                 }
             }
@@ -174,7 +174,7 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
     PageNum leaf;
 
    PageNum gBucket=-1,pBucket=-1, nBucket=-1;
-   int pos_g=-1,pos_p=-1,pos_n=-1;  // Positions linked to  entries
+   int pos_g=-1,pos_p=-1,pos_n=-1; // Positions linked to entries
 
    int nextSlot;
    int pos=0;
@@ -186,7 +186,7 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
 
     if(bScanOpen){
 
-        if(currentBucket == -1 && endScan !=true){ //  First access
+        if(currentBucket == -1 && endScan !=true){ // First access
             searchLeaf(pIndexHandle->fileHdr.rootPageNum,value,leaf);
             currentLeaf= pIndexHandle->readNodeFromPageNum(leaf);
 
@@ -210,7 +210,7 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
 
             if(gBucket==-1){
                 if(compOp==EQ_OP){
-
+pIndexHandle->pfFileHandle.UnpinPage(leaf);
                     endScan=true;
                 }
                 if(compOp==GE_OP){
@@ -240,6 +240,7 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
 
 
             if(currentBucket==-1){
+            pIndexHandle->pfFileHandle.UnpinPage(leaf);
                 endScan=true;
             }else{
                 curSlotNum=-1;
@@ -250,30 +251,36 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
             return IX_EOF;
         }else{
             stop=false;
-            while(!stop){
-
+            while(!stop){	
+            	
                 pIndexHandle->pfFileHandle.GetThisPage(currentBucket,pageHandler);
+                
+              
                 pageHandler.GetData(pdata);
+               
                 //memcpy(&bucketHdr,(IX_BucketHdr*)pdata, sizeof(IX_BucketHdr));
+                 
                 bucketHdr.before=pdata[0];
                 bucketHdr.next=pdata[sizeof(PageNum)];
+                
              //find nextSlot in bitmap
+             
                 nextSlot= getNextFullSlot(curSlotNum, pdata+sizeof(IX_BucketHdr),pIndexHandle->fileHdr.numRidsPerBucket);
-
+ 
                  if(nextSlot!=-2){
-                    
+                   
                     stop=true; // Sortie de la boucle While
                     //temp =pdata;
                     pdata=pdata+sizeof(IX_BucketHdr)+ pIndexHandle->fileHdr.bucketHeaderSize - sizeof(IX_BucketHdr);
-                    printf("NextSlot:%d \n",nextSlot);
+                   
                     PageNum ridPN = pdata[0];
                     SlotNum ridSN = pdata[sizeof(PageNum)];
                     RID ridnew(ridPN,ridSN);
                     rid = ridnew;
-                    printf("ridPN : %d  ridSN : %d \n",ridPN, ridSN);
+                    
                     //memcpy(&rid,(RID*)pdata,sizeof(RID));
                     /*rid.pageNum=pdata[0];
-                    rid.slotNum=pdata[sizeof(PageNum)];*/
+rid.slotNum=pdata[sizeof(PageNum)];*/
                     curSlotNum=nextSlot;
                     pIndexHandle->pfFileHandle.UnpinPage(currentBucket);
 
@@ -288,6 +295,7 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
                     }else{
                     // End of the scan
                         if(compOp==EQ_OP){
+                      pIndexHandle->pfFileHandle.UnpinPage(leaf);
                             endScan=true;
                             stop=true;
                         }
@@ -304,8 +312,9 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
                                     currentPosInLeaf=currentLeaf->numberOfKeys -1;
                                     currentBucket=(currentLeaf->entries[currentPosInLeaf]).child;
                                     curSlotNum=-1;
-
+pIndexHandle->pfFileHandle.UnpinPage(tempLeaf);
                                 }else{ // end of the list of leaves
+                                pIndexHandle->pfFileHandle.UnpinPage(leaf);
                                     endScan=true;
                                     stop=true;
                                 }
@@ -326,8 +335,11 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
                                     currentPosInLeaf=0;
                                     currentBucket=(currentLeaf->entries[currentPosInLeaf]).child;
                                     curSlotNum=-1;
+                                    pIndexHandle->pfFileHandle.UnpinPage(tempLeaf);
+                                    
 
                                 }else{ // end of the list of leaves
+                                 pIndexHandle->pfFileHandle.UnpinPage(leaf);
                                     endScan=true;
                                     stop=true;
                                 }
@@ -343,7 +355,8 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
             }
 
         }
-
+        
+ pIndexHandle->pfFileHandle.UnpinPage(leaf);
     }else{
         return -1; // scan not defined
 
@@ -352,7 +365,7 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
     if(!endScan)
         return 0;
     else
-        return -1;//IX_EOF
+        return IX_EOF;//IX_EOF
 
 }
 
@@ -361,7 +374,7 @@ RC IX_IndexScan::GetNextEntry(RID &rid){
 // CloseScan
 //
 // Desc: Close an index scan with the given indexHandle and scan condition
-// Ret:  IX_CLOSEDSCAN
+// Ret: IX_CLOSEDSCAN
 //
 RC IX_IndexScan::CloseScan()
 {
