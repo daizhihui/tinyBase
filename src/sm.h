@@ -68,6 +68,18 @@ struct Relation{
 
 //struct for Catalog attrcat in printer.h : DataAttrInfo
 
+//
+// Error table
+//
+static char *SM_WarnMsg[] = {
+    (char*)"inviable relation name",
+    (char*)"invalid attribute name",
+    (char*)"too much attributes",
+    (char*)"invalid attribute",
+    (char*)"index already exists",
+    (char*)"attribute index not exists",
+};
+
 void SM_PrintError(RC rc);
 
 #define SM_INVALIDRELNAME     (START_SM_WARN + 0) // invalid relation name
@@ -76,5 +88,5 @@ void SM_PrintError(RC rc);
 #define SM_INVALIDATTR        (START_SM_WARN + 3) // invalid attribute
 #define SM_INDEXEXIST       (START_SM_WARN + 4) //index already exists
 #define SM_ATTRINDEX_NOT_EXIST (START_SM_WARN + 5) // attribute index not exists
-
+#define SM_LASTWARN        SM_ATTRINDEX_NOT_EXIST
 #endif

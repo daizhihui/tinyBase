@@ -75,6 +75,16 @@ RC SM_Manager::CreateTable(const char *relName,
                            int        attrCount,
                            AttrInfo   *attributes)
 {
+    cout << "CreateTable\n"
+    << "   relName     =" << relName << "\n"
+    << "   attrCount   =" << attrCount << "\n";
+    for (int i = 0; i < attrCount; i++)
+        cout << "   attributes[" << i << "].attrName=" << attributes[i].attrName
+        << "   attrType="
+        << (attributes[i].attrType == INT ? "INT" :
+            attributes[i].attrType == FLOAT ? "FLOAT" : "STRING")
+        << "   attrLength=" << attributes[i].attrLength << "\n";
+    
     RC rc;
     
     //check if relation name begin with letter
@@ -205,16 +215,6 @@ RC SM_Manager::CreateTable(const char *relName,
     //Call RM_Manager::CreateFile to create table file
     if((rc=Rmm->CreateFile(relName, tuplelength))) goto err_return;
     
-    
-    cout << "CreateTable\n"
-         << "   relName     =" << relName << "\n"
-         << "   attrCount   =" << attrCount << "\n";
-    for (int i = 0; i < attrCount; i++)
-        cout << "   attributes[" << i << "].attrName=" << attributes[i].attrName
-             << "   attrType="
-             << (attributes[i].attrType == INT ? "INT" :
-                 attributes[i].attrType == FLOAT ? "FLOAT" : "STRING")
-             << "   attrLength=" << attributes[i].attrLength << "\n";
 err_return:
     return (rc);
 
@@ -224,6 +224,8 @@ err_return:
 
 RC SM_Manager::DropTable(const char *relName)
 {
+    cout << "DropTable\n   relName=" << relName << "\n";
+    
     RC rc;
     RM_FileScan filescan;
     
@@ -315,13 +317,16 @@ RC SM_Manager::DropTable(const char *relName)
     //c(lose scan
     if((rc=filescan.CloseScan())) return (rc);
     
-    cout << "DropTable\n   relName=" << relName << "\n";
     return (0);
 }
 
 RC SM_Manager::CreateIndex(const char *relName,
                            const char *attrName)
 {
+    cout << "CreateIndex\n"
+    << "   relName =" << relName << "\n"
+    << "   attrName=" << attrName << "\n";
+    
     RC rc;
     
     // define de RM_FileScan
@@ -419,15 +424,16 @@ RC SM_Manager::CreateIndex(const char *relName,
     //close index file
     if(Ixm->CloseIndex(indexhandle)) return (rc);
     
-    cout << "CreateIndex\n"
-         << "   relName =" << relName << "\n"
-         << "   attrName=" << attrName << "\n";
     return (0);
 }
 
 RC SM_Manager::DropIndex(const char *relName,
                          const char *attrName)
 {
+    cout << "DropIndex\n"
+    << "   relName =" << relName << "\n"
+    << "   attrName=" << attrName << "\n";
+    
     RC rc;
     RM_FileScan filescan;
  
@@ -476,15 +482,15 @@ RC SM_Manager::DropIndex(const char *relName,
     //close scan
     if((rc=filescan.CloseScan())) return (rc);
     
-    cout << "DropIndex\n"
-         << "   relName =" << relName << "\n"
-         << "   attrName=" << attrName << "\n";
     return (0);
 }
 
 RC SM_Manager::Load(const char *relName,
                     const char *fileName)
 {
+    cout << "Load\n"
+    << "   relName =" << relName << "\n"
+    << "   fileName=" << fileName << "\n";
     
     RC rc;
 
@@ -563,9 +569,6 @@ RC SM_Manager::Load(const char *relName,
     //close the relation file
     if((rc=Rmm->CloseFile(filehandle_r))) return (rc);
 
-    cout << "Load\n"
-         << "   relName =" << relName << "\n"
-         << "   fileName=" << fileName << "\n";
     return (0);
 }
 
@@ -658,18 +661,163 @@ RC SM_Manager::Set(const char *paramName, const char *value)
 RC SM_Manager::Help()
 {
     cout << "Help\n";
+    DataAttrInfo * attributes;
+    //initialize the attributes
+    strcpy(attributes[0].relName,"Help");
+    strcpy(attributes[0].attrName,"RelName");
+    attributes[0].attrLength=MAXNAME;
+    attributes[0].attrType=STRING;
+    attributes[0].offset=0;
+    attributes[0].indexNo=-1;
+    
+    // set a printer
+    Printer p(attributes,1);
+    
+    //print the header
+    p.PrintHeader(cout);
+    
+    RC rc;
+    RM_FileScan filescan;
+    RM_Record rec;
+    char * data;
+    Relation r;
+    
+    //open scan of relcat
+    if((rc=filescan.OpenScan(fileHandle_Relcat,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
+    
+    while(rc!=RM_EOF){
+        //get records until the end
+        rc=filescan.GetNextRec(rec);
+        if(rc!=0 && rc!=RM_EOF)return (rc);
+        if(rc!=RM_EOF){
+            //get record data
+            if((rc=rec.GetData(data))) return (rc);
+            memcpy(&r,data,sizeof(Relation));
+            //print the relation name
+            p.Print(cout, r.relName);
+        }
+    }
+
+    //print footer
+    p.PrintFooter(cout);
+    
+    //close the scan
+    if((rc=filescan.CloseScan())) return (rc);
+    
     return (0);
 }
 
 RC SM_Manager::Help(const char *relName)
 {
     cout << "Help\n"
-         << "   relName=" << relName << "\n";
+    << "   relName=" << relName << "\n";
+    
+    DataAttrInfo attributes[6];
+    //DataArrrInfo of relName
+    strcpy(attributes[0].relName,"Help");
+    strcpy(attributes[0].attrName,"RelName");
+    attributes[0].attrType=STRING;
+    attributes[0].attrLength=MAXNAME+1;
+    attributes[0].offset=0;
+    attributes[0].indexNo=-1;
+    
+    //DataArrrInfo of attrName
+    strcpy(attributes[1].relName,"Help");
+    strcpy(attributes[1].attrName,"AttrName");
+    attributes[1].attrType=STRING;
+    attributes[1].attrLength=MAXNAME+1;
+    attributes[1].offset=MAXNAME+1;
+    attributes[1].indexNo=-1;
+    
+    //DataArrrInfo of offset
+    strcpy(attributes[2].relName,"Help");
+    strcpy(attributes[2].attrName,"offset");
+    attributes[2].attrType=INT;
+    attributes[2].attrLength=4;
+    attributes[2].offset=2*(MAXNAME+1);
+    attributes[2].indexNo=-1;
+    
+    //DataArrrInfo of attribute type
+    strcpy(attributes[3].relName,"Help");
+    strcpy(attributes[3].attrName,"AttrType");
+    attributes[3].attrType=STRING;
+    attributes[3].attrLength=sizeof(AttrType);
+    attributes[3].offset=2*(MAXNAME+1)+4;
+    attributes[3].indexNo=-1;
+  
+    //DataArrrInfo of attribute length
+    strcpy(attributes[4].relName,"Help");
+    strcpy(attributes[4].attrName,"AttrLength");
+    attributes[4].attrType=INT;
+    attributes[4].attrLength=4;
+    attributes[4].offset=2*(MAXNAME+1)+4+sizeof(AttrType);
+    attributes[4].indexNo=-1;
+    
+    //DataArrrInfo of attribute indexNo
+    strcpy(attributes[5].relName,"Help");
+    strcpy(attributes[5].attrName,"IndexNo");
+    attributes[5].attrType=INT;
+    attributes[5].attrLength=4;
+    attributes[5].offset=2*(MAXNAME+1)+8+sizeof(AttrType);
+    attributes[5].indexNo=-1;
+    
+    Printer p(attributes,6);
+    
+    //print the header
+    p.PrintHeader(cout);
+    
+    RC rc;
+    RM_FileScan filescan;
+    RM_Record rec;
+    char * data;
+    DataAttrInfo r;
+    
+    //open scan of relcat
+    if((rc=filescan.OpenScan(fileHandle_Attrcat,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
+    
+    while(rc!=RM_EOF){
+        //get records until the end
+        rc=filescan.GetNextRec(rec);
+        if(rc!=0 && rc!=RM_EOF)return (rc);
+        if(rc!=RM_EOF){
+            //get record data
+            if((rc=rec.GetData(data))) return (rc);
+            memcpy(&r,data,sizeof(DataAttrInfo));
+            if(r.relName==relName){
+                //print the relation name
+                p.Print(cout, data);
+            }
+        }
+    }
+    
+    //print footer
+    p.PrintFooter(cout);
+    
+    //close the scan
+    if((rc=filescan.CloseScan())) return (rc);
+    
+    
     return (0);
 }
 
+//
+// SM_PrintError
+//
+// Desc: Send a message corresponding to a SM return code to cerr
+// In:   rc - return code for which a message is desired
+//
 void SM_PrintError(RC rc)
 {
-    cout << "SM_PrintError\n   rc=" << rc << "\n";
+    
+    // Check the return code is within proper limits
+    if (rc >= START_SM_WARN && rc <= SM_LASTWARN)
+        // Print warning
+        cerr << "SM warning: " << SM_WarnMsg[rc - START_SM_WARN] << "\n";
+    else if (rc == 0)
+        cerr << "SM_PrintError called with return code of 0\n";
+    else
+        cerr << "SM error: " << rc << " is out of bounds\n";
+
+    //cout << "SM_PrintError\n   rc=" << rc << "\n";
 }
 
