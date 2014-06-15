@@ -13,63 +13,12 @@
 #include "rm_rid.h"  // Please don't change these lines
 #include "pf.h"
 
-
-//
-// IX_FileHdr: Header structure for files
-//
-struct IX_FileHdr {
-    AttrType attrType; //attribute type
-    int attrLength; //attribute length
-    int indexNo; //indexNo
-    //int numMaxEntries; // max number of entries in a indexNode
-    int orderOfTree;  //every indexNode contains m entries, where order<=m<=2order except for the root, corresponding to t
-    PageNum rootPageNum; // page number of the root in the B+ tree
-    //add by dzh
-    int numRidsPerBucket; //# of rids in each bucket
-    int bucketHeaderSize; // size of (IX_BucketHdr + bitMap)
-    int treeLayerNums; //number of layers in the b+ tree
-};
-
-//TODO
-//need to be changed!!! here just for test
-struct entry
-{
-    PageNum child;
-    char* key;
-};
-
-struct indexNode
-{
-    PageNum pageNumber;
-    PageNum previous;//previous indexNode for leaves, first child for intermediary nodes.
-    PageNum next;
-    bool leaf;
-
-    //add by dzh
-    bool isRoot;
-
-    int numberOfKeys;
-    entry* entries;//K,V pairs
-
-};
-
-//a structure to save infos about neighors and anchors when delete a index
-struct nodeInfoInPath{
-    PageNum self;
-    PageNum neighborL;
-    PageNum neighborR;
-    PageNum anchor;
-    void* key; //key value
-    int entryNum; //position of this entry
-};
-
-
-
-
 //
 // IX_IndexHandle: IX Index File interface
 //
 class IX_IndexHandle {
+    friend class IX_Manager;
+    friend class IX_IndexScan;
 public:
     IX_IndexHandle();
     ~IX_IndexHandle();
@@ -82,32 +31,54 @@ public:
 
     // Force index files to disk
     RC ForcePages();
-    
+
+#ifdef DEBUG_IX
+    RC PrintNode(const PageNum);
+    RC VerifyOrder(PageNum = 0);
+    RC VerifyStructure(const PageNum = 0);
+    RC GetSmallestKey(const PageNum, char *&);
+#endif
+
+private:
+    // Copy constructor
+    IX_IndexHandle(const IX_IndexHandle &indexHandle);
+    // Overloaded =
+    IX_IndexHandle& operator=(const IX_IndexHandle &indexHandle);
+
+    inline int InternalEntrySize(void);
+    inline char* InternalKey(char *, int);
+    inline char* InternalPtr(char *, int);
+    inline int LeafEntrySize(void);
+    inline char* LeafKey(char *, int);
+    inline char* LeafRID(char *, int);
+    float Compare(void *, char *);
+
+    RC InsertEntryToNode(const PageNum, void *, const RID &,
+                         char *&, PageNum &);
+    RC InsertEntryToLeafNode(const PageNum, void *, const RID &,
+                             char *&, PageNum &, int = TRUE);
+    RC InsertEntryToLeafNodeSplit(const PageNum, void *, const RID &,
+                                  char *&, PageNum &);
+    RC InsertEntryToLeafNodeNoSplit(const PageNum, void *, const RID &,
+                                    char *&, PageNum &);
+    RC InsertEntryToIntlNode(const PageNum, const PageNum,
+                             char *&, PageNum &);
+    RC InsertEntryToIntlNodeSplit(const PageNum, const PageNum,
+                                  char *&, PageNum &);
+    RC InsertEntryToIntlNodeNoSplit(const PageNum, const PageNum,
+                                    char *&, PageNum &);
+
+    RC DeleteEntryAtNode(const PageNum, void *, const RID &,
+                         char *&, PageNum &);
+    RC DeleteEntryAtLeafNode(const PageNum, void *, const RID &,
+                             char *&, PageNum &);
+    RC DeleteEntryAtIntlNode(const PageNum, char *&, PageNum &);
+    RC LinkTwoNodesEachOther(const PageNum, const PageNum);
+    RC FindNewRootNode(const PageNum, PageNum &, char *&);
+
     PF_FileHandle pfFileHandle;
-    IX_FileHdr fileHdr;                                   // file header
-    int bHdrChanged;                                      // dirty flag for file
-
-    int compare(void* k1,void* k2);
-    indexNode* readNodeFromPageNum(PageNum pn);
-private:   
-    void reOrderDataInPage(indexNode* x);
-    void writeNodeOnNewPage(indexNode* x);
-    void addToBucket(PageNum& bucket, const RID &rid, PageNum prev);
-    void splitChild(indexNode * x, int i,indexNode * y);
-    void insertNonFull(indexNode* x, void*  pData,const RID &rid);
-    void insert(indexNode* x, void* pData, const RID &rid);
-    void collapseRoot(indexNode * oldRoot);
-    void merge (indexNode * thisNode , indexNode *neighborNode, indexNode *anchorNode, nodeInfoInPath *path, int keyNum, int depthInPath);
-    void shift (indexNode * thisNode , indexNode *neighborNode, indexNode *anchorNode, int keyNum, bool isRight );
-    void deleteEntryInNode(indexNode* x, int keyNum, nodeInfoInPath * path, int depthInPath);
-    RC deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * path, int pathDepth);
-    RC traversalTree(indexNode *x, void *pData, nodeInfoInPath *path,int &pathDepth);
-    // Bitmap Manipulation
-    int GetBitmap  (char *map, int idx) const;
-    void SetBitmap (char *map, int idx) const;
-    void ClrBitmap (char *map, int idx) const;
-    int t;
-
+    AttrType attrType;
+    int attrLength;
 };
 
 //
@@ -120,28 +91,42 @@ public:
 
     // Open index scan
     RC OpenScan(const IX_IndexHandle &indexHandle,
+#ifdef IX_DEFAULT_COMPOP
+                void *value,
+                CompOp compOp = EQ_OP,
+#else
                 CompOp compOp,
                 void *value,
+#endif
                 ClientHint  pinHint = NO_HINT);
 
     // Get the next matching entry return IX_EOF if no more matching
     // entries.
     RC GetNextEntry(RID &rid);
-    int searchLeaf(PageNum startPageNum,void* value, PageNum &leaf );
-int testBitValue(char bitmap[],int bit);
-int getNextFullSlot(int start,char bitmap[],int maxrecnumber);
+
     // Close index scan
     RC CloseScan();
 
 private:
-    bool bScanOpen;
-    bool endScan;
-    SlotNum curSlotNum;
-    PageNum currentBucket;
-    indexNode* currentLeaf;
-    PageNum nextLeaf;
-    PageNum prevLeaf;
-    int currentPosInLeaf;
+    // Copy constructor
+    IX_IndexScan(const IX_IndexScan &fileScan);
+    // Overloaded =
+    IX_IndexScan& operator=(const IX_IndexScan &fileScan);
+
+    inline int InternalEntrySize(void);
+    inline char* InternalKey(char *, int);
+    inline char* InternalPtr(char *, int);
+    inline int LeafEntrySize(void);
+    inline char* LeafKey(char *, int);
+    inline char* LeafRID(char *, int);
+    float Compare(void *, char *);
+    RC FindEntryAtNode(PageNum);
+
+    int bScanOpen;
+    PageNum curNodeNum;
+    int curEntry;
+    RID lastRid;
+
     IX_IndexHandle *pIndexHandle;
     CompOp compOp;
     void *value;
@@ -170,21 +155,33 @@ public:
     // Close an Index
     RC CloseIndex(IX_IndexHandle &indexHandle);
 
-    //add zhihui
 private:
+    // Copy constructor
+    IX_Manager(const IX_Manager &manager);
+    // Overloaded =
+    IX_Manager& operator=(const IX_Manager &manager);
+
     PF_Manager *pPfm;
-
 };
-
-
-
 
 //
 // Print-error function
 //
 void IX_PrintError(RC rc);
 
-#define  IX_INVALIDATTR (START_IX_WARN + 0) //invalid attribute parameters
-#define IX_INDEX_NOTFOUND (START_IX_WARN + 1) //index not found
-#define IX_EOF (START_IX_WARN + 2)
+#define IX_INVALIDINDEXNO  (START_IX_WARN + 0) // invalid index number
+#define IX_INVALIDCOMPOP   (START_IX_WARN + 1) // invalid comparison operator
+#define IX_INVALIDATTR     (START_IX_WARN + 2) // invalid attribute parameters
+#define IX_NULLPOINTER     (START_IX_WARN + 3) // pointer is null
+#define IX_SCANOPEN        (START_IX_WARN + 4) // scan is open
+#define IX_CLOSEDSCAN      (START_IX_WARN + 5) // scan is closed
+#define IX_CLOSEDFILE      (START_IX_WARN + 6) // file handle is closed
+#define IX_ENTRYNOTFOUND   (START_IX_WARN + 7) // entry not found
+#define IX_ENTRYEXISTS     (START_IX_WARN + 8) // entry already exists
+#define IX_EOF             (START_IX_WARN + 9) // end of file
+#define IX_LASTWARN        IX_EOF
+
+#define IX_NOMEM           (START_IX_ERR - 0)  // no memory
+#define IX_LASTERROR       IX_NOMEM
+
 #endif

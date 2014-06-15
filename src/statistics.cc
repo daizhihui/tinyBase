@@ -17,8 +17,7 @@
 // some (or maybe all) of this code.
 
 #include <iostream>
-#include <stdio.h>
-#include <string.h>
+#include<string.h>
 #include "statistics.h"
 
 using namespace std;

@@ -1,1128 +1,1717 @@
 //
-//  ix_handler.cpp
-//  TinyBaseP
-//
-//  Created by Cyril on 5/31/14.
-//  Copyright (c) 2014 Cyril. All rights reserved.
+// File:        ix_filehandle.cc
+// Description: IX_IndexHandle class implementation
+// Author:      Hyunjung Park (hyunjung@stanford.edu)
 //
 
-#include "ix.h"
 #include "ix_internal.h"
-#include <stdio.h>
-#include <string.h>
-//temporary, just for algo.
-//we will need these
 
-
-//TODO: make sure bucket logic is there.m
-
-//indexNode =data + child page numbers
-//fileHdr.orderOfTree is the minimum degree of the Tree: every indexNode other than the root must have fileHdr.orderOfTree-1 keys at least.
-
-
-
-
-//compare
-//returns true when k1 is greater than k2
-// if k1 and k2 are strings, it will return the one with the biggest first character that does not match.
-int IX_IndexHandle::compare(void* k1,void* k2)
-{
-    switch (fileHdr.attrType) {
-        case FLOAT:
-            if(*(float*)k1==(*(float*)k2))
-                return 0;
-            return (*(float*)k1)>(*(float*)k2)?1:-1;
-            break;
-        case INT:
-            if((*(int*)k1)==(*(int*)k2))
-                return 0;
-            return (*(int*)k1)>(*(int*)k2)?1:-1;
-            break;
-        case STRING:
-            return strcmp((char*)k1,(char*)k2);
-            break;
-        default:
-            break;
-    }
-    
-}
-
-//Will read and init a indexNode from this page on the disk
-
-indexNode* IX_IndexHandle::readNodeFromPageNum(PageNum pn)
-{
-    ////printf("Reading node from page\n");
-    PF_PageHandle pageHandler;
-    int rc = pfFileHandle.GetThisPage(pn, pageHandler);
-    char* pData;
-    pageHandler.GetData(pData);
-    indexNode* x = new indexNode();
-    x->pageNumber=*(int*)pData;
-    x->previous=*(int*)(pData+sizeof(PageNum));
-    x->next =*(int*)(pData+2*sizeof(PageNum));
-    x->leaf=(bool)pData[3*sizeof(PageNum)];
-    x->isRoot=(bool)pData[3*sizeof(PageNum)+sizeof(bool)];
-    x->numberOfKeys=*(int*)(pData+3*sizeof(PageNum)+2*sizeof(bool));
-
-    ////printf("Node structure: PN: %d\nPrev: %d\nNext: %d\nLeaf: %c\nRoot: %c\nNumberKeys: %d\n",(int)pData[0],(int)pData[sizeof(PageNum)],(int)pData[2*sizeof(PageNum)],(bool)pData[3*sizeof(PageNum)],(bool)pData[3*sizeof(PageNum)+sizeof(bool)],(int)pData[3*sizeof(PageNum)+2*sizeof(bool)]);
-//    //printf("PN : %d\n",x->previous);
-    x->entries = new entry[x->numberOfKeys];
-    for(int i =0;i<x->numberOfKeys;i++)
-    {
-        x->entries[i].child = pData[3*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum))];
-        x->entries[i].key = (char*)malloc(sizeof(fileHdr.attrLength));
-        memcpy(x->entries[i].key,pData+4*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum)),fileHdr.attrLength);
-
-//        //printf("Key %d: %d\n",i,*(int*)x->entries[i].key);
-//        //printf("PN %d: %d\n",i,(int)x->entries[i].child);
-        
-    }
-    ////printf("end of Reading node from page\n");
-    return  x;
-}
-
-//will write a indexNode on a new page
-//must write part by part because of dynamic allocation on entries.
-void IX_IndexHandle::writeNodeOnNewPage(indexNode* x)
-{
-    ////printf("Writing node on new page\n");
-    PF_PageHandle pageHandler;
-    pfFileHandle.AllocatePage(pageHandler);
-    char* pData;
-    pageHandler.GetData(pData);
-    pageHandler.GetPageNum(x->pageNumber);
-//    ////printf("Writing %d number of keys\n",x->numberOfKeys);
-    *((int*)pData) = x->pageNumber;
-    *(int*)(pData+sizeof(PageNum))=x->previous;
-    *(int*)(pData+2*sizeof(PageNum))=x->next;
-    pData[3*sizeof(PageNum)]=x->leaf;
-    pData[3*sizeof(PageNum)+sizeof(bool)]=x->isRoot;
-    *(int*)(pData+3*sizeof(PageNum)+2*sizeof(bool))=x->numberOfKeys;
-    //printf("Wrote number of keys: %d\n",pData[3*sizeof(PageNum)+2*sizeof(bool)]);
-    //copy entries
-    for(int i =0;i<x->numberOfKeys;i++)
-    {
-        pData[3*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum))]=x->entries[i].child;
-        memcpy(pData+4*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum)),x->entries[i].key,fileHdr.attrLength);
-//        //printf("Writing Key %d: %d\n",i,pData[4*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum))]);
-//        //printf("Writing PN %d: %d\n",i,pData[3*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum))]);
-//        memcpy(&pData[3*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum))], &(x->entries[i]), fileHdr.attrLength+sizeof(PageNum));
-    }
-    pfFileHandle.MarkDirty(x->pageNumber);
-        //printf("Done Writing node on new page\n");
-}
-
-void IX_IndexHandle::addToBucket(PageNum& bucket, const RID &rid, PageNum prev)
-{
-    //printf("Adding to bucket\n");
-
-    PageNum ridPN;
-    SlotNum ridSN;
-    rid.GetPageNum(ridPN);
-    rid.GetSlotNum(ridSN);
-    PF_PageHandle pageHandler;
-    if(bucket == -1 || pfFileHandle.GetThisPage(bucket, pageHandler)!=0)
-    {//bucket does not exist
-        //printf("New bucket\n");
-        pfFileHandle.AllocatePage(pageHandler);
-        pageHandler.GetPageNum(bucket);
-        char* data;
-        pageHandler.GetData(data);
-//        int maxEntries = (PF_PAGE_SIZE-sizeof(IX_BucketHdr))/(sizeof(RID)+1);
-        
-        ((int*)data)[0] = prev;//prev
-        ((int*)data)[1] = -1;//next
-        //create bitmap: set all to 0 -- if bitmap isn't a multiple of bytes, uncomment following
-        int bytes =  fileHdr.bucketHeaderSize - sizeof(IX_BucketHdr);
-        memset(data+sizeof(IX_BucketHdr), 0, bytes);//set to 0
-        
-//        int r = filehdr.numRidsPerBucket-bytes; //rest of bits
-//        int ind  = 0;
-//        while(r!=0)//set bit by bit
-//        {
-//            ClrBitmap(data+sizeof(IX_BucketHdr),filehdr.numRidsPerBucket-bytes*8+ind);
-//            r--;
-//            ind++;
-//        }
-//        //set first to 1;
-        SetBitmap(data+sizeof(IX_BucketHdr),0);
-        
-        data[sizeof(IX_BucketHdr)+bytes]=ridPN;
-        data[sizeof(IX_BucketHdr)+bytes+sizeof(PageNum)]=ridSN;
-
-        pfFileHandle.MarkDirty(bucket);
-        ForcePages();
-        pfFileHandle.UnpinPage(bucket);
-    }
-    else //bucket exists
-    {
-        char* data;
-        int rc = pageHandler.GetData(data);
-        //printf("rc: %d\n",rc);
-        //find first empty rid num
-        int ridnum;
-        for(ridnum=0;ridnum<fileHdr.numRidsPerBucket;ridnum++)
-            if(GetBitmap(data+sizeof(IX_BucketHdr),ridnum))
-                break;
-        if(ridnum!=fileHdr.numRidsPerBucket)
-        {
-            //found empty one.
-            //insert
-            int bytes =  fileHdr.bucketHeaderSize - sizeof(IX_BucketHdr);
-
-            data[sizeof(IX_BucketHdr)+bytes + ridnum*(sizeof(PageNum)+sizeof(SlotNum))] = ridPN;
-            data[sizeof(IX_BucketHdr)+bytes + ridnum*(sizeof(PageNum)+sizeof(SlotNum))+sizeof(PageNum)] = ridSN;
-            SetBitmap(data+sizeof(IX_BucketHdr),ridnum);
-            pfFileHandle.MarkDirty(bucket);
-            ForcePages();
-            pfFileHandle.UnpinPage(bucket);
-
-            
-        }
-        else//bucket full
-        {
-            PageNum next = data[sizeof(PageNum)];
-            if(next!=-1)
-            {//bucket full and already has next
-                addToBucket(next,rid,-1);
-                pfFileHandle.UnpinPage(bucket);
-
-            }
-            else
-            {//allocate new bucket
-                addToBucket(next, rid,bucket);
-                data[sizeof(PageNum)]=next;
-                pfFileHandle.MarkDirty(bucket);
-                ForcePages();
-                pfFileHandle.UnpinPage(bucket);
-
-            }
-        }
-    }
-    //printf("Done adding to bucket\n");
-
-    
-}
-
-void IX_IndexHandle::reOrderDataInPage(indexNode* x)
-{
-    //printf("Reordering data in page %d\n",x->pageNumber);
-    PF_PageHandle pageHandler;
-    pfFileHandle.GetThisPage(x->pageNumber, pageHandler);
-    char* data;
-    int rc=pageHandler.GetData(data);
-    ////printf("Got data with rc: %d\n",rc);
-    ////printf("Writing %d number of keys\n",x->numberOfKeys);
-    data[0] = x->pageNumber;
-    data[sizeof(PageNum)]=x->previous;
-    data[2*sizeof(PageNum)]=x->next;
-    data[3*sizeof(PageNum)]=x->leaf;
-    data[3*sizeof(PageNum)+sizeof(bool)]=x->isRoot;
-    data[3*sizeof(PageNum)+2*sizeof(bool)]=x->numberOfKeys;
-    
-    
-//    memcpy(data,x,3*sizeof(PageNum)+2*sizeof(bool)+sizeof(int));
-    //copy entries
-//    //printf("Wrote number of keys: %d\n",data[3*sizeof(PageNum)+2*sizeof(bool)]);
-
-    for(int i =0;i<x->numberOfKeys;i++)
-    {
-//        //printf("writing %d key+child of %d\n",i,x->numberOfKeys);
-        data[3*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum))]=x->entries[i].child;
-        memcpy(data+4*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum)),x->entries[i].key,fileHdr.attrLength);
-//        //printf("Writing Key %d: %d\n",i,data[4*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum))]);
-//        //printf("Writing PN %d: %d\n",i,data[3*sizeof(PageNum)+2*sizeof(bool)+sizeof(int)+i*(fileHdr.attrLength+sizeof(PageNum))]);
-        
-    }
-    pfFileHandle.MarkDirty(x->pageNumber);
-    ForcePages();
-    pfFileHandle.UnpinPage(x->pageNumber);
-    
-    
-
-}
-
-//x is father
-//y is child
-//i is index in x's entries, -1 if first
-void IX_IndexHandle::splitChild(indexNode * x, int i,indexNode * y)
-{
-    //printf("Splitting child\n");
-
-    //the new indexNode to write
-    indexNode *z = new indexNode();
-
-    //
-    z->leaf = y->leaf;
-    z->numberOfKeys=fileHdr.orderOfTree-1;
-    z->entries = new entry[fileHdr.orderOfTree-1];
-    for(int j = 0;j<=fileHdr.orderOfTree-2;j++)//largest fileHdr.orderOfTree-1 keys of y
-        z->entries[j].key = y->entries[j+fileHdr.orderOfTree].key;
-    if(!y->leaf)
-    {   z->previous=y->entries[fileHdr.orderOfTree-1].child;//1 child +
-        for(int j =0;j<=fileHdr.orderOfTree-2;j++)//fileHdr.orderOfTree-1 children
-            z->entries[j].child=y->entries[j+fileHdr.orderOfTree].child;
-    }
-    y->numberOfKeys=fileHdr.orderOfTree-1;
-    if(i!=-1)
-    {
-        
-        for(int j = x->numberOfKeys;j>i;j--)
-        {
-            x->entries[j].child=x->entries[j-1].child;
-            x->entries[j].key=x->entries[j-1].key;
-        }
-        x->entries[i+1].child=z->pageNumber;
-        x->entries[i].key=y->entries[fileHdr.orderOfTree-1].key;
-    }
-    x->numberOfKeys=x->numberOfKeys+1;
-    
-    if(y->leaf)//double linked list.
-    {
-        z->next=y->next;
-        y->next=z->pageNumber;
-        z->previous=y->pageNumber;
-    }
-    pfFileHandle.MarkDirty(y->pageNumber);
-    pfFileHandle.MarkDirty(x->pageNumber);
-    writeNodeOnNewPage(z);
-    ForcePages();
-    pfFileHandle.UnpinPage(z->pageNumber);
-    for(int i =0;i<z->numberOfKeys;i++)
-        free(z->entries[i].key);
-    delete[] z->entries;
-    delete z;
-    //printf("Done splitting child\n");
-
-    
-}
-
-
-//called recursively, if indexNode x is a leaf, it adds the entry to the bucket
-// if x is not a leaf, it goes to its children while splitting them if they have
-// the necessary amount of keys.
-
-void IX_IndexHandle::insertNonFull(indexNode* x, void*  pData,const RID &rid)
-{
-    //printf("insert non full\n");
-
-    //if same key, add to bucket and increment number of rids.
-    //if new key create bucket and add.
-    //Leaves point only to 1 bucket.
-    
-    int i = x->numberOfKeys;
-    int comp =2;
-    //printf("%d keys\n",i);
-    if(x->leaf)
-    {
-        if(i==0)
-        {
-            x->numberOfKeys++;
-            x->entries = new entry();
-            x->entries->key = (char*)malloc(fileHdr.attrLength);
-            memcpy(x->entries->key,pData,fileHdr.attrLength);
-            PageNum next=-1;
-            addToBucket(next, rid,-1);
-            x->entries[0].child = next;
-            reOrderDataInPage(x);
-            
-//            pfFileHandle.MarkDirty(x->pageNumber);
-            return;
-            
-        }
-        i--;
-        entry* tmp = x->entries;
-        x->entries = new entry[x->numberOfKeys+1];
-        memcpy(x->entries, tmp, x->numberOfKeys*sizeof(entry));
-        delete[] tmp;
-        while(i>=0 && ((comp = compare(pData,x->entries[i].key))==-1))
-        {
-            
-                x->entries[i+1].key=x->entries[i].key;
-                x->entries[i+1].child=x->entries[i].child;
-            
-                i--;
-        }
-        if(comp == 0)
-        {
-            //printf("Adding to existing bucket\n");
-            addToBucket(x->entries[i].child, rid,-1);
-        }
-        else
-        {
-            //printf("Adding new key\n");
-            x->entries[i+1].key=(char*)malloc(fileHdr.attrLength);
-            memcpy(x->entries[i+1].key,pData,fileHdr.attrLength);
-            //            x->entries[i+1].key=(char*)pData;
-            x->numberOfKeys++;
-            PageNum next=-1;
-            addToBucket(next, rid,-1);
-            x->entries[i+1].child = next;
-            //new bucket
-        }
-        ////printf("$$COMP: %d\n",comp);
-        //x->children = new PageNum();
-        reOrderDataInPage(x);
-//        pfFileHandle.MarkDirty(x->pageNumber);
-    }
-    else
-    {
-        i--;
-        while(i>=0 && !compare(pData,x->entries[i].key))
-        {
-            i--;
-        }
-        i++;
-        //read x->children[i];
-        indexNode* childi = readNodeFromPageNum(x->entries[i].child);
-        
-        if(childi->numberOfKeys==2*fileHdr.orderOfTree-1)
-        {
-            splitChild(x,i,childi);
-            if(compare(pData,x->entries[i].key))
-                i++;
-        }
-        //printf("Inserting in child \n");
-        insertNonFull(childi,pData,rid);
-        pfFileHandle.UnpinPage(childi->pageNumber);
-
-        for(int i =0;i<childi->numberOfKeys;i++)
-            free(childi->entries[i].key);
-        delete[] childi->entries;
-        delete childi;
-    }
-    
-    //printf("done insert non full\n");
-
-}
-
-//start of recursion for the insert, x should be the root indexNode
-void IX_IndexHandle::insert(indexNode* x, void* pData, const RID &rid)
-{
-    //printf("insert %d\n",*(int*)pData);
-
-    //x is the root indexNode
-    if(x->numberOfKeys==2*fileHdr.orderOfTree-1)
-    {
-        indexNode* s = new indexNode();//s becomes the root
-        //allocate and write s?
-        s->leaf = false;
-        s->isRoot=true;
-        s->numberOfKeys=0;
-        s->previous = x->previous;
-        x->leaf = true;
-        x->isRoot=false;
-        s->entries= new entry[fileHdr.orderOfTree-1];//allocate entries for new root.
-        splitChild(s,-1,x);
-        insertNonFull(s,pData,rid);
-        fileHdr.treeLayerNums++;
-        fileHdr.rootPageNum=s->pageNumber;
-        bHdrChanged = 1;
-        writeNodeOnNewPage(s);
-        pfFileHandle.MarkDirty(x->pageNumber);
-        //point T->root = s; if we put the root in memory
-        ForcePages();
-        pfFileHandle.UnpinPage(x->pageNumber);
-        pfFileHandle.UnpinPage(s->pageNumber);
-
-        for(int i =0;i<s->numberOfKeys;i++)
-            free(s->entries[i].key);
-        delete[] s->entries;
-        delete s;
-    
-    }
-    else
-    {
-        insertNonFull(x,pData,rid);
-        pfFileHandle.UnpinPage(x->pageNumber);
-
-    }
-    //printf("done insert \n");
-
-    
-}
-
+// 
+// IX_IndexHandle
+//
+// Desc: Default constructor 
+//
 IX_IndexHandle::IX_IndexHandle()
 {
-    // Initialize member variables
-    bHdrChanged = FALSE;
-    memset(&fileHdr, 0, sizeof(fileHdr));
-    fileHdr.rootPageNum = IX_EMPTY_TREE;
-  //  fileHdr.orderOfTree = fileHdr.orderOfTree;
-    //printf("constructor\n");
+   // Initialize member variables
+   attrType = INT;
+   attrLength = 0;
 }
 
+//
+// ~IX_IndexHandle
+//
+// Desc: Destructor
+//
 IX_IndexHandle::~IX_IndexHandle()
 {
-    
+   // Don't need to do anything
 }
 
-// Insert a new index entry
+//
+// InsertEntry
+//
+// Desc: Insert a new index entry to index.
+// In:   pData - key value
+//       rid - record identifier
+// Ret:  IX_NULLPOINTER, RM_INVIABLERID
+//
 RC IX_IndexHandle::InsertEntry(void *pData, const RID &rid)
 {
-    
-    //printf("insertEntry %d\n",*(int*)pData);
-
-    if(pData==NULL)
-        return 5;
-    if(fileHdr.rootPageNum==IX_EMPTY_TREE)
-    {
-        indexNode * root = new indexNode();
-        root->leaf = true;
-        root->isRoot=  true;
-        fileHdr.treeLayerNums++;
-        root->numberOfKeys=0;
-        root->previous=-1;
-        writeNodeOnNewPage(root);
-        fileHdr.rootPageNum=root->pageNumber;
-        bHdrChanged = 1;
-        insertNonFull(root, pData, rid);
-        
-        pfFileHandle.MarkDirty(root->pageNumber);
-        int rc =  ForcePages();
-        pfFileHandle.UnpinPage(root->pageNumber);
-        free(root->entries->key);
-        delete root->entries;
-        delete root;
-        
-    }
-    else
-    {
-        indexNode* root = readNodeFromPageNum(fileHdr.rootPageNum);
-        insert(root, pData, rid);
-        for(int i =0;i<root->numberOfKeys;i++)
-        {
-            free(root->entries[i].key);
-        }
-        delete[] root->entries;
-        delete root;
-        
-    }
-    //printf("done insert entry \n");
+   RC rc;
+   PageNum pageNum;
+   char* tmp;
    
-    return 0;
-    
+   // Sanity Check: pData must not be NULL
+   if (pData == NULL)
+      // Test: NULL pData
+      return (IX_NULLPOINTER);
+ 
+   // Sanity Check: RID must be viable
+   if (rc = rid.GetPageNum(pageNum))
+      // Test: inviable rid
+      goto err_return;
+
+   // Insert the new entry to the B+ tree
+   if (rc = InsertEntryToNode(0, pData, rid, tmp, pageNum))
+      // Test: unopened indexHandle
+      goto err_return;
+
+   // Return ok
+   return (0);
+
+err_return:
+   // Return error
+   return (rc);
 }
 
-
-
-
-//desc : after delete the last entry in the root, this function collapseRoot change the root
-//      if root is also the leaf, the tree becomes empty;
-//      otherwise, the first child of oldRoot becomes the new root
-//      treeLayerNums descrease by 1
-
-//input : oldRoot - old root
-void IX_IndexHandle::collapseRoot(indexNode * oldRoot){
-    char* data;
-    PF_PageHandle pageHandle;
-
-
-    //tree becomes empty
-    if(oldRoot->leaf) {
-        fileHdr.rootPageNum = IX_EMPTY_TREE;
-    }
-    else{ //generate new root
-        fileHdr.rootPageNum = oldRoot->previous;
-    }
-
-
-    //write back to buffer pool fileHeader
-    pfFileHandle.GetFirstPage(pageHandle);
-    pageHandle.GetData(data);
-    PageNum fileHeaderPage;
-    pageHandle.GetPageNum(fileHeaderPage);
-    ((IX_FileHdr *)data)->rootPageNum = fileHdr.rootPageNum;
-    //number of layers in the tree decrease by 1
-    ((IX_FileHdr *)data)->treeLayerNums--;
-    bHdrChanged = 1;
-    pfFileHandle.MarkDirty(fileHeaderPage);
-
-    //dispose of oldRoot page
-    pfFileHandle.MarkDirty(oldRoot->pageNumber);
-    ForcePages();
-    pfFileHandle.UnpinPage(oldRoot->pageNumber);
-    pfFileHandle.DisposePage(oldRoot->pageNumber);
-
-}
-
-//Desc: merge two nodes, copy all the entries in the right indexNode to the leftnode
-//      delete the right indexNode, that means call recusively the function deleteEntryInNode(indexNode* x, int keyNum, nodeInfoInPath * path)
-//      where indexNode x is replaced by the indexNode anchorNode
-// 10/06/2014 deal with leaf linked list
-
-//input : keyNum - is the position of key that separates this indexNode and neighorNode
-//        depthInPath - the depth of indexNode thisNode in the path
 //
-
-void IX_IndexHandle::merge (indexNode * thisNode , indexNode *neighborNode, indexNode *anchorNode, nodeInfoInPath * path,int keyNum, int depthInPath){
-    //to get right indexNode and left indexNode
-    indexNode * leftN = NULL;
-    indexNode * rightN = NULL;
-    if(compare(thisNode->entries[0].key,neighborNode->entries[0].key) >=0) {
-        leftN = neighborNode;
-        rightN = thisNode;
-    }
-    else{
-        leftN = thisNode;
-        rightN = neighborNode;
-    }
-
-    //indexNode is not leaf
-    if(!leftN->leaf){
-        //copy keyNum key to leftN
-        leftN->entries[leftN->numberOfKeys].key = anchorNode->entries[keyNum].key;
-        //copy the first pointer in the right indexNode to the left indexNode
-        leftN->entries[leftN->numberOfKeys].child = rightN->previous;
-        leftN->numberOfKeys++;
-    }
-
-    //copy all the entries in the right indexNode to the leftnode
-    for(int i=0; i<rightN->numberOfKeys; i++){
-        leftN->entries[leftN->numberOfKeys] = rightN->entries[i];
-        leftN->numberOfKeys++;
-
-    }
-
-    //deal with leaf linked list
-    if(leftN->leaf){
-        leftN->next = rightN->next;
-        readNodeFromPageNum(rightN->next)->previous = leftN->pageNumber;
-        //unpin
-        pfFileHandle.UnpinPage(rightN->next);
-    }
-
-    //dispose page in indexNode rightN
-    pfFileHandle.UnpinPage(rightN->pageNumber);
-    pfFileHandle.DisposePage(rightN->pageNumber);
-
-    //write left indexNode to buffer pool
-    reOrderDataInPage(leftN);
-
-     //delete keyNum in anchorNode, recursively
-    deleteEntryInNode(anchorNode,keyNum,path,depthInPath);
-}
-
-
-//Desc: shift over half of a neighbor’s plus keys to this indexNode
-//      update anchor : the key value in the index entry pointing to the second indexNode must be changed to the the lowest search key in the second indexNode
-
-//input : keyNum - is the position of key that separates this indexNode and neighorNode
-//        isRight - true : neighbor is on the rightside; false : neighbor is on the leftside
+// InsertEntryToNode
 //
-void IX_IndexHandle::shift (indexNode * thisNode , indexNode *neighborNode, indexNode *anchorNode, int keyNum, bool isRight ){
-
-    int numKeysShifted = (neighborNode->numberOfKeys - thisNode->numberOfKeys) / 2;
-    // neighbor is on the rightside
-    if(isRight){
-        //indexNode is not leaf
-        if(!thisNode->leaf){
-            //copy key in position keyNum to thisNode
-            thisNode->entries[fileHdr.orderOfTree-1].key = anchorNode->entries[keyNum].key;
-            thisNode->entries[fileHdr.orderOfTree-1].child = neighborNode->previous;
-            thisNode->numberOfKeys++;
-            //shift numKeysShifted-1 (p,k) to thisNode from neighborNode
-            for(int i=0; i<numKeysShifted-1;i++){
-                thisNode->entries[thisNode->numberOfKeys] = neighborNode->entries[i];
-                thisNode->numberOfKeys++;
-            }
-
-            //TODO to verify
-            //shift neighborNode (k,v) to the left
-            neighborNode->previous = neighborNode->entries[numKeysShifted-1].child;
-            for(int i=0; i<neighborNode->numberOfKeys-numKeysShifted;i++){
-                neighborNode->entries[i] = neighborNode->entries[i+numKeysShifted];
-            }
-            //copy separate value to anchorNode key
-            anchorNode->entries[keyNum].key = neighborNode->entries[numKeysShifted-1].key;
-        }
-
-        //indexNode is leaf, shift numKeysShifted (k,p) to thisNode from neighborNode
-        else{
-            for(int i=0; i<numKeysShifted;i++){
-                thisNode->entries[thisNode->numberOfKeys] = neighborNode->entries[i];
-                thisNode->numberOfKeys++;
-            }
-
-            //shift neighborNode (k,v) to the left
-            for(int i=0; i<neighborNode->numberOfKeys-numKeysShifted;i++){
-                neighborNode->entries[i] = neighborNode->entries[i+numKeysShifted];
-            }
-
-            //copy the the lowest search key in the second indexNode to anchor's
-             anchorNode->entries[keyNum].key = neighborNode->entries[numKeysShifted].key;
-        }
-
-
-        //update the number of keys in neighborNode
-        neighborNode->numberOfKeys -= numKeysShifted;
-    }
-    //neighbor is on the leftside
-    else {
-        //shift all the entries in thisNode by numKeysShifted to the right
-        for(int i=thisNode->numberOfKeys-1; i>=0;i--){
-            thisNode->entries[i+numKeysShifted] = thisNode->entries[i];
-        }
-
-
-        //indexNode is not leaf
-        if(!thisNode->leaf){
-            //shift the first pointer of thisNode
-            thisNode->entries[numKeysShifted-1].child = thisNode->previous;
-
-            //copy key in position keyNum of anchorNode to thisNode
-            thisNode->entries[numKeysShifted-1].key = anchorNode->entries[keyNum].key;
-            thisNode->numberOfKeys++;
-
-
-            //shift numKeysShifted-1 pairs of (pointer,key) to thisNode from the end of neighborNode
-            for(int i=numKeysShifted-2; i>=0; i--){
-                thisNode->entries[i] = neighborNode->entries[neighborNode->numberOfKeys-1];
-                thisNode->numberOfKeys++;
-                neighborNode->numberOfKeys--;
-            }
-
-            //copy the last pointer of neighborNode to the fisrt pointer of thisNode
-            thisNode->previous = neighborNode->entries[neighborNode->numberOfKeys-1].child;
-
-
-            //copy the last key value from neighborNode to the position keyNum of anchorNode
-            anchorNode->entries[keyNum].key = neighborNode->entries[neighborNode->numberOfKeys-1].key;
-        }
-
-        //indexNode is leaf, shift numKeysShifted (k,p) to thisNode from neighborNode
-        else{
-            for(int i=numKeysShifted-1; i>=0; i--){
-                thisNode->entries[i] = neighborNode->entries[neighborNode->numberOfKeys-1];
-                thisNode->numberOfKeys++;
-                neighborNode->numberOfKeys--;
-            }
-
-            //copy the the lowest search key in the second indexNode to anchor's
-             anchorNode->entries[keyNum].key = thisNode->entries[0].key;
-        }
-    }
-
-    //write these changes to buffer pool
-    reOrderDataInPage(thisNode);
-    reOrderDataInPage(neighborNode);
-    reOrderDataInPage(anchorNode);
-
-}
-
-//desc : delete the entry in position keyNum in indexNode x
-//input : depthInPath - the depth of indexNode x in the path
-void IX_IndexHandle::deleteEntryInNode(indexNode* x, int keyNum, nodeInfoInPath * path, int depthInPath)
+// Desc: Insert a new index entry to a specific node or the subtree
+//       accessible from it.
+//       
+//       If this node is internal: 
+//         1. Find a subtree where the entry should be inserted.
+//         2. Recursively call InsertEntryToNode() for the subtree.
+//         3. If the traversed child node is not splitted, we're DONE.
+//         4. Otherwise, insert a new key/pointer pair propagated from
+//            child to this node. If no space, split this node and
+//            propagate split information to parent node.
+//
+//       If this node is leaf:
+//         1. If enough space, just add the new entry into this node,
+//            and we're DONE.
+//         2. Otherwise, split this node and propagate split information 
+//            to parent node.
+//
+// In:   nodeNum - 
+//       pData/rid - index entry to be inserted
+// Out:  splitKey/    - key/pointer pair which should be inserted to
+//       splitNodeNum   the parent node (as a result of split)
+// Ret:  PF return code
+//
+RC IX_IndexHandle::InsertEntryToNode(const PageNum nodeNum,
+                                     void *pData, const RID &rid,
+                                     char *&splitKey,
+                                     PageNum &splitNodeNum)
 {
-    //remove the entry and move its following entries forward
-    // TODO make more efficient
-    for(int i=keyNum; i < x->numberOfKeys ; ++i){
-        x->entries[i] = x->entries[i+1];
-    }
-     --(x->numberOfKeys);
-    //printf("numberKeys:%d\n",x->numberOfKeys);
-    if(fileHdr.rootPageNum == x->pageNumber) //printf("is Root PAGE\n");
-    //underflow
-    if(x->numberOfKeys < fileHdr.orderOfTree){
-        //printf("underFlow\n");
-        //this indexNode is root
-        if(x->isRoot) {
-            //printf("IS root\n");
-            if(x->numberOfKeys==0) //root has no more keys after delete
-                collapseRoot(x);
-            else //root has still keys, do nothing
-            {
-                //printf("not collapse root\n");
-                reOrderDataInPage(x);
-                //for test
-//                if(fileHdr.rootPageNum == x->pageNumber) //printf("afterWrite,is Root PAGE\n");
-//                else //printf("afterWrite,is NOT Root PAGE\n");
-                //pfFileHandle.MarkDirty(x->pageNumber);
-                return;
-            }
-        }
-        //printf("NOT root\n");
-        //check immediate neighbors
-        nodeInfoInPath nodeInfo = path[depthInPath];
-        PageNum neighborR = path[depthInPath].neighborR;
-        PageNum neighborL = path[depthInPath].neighborL;
+   RC rc;
+   PF_PageHandle pageHandle;
+   char *pNode;
+   int j;
 
-        //choose a neighor with more keys
-        indexNode * nodeNeighbor = NULL;
-        int entryNum = 0;
-        bool isRight = false;
-        if(neighborR!=-1 && neighborL!=-1){
-            indexNode * nodeR = readNodeFromPageNum(neighborR);
-            indexNode * nodeL = readNodeFromPageNum(neighborL);
-            if(nodeR->numberOfKeys >= nodeL->numberOfKeys){
-                nodeNeighbor = nodeR;
-                entryNum = nodeInfo.entryNum;
-                isRight = true;
-                //unpin the one not used
-                pfFileHandle.UnpinPage(nodeL->pageNumber);
+   // Pin
+   if (rc = pfFileHandle.GetThisPage(nodeNum, pageHandle))
+      goto err_return;
+   if (rc = pageHandle.GetData(pNode))
+      goto err_return;
 
-            }
-            else{
-                nodeNeighbor = nodeL;
-                entryNum = nodeInfo.entryNum - 1;
-                isRight = false;
-                  //unpin the one not used
-                pfFileHandle.UnpinPage(nodeR->pageNumber);
-            }
-        }
-        else if(neighborR!= -1 && neighborL==-1) {
-            nodeNeighbor = readNodeFromPageNum(neighborR);
-            entryNum = nodeInfo.entryNum;
-            isRight = true;
-        }
-        else if(neighborR == -1 && neighborL!=-1) {
-            nodeNeighbor = readNodeFromPageNum(neighborL);
-            entryNum = nodeInfo.entryNum -1;
-            isRight = false;
-        }
-        else {
-            reOrderDataInPage(x);
-            return; //TODO shouldn't happen
-        }
+   // Current node is LEAF node
+   if (((IX_PageHdr *)pNode)->flags & IX_LEAF_NODE) {
+      // Unpin
+      if (rc = pfFileHandle.UnpinPage(nodeNum))
+         goto err_return;
 
-        indexNode *anchorNode = readNodeFromPageNum(nodeInfo.anchor);
+      // Insert new entry to leaf node
+      if (rc = InsertEntryToLeafNode(nodeNum, pData, rid,
+                                     splitKey, splitNodeNum))
+         goto err_return;
+   }
 
-        //both neighbors are minimum size
-        if(nodeNeighbor->numberOfKeys==fileHdr.orderOfTree){
-            merge(x,nodeNeighbor,anchorNode,path,entryNum, depthInPath-1);           
-        }
-        else {
-            shift(x,nodeNeighbor,anchorNode,entryNum,isRight);
-        }
-        //unpin the pages
-        pfFileHandle.UnpinPage(anchorNode->pageNumber);
-        pfFileHandle.UnpinPage(nodeNeighbor->pageNumber);
+   // Current node is INTERNAL node
+   else {
+      PageNum childNodeNum;
 
-    }
+      // Find the right child to traverse
+      for (j = 0; j < ((IX_PageHdr *)pNode)->numKeys; j++) {
+         if (Compare(pData, InternalKey(pNode, j)) < 0)
+            break;
+      }
+      memcpy(&childNodeNum, InternalPtr(pNode, j), sizeof(PageNum));
 
+      // Unpin
+      if (rc = pfFileHandle.UnpinPage(nodeNum))
+         goto err_return;
+
+      // Recursively call InsertEntryToNode()
+      // No clue whether the child is internal or leaf
+      if (rc = InsertEntryToNode(childNodeNum, pData, rid, 
+                                 splitKey, splitNodeNum))
+         goto err_return;
+
+      // Need to add new entry to this node
+      // (traveresed child node has been splitted)
+      if (splitNodeNum != IX_DONT_SPLIT)
+         if (rc = InsertEntryToIntlNode(nodeNum, childNodeNum,
+                                        splitKey, splitNodeNum))
+            // Should not happen
+            goto err_return;
+   }
+
+   // Return ok
+   return (0);
+
+   // Return error
+err_return:
+   return (rc);
 }
 
-// input :  bucket - the pageNum of bucket page
-//          rid - the rid that need be deleted
-//          path - an array of nodeNeighbor infos
-//          pathDepth - the length of array path
+//
+// InsertEntryToIntlNode
+//
+RC IX_IndexHandle::InsertEntryToIntlNode(const PageNum nodeNum,
+                                         const PageNum childNodeNum,
+                                         char *&splitKey,
+                                         PageNum &splitNodeNum)
+{
+   RC rc;
+   PF_PageHandle pageHandle;
+   char *pNode;
+   int numKeys;
 
-RC IX_IndexHandle::deleteRID(PageNum &bucket, const RID &rid, nodeInfoInPath * path, int pathDepth){
-    //printf("begin deleteRID, entryNum in path %d\n", path[1].entryNum);
+   // Pin
+   if (rc = pfFileHandle.GetThisPage(nodeNum, pageHandle))
+      goto err_return;
+   if (rc = pageHandle.GetData(pNode))
+      goto err_return;
 
-    char* data;
-    PF_PageHandle pageHandle;
-    pfFileHandle.GetThisPage(bucket, pageHandle);
-    pageHandle.GetData(data);
-    //IX_BucketHdr *bucketHdr = (IX_BucketHdr*)data;
-    //PageNum before = before;
-    //PageNum next = next;
-    ////printf("bucketHdr prev%d, next %d \n",(int)data[0],(int)data[sizeof(int)]);
-    PageNum before = ((int*)data)[0];
-    PageNum next = ((int*)data)[1];
-    //printf("bucketHdr prev%d, next %d \n",before,next);
-    int ridNum=0;
-    RID *ridi;
-        //iterate for all non-empty rids
-    for(; ridNum< fileHdr.numRidsPerBucket && GetBitmap(data + sizeof(IX_BucketHdr), ridNum); ++ridNum){
-        ridi = (RID*)(data+fileHdr.bucketHeaderSize+ridNum*sizeof(RID));
-        PageNum ridPN;
-        SlotNum ridSN;
-        ridi->GetPageNum(ridPN);
-        ridi->GetSlotNum(ridSN);
-        //printf(" rid: pN %d, SN %d\n", ridPN,ridSN);
+   // Read numKeys
+   numKeys = ((IX_PageHdr *)pNode)->numKeys;
 
-        //found in this page
-        if((*ridi)==rid) {
-            //printf("found in this bucket\n");
-            // Clear bit
-            ClrBitmap(data + sizeof(IX_BucketHdr), ridNum);
-            // Find a non-free rid
-            for ( ridNum = 0; ridNum < fileHdr.numRidsPerBucket; ridNum++)
-               if (GetBitmap(data + sizeof(IX_BucketHdr), ridNum))
-                  break;
+   // Unpin
+   if (rc = pfFileHandle.UnpinPage(nodeNum))
+      goto err_return;
 
-            // Dispose the bucket if empty (the deleted rid was the last one)
-            // This will help the total number of occupied pages to be remained
-            // as small as possible
-            if (ridNum == fileHdr.numRidsPerBucket) {
-                //printf("after deletion, the bucket is empty\n");
-               //TODO change insert (rid space be free, can be reused, add freeSlot in bucket page header)
-                //dispose of page bucket
-                pfFileHandle.MarkDirty(bucket);
-                pfFileHandle.UnpinPage(bucket);
-                pfFileHandle.DisposePage(bucket);
+   // Just add new entry if possible
+   if (IX_PAGEHDR_SIZE + (numKeys + 2) * InternalEntrySize() <= PF_PAGE_SIZE) {
+      if (rc = InsertEntryToIntlNodeNoSplit(nodeNum, childNodeNum,
+                                            splitKey, splitNodeNum))
+         goto err_return;
+   }
+   // Split INTERNAL node
+   else {
+      if (rc = InsertEntryToIntlNodeSplit(nodeNum, childNodeNum,
+                                          splitKey, splitNodeNum))
+         goto err_return;
+   }
 
-               //the first bucket to be removed
-                if(before == -1) {
-                    //printf("the first bucket to be removed\n");
-                    PageNum leafPage = path[pathDepth].anchor;
-                    int entryNum = path[pathDepth].entryNum;
-                    indexNode * leaf = readNodeFromPageNum(leafPage);
+   // Return ok
+   return (0);
 
-//                    if(fileHdr.rootPageNum == leafPage) //printf("leafPage is Root PAGE\n");
-//                    if(leaf->pageNumber == leafPage) //printf("node leaf Page is Root PAGE\n");
-                    if(next == -1) {
-                         //printf("no nextbucket,delete the entry in leaf\n");
-                        //delete the entry in leaf
-                        deleteEntryInNode(leaf,entryNum,path,pathDepth-1);
-                        pfFileHandle.UnpinPage(leafPage);
-
-                    }
-                    else{
-                        //printf("has nextbucket,replace pageNum in leaf\n");
-                        //replace pageNum in leaf, change IX_BucketHdr.before in next bucket
-                        pfFileHandle.GetThisPage(next,pageHandle);
-                        pageHandle.GetData(data);
-                        ((IX_BucketHdr *) data)->before = -1; //this bucket becomes the first bucket in the chain list
-                        //data[0]=-1;
-                        leaf->entries[entryNum].child = next;
-                        pfFileHandle.MarkDirty(leafPage);
-                        pfFileHandle.MarkDirty(next);
-
-                    }
-
-                }
-                //rid not in the first bucket
-                else{
-                    //printf("the non-first bucket to be removed\n");
-                    //modify IX_BucketHdr.after in last bucket
-                    pfFileHandle.GetThisPage(before,pageHandle);
-                    pageHandle.GetData(data);
-                    ((IX_BucketHdr *) data)->next = next; //
-                    //data[sizeof(PageNum)] = next;
-                    pfFileHandle.MarkDirty(before);
-                    if(next!=-1){
-                        //modify IX_BucketHdr.before in next bucket
-                        pfFileHandle.GetThisPage(next,pageHandle);
-                        pageHandle.GetData(data);
-                        ((IX_BucketHdr *) data)->before = before; //
-                        //((int*)data)[0] = before;
-                        pfFileHandle.MarkDirty(next);
-                    }
-                }
-
-            }
-            return 0;
-        }
-    }
-
-    //not found in this page, find the next
-    if(next == -1) return IX_INDEX_NOTFOUND;
-    //printf("search rid in the next bucket\n");
-    return deleteRID(next,rid,path,pathDepth);
+   // Return error
+err_return:
+#ifdef DEBUG_IX
+   assert(0);
+#endif
+   return (rc);
 }
 
+//
+// InsertEntryToIntlNodeNoSplit
+//
+RC IX_IndexHandle::InsertEntryToIntlNodeNoSplit(const PageNum nodeNum,
+                                                const PageNum childNodeNum,
+                                                char *&splitKey,
+                                                PageNum &splitNodeNum)
+{
+   RC rc;
+   PF_PageHandle pageHandle;
+   char *pNode;
+   int j;
 
+   // Pin
+   if (rc = pfFileHandle.GetThisPage(nodeNum, pageHandle))
+      goto err_return;
+   if (rc = pageHandle.GetData(pNode))
+      goto err_return;
 
-//desc : Delete a index entry
-//input : pData - the key value of index
-//          rid - the rid to be deleted
-RC IX_IndexHandle::DeleteEntry(void *pData, const RID &rid){
-    PageNum rootPage = fileHdr.rootPageNum;
-    indexNode *root = readNodeFromPageNum(rootPage);
-    //an array of nodeInfo to save infos about neighors and anchors
-    nodeInfoInPath path[fileHdr.treeLayerNums];
-    //for debugging
-    ////printf("treeLayer%d,order%d\n",fileHdr.treeLayerNums,fileHdr.orderOfTree);
-    //for root
-    path[0].nodeSelf = rootPage;
-    path[0].anchor=-1; //implicit root
-    path[0].neighborL=-1;
-    path[0].neighborR=-1;
-    //path[0].key = (void*)-1;
-    path[0].entryNum = -1;
+   // Should respect the original order among duplicated keys
+   for (j = 0; j < ((IX_PageHdr *)pNode)->numKeys; j++)
+      if (memcmp(InternalPtr(pNode, j), &childNodeNum, sizeof(PageNum)) == 0) {
+         // Make a "hole" for new entry
+         memmove(InternalKey(pNode, j + 1),
+                 InternalKey(pNode, j),
+                 (((IX_PageHdr *)pNode)->numKeys - j) * InternalEntrySize());
+         break;
+      }
 
-    int pathDepth = 0;
-    //parcourir l'arbre et obtenir les donnees enregistrees dans path
-    ////printf("before traversal\n");
-    traversalTree(root,pData,path,pathDepth);
-    ////printf("after traversal\n");
-    //remove rid in bucket
-    //get the first bucket page
-    //printf("pathDepth%d\n",pathDepth);
-    PageNum bucket = path[pathDepth].nodeSelf;
-    //delete rid in the buckets
-    return deleteRID(bucket,rid,path,pathDepth);
+   // Fill out new key
+   memcpy(InternalKey(pNode, j), splitKey, attrLength);
+   // Fill out node associated with new key
+   memcpy(InternalPtr(pNode, j+1), &splitNodeNum, sizeof(PageNum));
+   // Increment #keys
+   ((IX_PageHdr *)pNode)->numKeys++;
+
+   // Unpin
+   if (rc = pfFileHandle.MarkDirty(nodeNum))
+      goto err_return;
+   if (rc = pfFileHandle.UnpinPage(nodeNum))
+      goto err_return;
+
+   // Reset
+   splitNodeNum = IX_DONT_SPLIT;
+   delete [] splitKey;
+   splitKey = NULL;
+
+   // Return ok
+   return (0);
+
+   // Return error
+err_return:
+#ifdef DEBUG_IX
+   assert(0);
+#endif
+   return (rc);
 }
 
+//
+// InsertEntryToIntlNodeSplit
+//
+RC IX_IndexHandle::InsertEntryToIntlNodeSplit(const PageNum nodeNum,
+                                              const PageNum childNodeNum,
+                                              char *&splitKey,
+                                              PageNum &splitNodeNum)
+{
+   RC rc;
+   PF_PageHandle pageHandle;
+   char *pNode;
+   PF_PageHandle newPageHandle;
+   char *pNewNode;
+   PageNum newNodeNum;
+   int insertLocation, pivot;
+   char *newSplitKey;
+   int j;
 
-//desc : recurse to a leaf indexNode from root to find deletable entry:
-//       for nodes in the search path, calculate immediate neighbors and their anchors
-//input : pData - the key value of index
-//          x - the indexNode to
-//return : path - a pointer that points to a list of nodeInfoInPath
-//         pathDepth - the length of this list of nodeInfoInPath
-RC IX_IndexHandle::traversalTree(indexNode *x, void *pData, nodeInfoInPath *path,int &pathDepth){
-    RC rc;
-    pathDepth++;
-    ////printf("pdata%d\nnumberofKeys%d\n",*(int*)pData,x->numberOfKeys);
-    if(x->leaf){
-        ////printf("traversal leaf\n");
-        int i = 0;
-        while(i<x->numberOfKeys && compare(pData,x->entries[i].key)!=0)
-            i++;
-        //for debug
-        ////printf("print all the elements key in leaf\n");
-//        int j=0;
-//        while(j<x->numberOfKeys){
-//            //printf("%d\n",*(int*)x->entries[j].key);
-//            j++;
-//        }
-        // if not found in leaf
-        if(compare(pData,x->entries[i].key)!=0) return IX_INDEX_NOTFOUND; //TODO define ERROR
+   // Pin
+   if (rc = pfFileHandle.GetThisPage(nodeNum, pageHandle))
+      goto err_return;
+   if (rc = pageHandle.GetData(pNode))
+      goto err_return;
 
-        //found in leaf, save neighbor infos for bucket page
-        path[pathDepth].nodeSelf = x->entries[i].child;
-        path[pathDepth].anchor = x->pageNumber;
-        path[pathDepth].neighborL = -1; //for bucket, no need to know its neighbors
-        path[pathDepth].neighborR = -1;
-        //path[pathDepth].key = x->entries[i].key;
-        path[pathDepth].entryNum = i;
-        pfFileHandle.UnpinPage(x->pageNumber);
-        return 0;
-    }
+   // Allocate a new INTERNAL node
+   if (rc = pfFileHandle.AllocatePage(newPageHandle))
+      goto err_return;
+   if (rc = newPageHandle.GetData(pNewNode))
+      goto err_return;
+   if (rc = newPageHandle.GetPageNum(newNodeNum))
+      goto err_return;
 
-    //printf("traversal non-leaf\n");
-    int i = 0;
-    while(i<x->numberOfKeys && compare(pData,x->entries[i].key)!=-1)
-        i++;
-    indexNode* childi = NULL;
-    //pData is less than the first key, so childi is pointed by the first pointer in x
-    if(i==0){
-        childi = readNodeFromPageNum(x->previous);
-        path[pathDepth].nodeSelf = x->previous;
-        //if pointer to this page is the first pointer in its parent
-        path[pathDepth].neighborL = -1; //doesn't have left neighbor
-        path[pathDepth].neighborR = x->entries[0].child;
+   // Should respect the original order among duplicated keys
+   for (j = 0; j <= ((IX_PageHdr *)pNode)->numKeys; j++)
+      if (memcmp(InternalPtr(pNode, j), &childNodeNum, sizeof(PageNum)) == 0)
+         break;
 
-    }
-    else{
-        childi = readNodeFromPageNum(x->entries[i-1].child);
-        path[pathDepth].nodeSelf = x->entries[i-1].child;
-    }
-    //save immdediate neighors for childi
-    path[pathDepth].anchor = x->pageNumber; //childi's anchor
-    //path[pathDepth].key = x->entries[i].key;
-    path[pathDepth].entryNum = i;
+#ifdef DEBUG_IX
+   assert(j <= ((IX_PageHdr *)pNode)->numKeys);
+#endif
 
+   newSplitKey = new char[MAXSTRINGLEN];
 
-    if(0<i<x->numberOfKeys) {
-        if(i==1)    path[pathDepth].neighborL = x->previous;
-        else    path[pathDepth].neighborL = x->entries[i-2].child;
-        path[pathDepth].neighborR = x->entries[i].child;
-    }
+   // Select a boundary so that "half full" constraint is met
+   pivot = (((IX_PageHdr *)pNode)->numKeys + 1) / 2;
+   if (j > pivot)
+      insertLocation =  1; // right
+   else if (j < pivot) {
+      pivot--;
+      insertLocation = -1; // left
+   } else
+      insertLocation =  0; // to parent
 
-    //if pointer to this page is the last pointer in its parent
-    else if(i==x->numberOfKeys){
-        path[pathDepth].neighborL = x->entries[x->numberOfKeys-2].child;
-        path[pathDepth].neighborR = -1;
-    }
-    //this shouldn't happen
-    else{
-        path[pathDepth].neighborL = -1;
-        path[pathDepth].neighborR = -1;
-    }
-    rc = traversalTree(childi,pData,path,pathDepth);
-    pfFileHandle.UnpinPage(x->pageNumber);
-    return rc;
+   // Move a half of data to new node
+   if (insertLocation == 0) {
+      memcpy(InternalKey(pNewNode, 0),
+             InternalKey(pNode, pivot),
+             (((IX_PageHdr *)pNode)->numKeys - pivot) * InternalEntrySize());
+      memcpy(InternalPtr(pNewNode, 0),
+             &splitNodeNum,
+             sizeof(PageNum));
+      memcpy(newSplitKey, splitKey, MAXSTRINGLEN);
+   }
+   else {
+      memcpy(InternalPtr(pNewNode, 0),
+             InternalPtr(pNode, pivot + 1),
+             (((IX_PageHdr *)pNode)->numKeys - pivot) * InternalEntrySize());
+      memcpy(newSplitKey, InternalKey(pNode, pivot), attrLength);
+   }
+
+   // Write node headers
+   memcpy(pNewNode, pNode, sizeof(IX_PageHdr));
+   ((IX_PageHdr *)pNewNode)->numKeys = ((IX_PageHdr *)pNode)->numKeys - pivot
+                                       - insertLocation * insertLocation;
+   ((IX_PageHdr *)pNode)->numKeys = pivot;
+
+   // Maintain doubly linked list
+   ((IX_PageHdr *)pNewNode)->prevNode = nodeNum;
+   ((IX_PageHdr *)pNode)->nextNode = newNodeNum;
+
+   if (nodeNum != 0 && ((IX_PageHdr *)pNewNode)->nextNode != IX_NO_MORE_NODE) {
+      PF_PageHandle ph;
+      char *pn;
+
+      // Pin
+      if (rc = pfFileHandle.GetThisPage(((IX_PageHdr *)pNewNode)->nextNode, ph))
+         goto err_return;
+      if (rc = ph.GetData(pn))
+         goto err_return;
+
+      ((IX_PageHdr *)pn)->prevNode = newNodeNum;
+
+      // Unpin
+      if (rc = pfFileHandle.MarkDirty(((IX_PageHdr *)pNewNode)->nextNode))
+         goto err_return;
+      if (rc = pfFileHandle.UnpinPage(((IX_PageHdr *)pNewNode)->nextNode))
+         goto err_return;
+   }
+
+   // Insert
+   if (insertLocation > 0) {
+      if (rc = InsertEntryToIntlNodeNoSplit(newNodeNum, childNodeNum,
+                                            splitKey, splitNodeNum))
+         goto err_return;
+   } else if (insertLocation < 0) {
+      if (rc = InsertEntryToIntlNodeNoSplit(nodeNum, childNodeNum,
+                                            splitKey, splitNodeNum))
+         goto err_return;
+   }
+
+   //
+   memcpy(&splitNodeNum, &newNodeNum, sizeof(PageNum));
+   delete [] splitKey;
+   splitKey = newSplitKey;
+
+#ifdef DEBUG_IX
+   assert(Compare(newSplitKey,
+                  InternalKey(pNode, ((IX_PageHdr *)pNode)->numKeys - 1)) >= 0);
+   assert(Compare(newSplitKey,
+                  InternalKey(pNewNode, 0)) <= 0);
+#endif
+
+   // This INTERNAL node is ROOT!
+   if (nodeNum == 0) {
+      PF_PageHandle new2PageHandle;
+      char *pNew2Node;
+      PageNum new2NodeNum;
+
+      // Allocate a new LEAF node
+      if (rc = pfFileHandle.AllocatePage(new2PageHandle))
+         goto err_return;
+      if (rc = new2PageHandle.GetData(pNew2Node))
+         goto err_return;
+      if (rc = new2PageHandle.GetPageNum(new2NodeNum))
+         goto err_return;
+
+      // To assign page number 0 to root node
+      memcpy(pNew2Node, pNode, PF_PAGE_SIZE);
+      memset(pNode, 0, PF_PAGE_SIZE); 
+      ((IX_PageHdr *)pNode)->flags = IX_INTERNAL_NODE;
+      ((IX_PageHdr *)pNode)->numKeys = 1;
+      ((IX_PageHdr *)pNode)->prevNode = attrType;
+      ((IX_PageHdr *)pNode)->nextNode = attrLength;
+      ((IX_PageHdr *)pNew2Node)->prevNode = IX_NO_MORE_NODE;
+      ((IX_PageHdr *)pNewNode)->nextNode  = IX_NO_MORE_NODE;
+      
+      memcpy(InternalPtr(pNode, 0), &new2NodeNum, sizeof(PageNum));
+      memcpy(InternalKey(pNode, 0), splitKey, attrLength);
+      memcpy(InternalPtr(pNode, 1), &newNodeNum, sizeof(PageNum));
+
+      //
+      ((IX_PageHdr *)pNewNode)->prevNode = new2NodeNum;
+
+      // Unpin
+      if (rc = pfFileHandle.MarkDirty(new2NodeNum))
+         goto err_return;
+      if (rc = pfFileHandle.UnpinPage(new2NodeNum))
+         goto err_return;
+
+      // Reset
+      splitNodeNum = IX_DONT_SPLIT;
+      delete [] splitKey;
+      splitKey = NULL;
+   }
+
+   // Unpin
+   if (rc = pfFileHandle.MarkDirty(nodeNum))
+      goto err_return;
+   if (rc = pfFileHandle.MarkDirty(newNodeNum))
+      goto err_return;
+   if (rc = pfFileHandle.UnpinPage(nodeNum))
+      goto err_return;
+   if (rc = pfFileHandle.UnpinPage(newNodeNum))
+      goto err_return;
+
+   // Return ok
+   return (0);
+
+   // Return error
+err_return:
+#ifdef DEBUG_IX
+   assert(0);
+#endif
+   return (rc);
 }
 
+//
+// InsertEntryToLeafNode
+//
+RC IX_IndexHandle::InsertEntryToLeafNode(const PageNum nodeNum,
+                                         void *pData, const RID &rid,
+                                         char *&splitKey,
+                                         PageNum &splitNodeNum,
+                                         int originalLeaf)
+{
+   RC rc;
+   PF_PageHandle pageHandle;
+   char *pNode;
+   int numKeys;
+   int j;
 
+   // Pin
+   if (rc = pfFileHandle.GetThisPage(nodeNum, pageHandle))
+      goto err_return;
+   if (rc = pageHandle.GetData(pNode))
+      goto err_return;
 
+   // Read numKeys
+   numKeys = ((IX_PageHdr *)pNode)->numKeys;
 
-// Force index files to disk
+   // Key already exists?
+   for (j = numKeys - 1; j >= 0; j--)
+      if (Compare(pData, LeafKey(pNode, j)) == 0)
+         break;
+
+   if (j == -1) {
+      // Key not found: we're good
+      if (originalLeaf)
+         goto do_unpin;
+      // No more recursion, don't insert here and go back
+      else {
+         // Unpin
+         if (rc = pfFileHandle.UnpinPage(nodeNum))
+            goto err_return;
+
+         return (-9999);
+      }
+   }
+
+   // (Key,RID) already exists?
+   for (; j >= 0; j--) {
+      if (Compare(pData, LeafKey(pNode, j)) > 0)
+         goto do_unpin;
+
+      // Found
+      if (memcmp(&rid, LeafRID(pNode, j), sizeof(RID)) == 0) {
+         // Unpin
+         if (rc = pfFileHandle.UnpinPage(nodeNum))
+            goto err_return;
+
+         return (IX_ENTRYEXISTS);
+      }
+   }
+
+   // Need to proceed to the previous leaf node
+   if (j == -1 && nodeNum != 0
+       && ((IX_PageHdr *)pNode)->prevNode != IX_NO_MORE_NODE) {
+      // Unpin
+      if (rc = pfFileHandle.UnpinPage(nodeNum))
+         goto err_return;
+
+      rc = InsertEntryToLeafNode(((IX_PageHdr *)pNode)->prevNode,
+                                 pData, rid,
+                                 splitKey, splitNodeNum, FALSE);
+      if (rc == -9999)
+         goto do_insert;
+      else if (rc)
+         goto err_return;
+
+      return (0);
+   }
+
+do_unpin:
+   // Unpin
+   if (rc = pfFileHandle.UnpinPage(nodeNum))
+      goto err_return;
+do_insert:
+   // Just add new entry if possible
+   if (IX_PAGEHDR_SIZE + (numKeys + 1) * LeafEntrySize() <= PF_PAGE_SIZE) {
+      if (rc = InsertEntryToLeafNodeNoSplit(nodeNum, pData, rid,
+                                            splitKey, splitNodeNum))
+         goto err_return;
+   }
+   // Not enough room
+   else {
+      // Split LEAF node
+      if (originalLeaf) {
+         if (rc = InsertEntryToLeafNodeSplit(nodeNum, pData, rid, 
+                                             splitKey, splitNodeNum))
+            goto err_return;
+      }
+      // Don't split any other leaf nodes but the original one 
+      else
+         return (-9999);
+   }
+
+   // Return ok
+   return (0);
+
+   // Return error
+err_return:
+   return (rc);
+}
+
+//
+// InsertEntryToLeafNodeNoSplit
+//
+RC IX_IndexHandle::InsertEntryToLeafNodeNoSplit(const PageNum nodeNum,
+                                                void *pData, const RID &rid,
+                                                char *&splitKey,
+                                                PageNum &splitNodeNum)
+{
+   RC rc;
+   PF_PageHandle pageHandle;
+   char *pNode;
+   int j;
+
+   // Pin
+   if (rc = pfFileHandle.GetThisPage(nodeNum, pageHandle))
+      goto err_return;
+   if (rc = pageHandle.GetData(pNode))
+      goto err_return;
+
+   // Find the right place
+   for (j = 0; j < ((IX_PageHdr *)pNode)->numKeys; j++) {
+      if (Compare(pData, LeafKey(pNode, j)) < 0) {
+         // Make a "hole" for new entry
+         memmove(LeafKey(pNode, j + 1),
+                 LeafKey(pNode, j),
+                 (((IX_PageHdr *)pNode)->numKeys - j)
+                 * LeafEntrySize());
+         break;
+      }
+   }
+
+   // Fill out new key
+   memcpy(LeafKey(pNode, j), pData, attrLength);
+   // Fill out RID associated with new key
+   memcpy(LeafRID(pNode, j), &rid, sizeof(RID));
+   // Increment #keys
+   ((IX_PageHdr *)pNode)->numKeys++;
+
+   // Unpin
+   if (rc = pfFileHandle.MarkDirty(nodeNum))
+      goto err_return;
+   if (rc = pfFileHandle.UnpinPage(nodeNum))
+      goto err_return;
+
+   // Reset
+   splitNodeNum = IX_DONT_SPLIT;
+   splitKey = NULL;
+
+   // Return ok
+   return (0);
+
+   // Return error
+err_return:
+#ifdef DEBUG_IX
+   assert(0);
+#endif
+   return (rc);
+}
+
+//
+// InsertEntryToLeafNodeSplit
+//
+RC IX_IndexHandle::InsertEntryToLeafNodeSplit(const PageNum nodeNum,
+                                              void *pData, const RID &rid,
+                                              char *&splitKey,
+                                              PageNum &splitNodeNum)
+{
+   RC rc;
+   PF_PageHandle pageHandle;
+   char *pNode;
+   PF_PageHandle newPageHandle;
+   char *pNewNode;
+   PageNum newNodeNum;
+   int insertLocation, pivot;
+
+   // Pin
+   if (rc = pfFileHandle.GetThisPage(nodeNum, pageHandle))
+      goto err_return;
+   if (rc = pageHandle.GetData(pNode))
+      goto err_return;
+
+   // Allocate a new LEAF node
+   if (rc = pfFileHandle.AllocatePage(newPageHandle))
+      goto err_return;
+   if (rc = newPageHandle.GetData(pNewNode))
+      goto err_return;
+   if (rc = newPageHandle.GetPageNum(newNodeNum))
+      goto err_return;
+
+   // Select a boundary so that "half full" constraint is met
+   pivot = ((IX_PageHdr *)pNode)->numKeys / 2;
+   if (Compare(pData, LeafKey(pNode, pivot)) > 0) {
+      pivot++;
+      insertLocation = 1;
+   } else
+      insertLocation = -1;
+
+   // Move a half of data to new node
+   memcpy(pNewNode + IX_PAGEHDR_SIZE,
+          LeafKey(pNode, pivot),
+          (((IX_PageHdr *)pNode)->numKeys - pivot) * LeafEntrySize());
+
+   // Write node headers
+   memcpy(pNewNode, pNode, sizeof(IX_PageHdr));
+   ((IX_PageHdr *)pNewNode)->numKeys = ((IX_PageHdr *)pNode)->numKeys - pivot;
+   ((IX_PageHdr *)pNode)->numKeys = pivot;
+
+   // Maintain doubly linked list
+   ((IX_PageHdr *)pNewNode)->prevNode = nodeNum;
+   ((IX_PageHdr *)pNode)->nextNode = newNodeNum;
+
+   if (nodeNum != 0 && ((IX_PageHdr *)pNewNode)->nextNode != IX_NO_MORE_NODE) {
+      PF_PageHandle ph;
+      char *pn;
+
+      // Pin
+      if (rc = pfFileHandle.GetThisPage(((IX_PageHdr *)pNewNode)->nextNode, ph))
+         goto err_return;
+      if (rc = ph.GetData(pn))
+         goto err_return;
+
+      ((IX_PageHdr *)pn)->prevNode = newNodeNum;
+
+      // Unpin
+      if (rc = pfFileHandle.MarkDirty(((IX_PageHdr *)pNewNode)->nextNode))
+         goto err_return;
+      if (rc = pfFileHandle.UnpinPage(((IX_PageHdr *)pNewNode)->nextNode))
+         goto err_return;
+   }
+      
+   // Insert
+   if (insertLocation > 0) {
+      if (rc = InsertEntryToLeafNodeNoSplit(newNodeNum, pData, rid,
+                                            splitKey, splitNodeNum))
+         goto err_return;
+   }
+   else {
+      if (rc = InsertEntryToLeafNodeNoSplit(nodeNum, pData, rid,
+                                            splitKey, splitNodeNum))
+         goto err_return;
+   }
+
+   // Choose a key to propagate to parent node
+   memcpy(&splitNodeNum, &newNodeNum, sizeof(PageNum));
+   splitKey = new char[MAXSTRINGLEN];
+   memcpy(splitKey, LeafKey(pNewNode, 0), attrLength);
+
+#ifdef DEBUG_IX
+   assert(Compare(splitKey,
+                  LeafKey(pNode, ((IX_PageHdr *)pNode)->numKeys - 1)) >= 0);
+   assert(Compare(splitKey, LeafKey(pNewNode, 0)) <= 0);
+#endif
+
+   // This LEAF node is ROOT!
+   if (nodeNum == 0) {
+      PF_PageHandle new2PageHandle;
+      char *pNew2Node;
+      PageNum new2NodeNum;
+
+      // Allocate a new LEAF node
+      if (rc = pfFileHandle.AllocatePage(new2PageHandle))
+         goto err_return;
+      if (rc = new2PageHandle.GetData(pNew2Node))
+         goto err_return;
+      if (rc = new2PageHandle.GetPageNum(new2NodeNum))
+         goto err_return;
+
+      // To assign page number 0 to root node
+      memcpy(pNew2Node, pNode, PF_PAGE_SIZE);
+      memset(pNode, 0, PF_PAGE_SIZE); 
+      ((IX_PageHdr *)pNode)->flags = IX_INTERNAL_NODE;
+      ((IX_PageHdr *)pNode)->numKeys = 1;
+      ((IX_PageHdr *)pNode)->prevNode = attrType;
+      ((IX_PageHdr *)pNode)->nextNode = attrLength;
+      ((IX_PageHdr *)pNew2Node)->prevNode = IX_NO_MORE_NODE;
+      ((IX_PageHdr *)pNewNode)->nextNode  = IX_NO_MORE_NODE;
+      
+      memcpy(InternalPtr(pNode, 0), &new2NodeNum, sizeof(PageNum));
+      memcpy(InternalKey(pNode, 0), splitKey, attrLength);
+      memcpy(InternalPtr(pNode, 1), &newNodeNum, sizeof(PageNum));
+
+      //
+      ((IX_PageHdr *)pNewNode)->prevNode = new2NodeNum;
+
+      // Unpin
+      if (rc = pfFileHandle.MarkDirty(new2NodeNum))
+         goto err_return;
+      if (rc = pfFileHandle.UnpinPage(new2NodeNum))
+         goto err_return;
+
+      // Reset
+      splitNodeNum = IX_DONT_SPLIT;
+      delete [] splitKey;
+      splitKey = NULL;
+   }
+
+   // Unpin
+   if (rc = pfFileHandle.MarkDirty(nodeNum))
+      goto err_return;
+   if (rc = pfFileHandle.MarkDirty(newNodeNum))
+      goto err_return;
+   if (rc = pfFileHandle.UnpinPage(nodeNum))
+      goto err_return;
+   if (rc = pfFileHandle.UnpinPage(newNodeNum))
+      goto err_return;
+
+   // Return ok
+   return (0);
+
+   // Return error
+err_return:
+#ifdef DEBUG_IX
+   assert(0);
+#endif
+   return (rc);
+}
+
+//
+// DeleteEntry
+//
+// Desc: Delete an existing index entry from index.
+//       pData/rid pair should exist in the index.
+// In:   pData - key value
+//       rid - record identifier
+// Ret:  IX_NULLPOINTER, RM_INVIABLERID
+//
+RC IX_IndexHandle::DeleteEntry(void *pData, const RID &rid)
+{
+   RC rc;
+   PageNum pageNum;
+   char *tmp;
+   
+   // Sanity Check: pData must not be NULL
+   if (pData == NULL)
+      // Test: NULL pData
+      return (IX_NULLPOINTER);
+ 
+   // Sanity Check: RID must be viable
+   if (rc = rid.GetPageNum(pageNum))
+      // Test: inviable rid
+      goto err_return;
+
+   // Delete the entry from the B+ tree
+   if (rc = DeleteEntryAtNode(0, pData, rid, tmp, pageNum))
+      // Test: unopened indexHandle
+      goto err_return;
+
+#ifdef DEBUG_IX
+   assert(tmp == NULL);
+#endif
+
+   // Return ok
+   return (0);
+
+   // Return error
+err_return:
+   return (rc);
+}
+
+//
+// DeleteEntryAtNode
+//
+// Desc: Delete an existing index entry from a specific node or the
+//       subtree accessible from it.
+//       Lazy deletion.
+//
+//       If this node is internal: 
+//         1. Find a subtree using the key.
+//         2. Recursively call DeleteEntryAtNode() for the subtree.
+//         3. If the smallest value of the subtree is changed, update
+//            the value (if the traversed subtree is leftmost one,
+//            just propagate this infomation to parent)
+//         4. If the subtree is deleted, delete the corresponding 
+//            key/pointer pair. At this step, the smallest value of
+//            the subtree might be changed, too. If no pointer left, 
+//            delete this node and propagate this information to parent.
+//         Note: Different from insertion, the changed subtree might
+//               not be accessible from pointers in this node because 
+//               of duplicates. When necessary, the doubly linked 
+//               list is used to handle this situation.
+//
+//       If this node is leaf:
+//         1. Find the entry. It can be at previous node since we
+//            traversed to the rightmost leaf node with key.
+//         2. If 2+ entries, just delete the new entry. If the smallest
+//            value of the leaf node is changed, propagate the new
+//            smallest key to parent node.
+//         3. Otherwise, delete the leaf node and propagate information 
+//            to parent node so that the parent node can be updated
+//            accordingly.
+//
+// In:   nodeNum - 
+//       pData/rid - index entry to be deleted
+// Out:  smallestKey - key/pointer pair which should be inserted to
+//       deletedNodeNum - 
+// Ret:  IX_ENTRYNOTFOUND, PF return code
+//
+RC IX_IndexHandle::DeleteEntryAtNode(const PageNum nodeNum,
+                                     void *pData, const RID &rid,
+                                     char *&smallestKey,
+                                     PageNum &deletedNodeNum)
+{
+   RC rc;
+   PF_PageHandle pageHandle;
+   char *pNode;
+   int j;
+
+   // Pin
+   if (rc = pfFileHandle.GetThisPage(nodeNum, pageHandle))
+      goto err_return;
+   if (rc = pageHandle.GetData(pNode))
+      goto err_return;
+
+   // Current node is LEAF node
+   if (((IX_PageHdr *)pNode)->flags & IX_LEAF_NODE) {
+      // Unpin
+      if (rc = pfFileHandle.UnpinPage(nodeNum))
+         goto err_return;
+
+      //
+      if (rc = DeleteEntryAtLeafNode(nodeNum, pData, rid,
+                                     smallestKey, deletedNodeNum))
+         goto err_return;
+   }
+
+   // Current node is INTERNAL node
+   else {
+      PageNum childNodeNum;
+
+      // Find the right child to traverse
+      for (j = 0; j < ((IX_PageHdr *)pNode)->numKeys; j++) {
+         if (Compare(pData, InternalKey(pNode, j)) < 0)
+            break;
+      }
+      memcpy(&childNodeNum, InternalPtr(pNode, j), sizeof(PageNum));
+
+      // Unpin
+      if (rc = pfFileHandle.UnpinPage(nodeNum))
+         goto err_return;
+
+      // Recursion
+      if (rc = DeleteEntryAtNode(childNodeNum, pData, rid,
+                                 smallestKey, deletedNodeNum))
+         goto err_return;
+
+      // Update the smallest key value
+      if (smallestKey != NULL && j > 0) {
+#ifdef DEBUG_IX
+         assert(deletedNodeNum == IX_NOT_DELETED);
+#endif
+         // Pin
+         if (rc = pfFileHandle.GetThisPage(nodeNum, pageHandle))
+            goto err_return;
+         if (rc = pageHandle.GetData(pNode))
+            goto err_return;
+
+         //
+         memcpy(InternalKey(pNode, j - 1), smallestKey, attrLength);
+         delete [] smallestKey;
+         smallestKey = NULL;
+
+         // Unpin
+         if (rc = pfFileHandle.MarkDirty(nodeNum))
+            goto err_return;
+         if (rc = pfFileHandle.UnpinPage(nodeNum))
+            goto err_return;
+      }
+
+      // Traversed child node was disposed
+      if (deletedNodeNum != IX_NOT_DELETED)
+         if (rc = DeleteEntryAtIntlNode(nodeNum, smallestKey, deletedNodeNum))
+            goto err_return;
+   }
+
+   // Return ok
+   return (0);
+
+   // Return error
+err_return:
+   return (rc);
+}
+
+//
+// DeleteEntryAtLeafNode
+//
+RC IX_IndexHandle::DeleteEntryAtIntlNode(const PageNum nodeNum,
+                                         char *&smallestKey,
+                                         PageNum &deletedNodeNum)
+{
+   RC rc;
+   PF_PageHandle pageHandle;
+   char *pNode;
+   int j;
+
+   // Pin
+   if (rc = pfFileHandle.GetThisPage(nodeNum, pageHandle))
+      goto err_return;
+   if (rc = pageHandle.GetData(pNode))
+      goto err_return;
+
+   // Should respect the original order among duplicated keys
+   for (j = ((IX_PageHdr *)pNode)->numKeys; j >= 0; j--)
+      if (memcmp(InternalPtr(pNode, j), &deletedNodeNum, sizeof(PageNum)) == 0)
+         break;
+
+   // Need to proceed to the previous internal node
+   if (j == -1 && nodeNum != 0) {
+      PageNum prevNode = ((IX_PageHdr *)pNode)->prevNode;
+
+      // Unpin
+      if (rc = pfFileHandle.UnpinPage(nodeNum))
+         goto err_return;
+
+#ifdef DEBUG_IX
+      assert(prevNode != IX_NO_MORE_NODE);
+#endif
+      return DeleteEntryAtIntlNode(prevNode, smallestKey, deletedNodeNum);
+   }
+   // Found
+   else {
+      // The only pointer
+      if (((IX_PageHdr *)pNode)->numKeys == 0) {
+         assert(nodeNum != 0);
+         deletedNodeNum = nodeNum;
+         LinkTwoNodesEachOther(((IX_PageHdr *)pNode)->prevNode,
+                               ((IX_PageHdr *)pNode)->nextNode);
+
+         // Dispose
+         if (rc = pfFileHandle.UnpinPage(nodeNum))
+            goto err_return;
+         if (rc = pfFileHandle.DisposePage(nodeNum))
+            goto err_return;
+      }
+      // Not the only key
+      else {
+         deletedNodeNum = IX_NOT_DELETED;
+
+         // Compute the smallest value 
+         if (j == 0 && nodeNum != 0
+             && ((IX_PageHdr *)pNode)->prevNode != IX_NO_MORE_NODE) {
+            smallestKey = new char[MAXSTRINGLEN];
+            memcpy(smallestKey, InternalKey(pNode, 0), attrLength);
+            
+            // Remove the found entry
+            memmove(InternalPtr(pNode, 0),
+                    InternalPtr(pNode, 1),
+                    (((IX_PageHdr *)pNode)->numKeys) * InternalEntrySize());
+         } else {
+            smallestKey = NULL;
+
+            // Remove the found entry
+            memmove(InternalKey(pNode, j - 1),
+                    InternalKey(pNode, j),
+                    (((IX_PageHdr *)pNode)->numKeys - j) * InternalEntrySize());
+         }
+
+         // Decrement #keys
+         ((IX_PageHdr *)pNode)->numKeys--;
+
+         // Only one pointer remained at the ROOT node!
+         if (nodeNum == 0 && ((IX_PageHdr *)pNode)->numKeys == 0) {
+            PageNum childNodeNum;
+            PageNum rootNodeNum;
+            char *pRootNode;
+
+            memcpy(&childNodeNum, InternalPtr(pNode, 0), sizeof(PageNum));
+            if (rc = FindNewRootNode(childNodeNum, rootNodeNum, pRootNode))
+               goto err_return;
+
+            // Move the new root node to page 0
+            memcpy(pNode, pRootNode, PF_PAGE_SIZE);
+            ((IX_PageHdr *)pNode)->prevNode = attrType;
+            ((IX_PageHdr *)pNode)->nextNode = attrLength;
+
+            // Unpin
+            if (rc = pfFileHandle.UnpinPage(rootNodeNum))
+               goto err_return;
+            if (rc = pfFileHandle.DisposePage(rootNodeNum))
+               goto err_return;
+         }
+
+         // Unpin
+         if (rc = pfFileHandle.MarkDirty(nodeNum))
+            goto err_return;
+         if (rc = pfFileHandle.UnpinPage(nodeNum))
+            goto err_return;
+      }
+   }
+
+   // Return ok
+   return (0);
+
+   // Return error
+err_return:
+#ifdef DEBUG_IX
+   assert(0);
+#endif
+   return (rc);
+}
+
+//
+// DeleteEntryAtLeafNode
+//
+RC IX_IndexHandle::DeleteEntryAtLeafNode(const PageNum nodeNum,
+                                         void *pData, const RID &rid,
+                                         char *&smallestKey,
+                                         PageNum &deletedNodeNum)
+{
+   RC rc;
+   PF_PageHandle pageHandle;
+   char *pNode;
+   int j;
+
+   // Pin
+   if (rc = pfFileHandle.GetThisPage(nodeNum, pageHandle))
+      goto err_return;
+   if (rc = pageHandle.GetData(pNode))
+      goto err_return;
+
+   // Find the right place (by search key)
+   for (j = ((IX_PageHdr *)pNode)->numKeys - 1; j >= 0; j--)
+      if (Compare(pData, LeafKey(pNode, j)) == 0)
+         break;
+
+   // Search key not found
+   if (j == -1) {
+      // Unpin
+      if (rc = pfFileHandle.UnpinPage(nodeNum))
+         goto err_return;
+
+      return (IX_ENTRYNOTFOUND);
+   }
+
+   // Find the right place (by RID)
+   for (; j >= 0; j--) {
+      if (Compare(pData, LeafKey(pNode, j)) > 0) {
+         // Unpin
+         if (rc = pfFileHandle.UnpinPage(nodeNum))
+            goto err_return;
+
+         return (IX_ENTRYNOTFOUND);
+      }
+
+      // Found
+      if (memcmp(&rid, LeafRID(pNode, j), sizeof(RID)) == 0)
+         break;
+   }
+
+   // Need to proceed to the previous leaf node
+   if (j == -1 && nodeNum != 0) {
+      PageNum prevNode = ((IX_PageHdr *)pNode)->prevNode;
+      
+      // Unpin
+      if (rc = pfFileHandle.UnpinPage(nodeNum))
+         goto err_return;
+
+      // No more node
+      if (prevNode == IX_NO_MORE_NODE)
+         return (IX_ENTRYNOTFOUND);
+
+      return DeleteEntryAtLeafNode(prevNode, pData, rid,
+                                   smallestKey, deletedNodeNum);
+   }
+   // Found
+   else {
+      // The only key
+      if (((IX_PageHdr *)pNode)->numKeys == 1 && nodeNum != 0) {
+#ifdef DEBUG_IX
+         assert(j == 0);
+#endif
+         deletedNodeNum = nodeNum;
+         smallestKey = NULL;
+
+         LinkTwoNodesEachOther(((IX_PageHdr *)pNode)->prevNode,
+                               ((IX_PageHdr *)pNode)->nextNode);
+
+         // Dispose
+         if (rc = pfFileHandle.UnpinPage(nodeNum))
+            goto err_return;
+         if (rc = pfFileHandle.DisposePage(nodeNum))
+            goto err_return;
+      }
+      // Not the only key
+      else {
+         deletedNodeNum = IX_NOT_DELETED;
+
+         // Compute the smallest value 
+         if (j == 0 && nodeNum != 0
+             && ((IX_PageHdr *)pNode)->prevNode != IX_NO_MORE_NODE
+             && Compare(LeafKey(pNode, 0), LeafKey(pNode, 1)) < 0) {
+            smallestKey = new char[MAXSTRINGLEN];
+            memcpy(smallestKey, LeafKey(pNode, 1), attrLength);
+         } else
+            smallestKey = NULL;
+
+         // Remove the found entry
+         memmove(LeafKey(pNode, j),
+                 LeafKey(pNode, j + 1),
+                 (((IX_PageHdr *)pNode)->numKeys - j - 1) * LeafEntrySize());
+         // Decrement #keys
+         ((IX_PageHdr *)pNode)->numKeys--;
+
+         // Unpin
+         if (rc = pfFileHandle.MarkDirty(nodeNum))
+            goto err_return;
+         if (rc = pfFileHandle.UnpinPage(nodeNum))
+            goto err_return;
+      }
+   }
+
+   // Return ok
+   return (0);
+
+   // Return error
+err_return:
+#ifdef DEBUG_IX
+   assert(0);
+#endif
+   return (rc);
+}
+
+//
+// LinkTwoNodesEachOther
+//
+// Desc: Link two nodes (at the same depth) each other
+//       Maintains doubly linked list when a node is deleted
+//       Called by DeleteEntryAtIntlNode() and DeleteEntryAtLeafNode()
+// Ret:  PF return code
+//
+RC IX_IndexHandle::LinkTwoNodesEachOther(const PageNum prevNode,
+                                         const PageNum nextNode)
+{
+   RC rc;
+   PF_PageHandle ph;
+   char *pn;
+   
+   if (prevNode != IX_NO_MORE_NODE) {
+      // Pin
+      if (rc = pfFileHandle.GetThisPage(prevNode, ph))
+         goto err_return;
+      if (rc = ph.GetData(pn))
+         goto err_return;
+   
+      // Link
+      ((IX_PageHdr *)pn)->nextNode = nextNode;
+   
+      // Unpin
+      if (rc = pfFileHandle.MarkDirty(prevNode))
+         goto err_return;
+      if (rc = pfFileHandle.UnpinPage(prevNode))
+         goto err_return;
+   }
+   
+   if (nextNode != IX_NO_MORE_NODE) {
+      // Pin
+      if (rc = pfFileHandle.GetThisPage(nextNode, ph))
+         goto err_return;
+      if (rc = ph.GetData(pn))
+         goto err_return;
+   
+      // Link
+      ((IX_PageHdr *)pn)->prevNode = prevNode;
+   
+      // Unpin
+      if (rc = pfFileHandle.MarkDirty(nextNode))
+         goto err_return;
+      if (rc = pfFileHandle.UnpinPage(nextNode))
+         goto err_return;
+   }
+
+   // Return ok
+   return (0);
+
+   // Return error
+err_return:
+#ifdef DEBUG_IX
+   assert(0);
+#endif
+   return (rc);
+}
+
+//
+// FindNewRootNode
+//
+// Desc: Recursively find the new root node when the old root node has 
+//       only one pointer due to deletions.
+//       Dispose every node on the path from the old root to the new root.
+//       Unpin is handled by caller.
+//       Called by DeleteEntryAtIntlNode()
+// In:   nodeNum
+// Out:  rootNodeNum - set to the page number of new root node
+//       pRootNode - set to the data pointer of new root node
+// Ret:  PF return code
+//
+RC IX_IndexHandle::FindNewRootNode(const PageNum nodeNum,
+                                   PageNum &rootNodeNum,
+                                   char *&pRootNode)
+{
+   RC rc;
+   PF_PageHandle pageHandle;
+   char *pNode;
+
+   // Pin
+   if (rc = pfFileHandle.GetThisPage(nodeNum, pageHandle))
+      goto err_return;
+   if (rc = pageHandle.GetData(pNode))
+      goto err_return;
+
+   // Current node is LEAF node
+   if (((IX_PageHdr *)pNode)->flags & IX_LEAF_NODE) {
+      // New root (leaf node)
+      rootNodeNum = nodeNum;
+      pRootNode = pNode;
+   }
+
+   // Current node is INTERNAL node
+   else {
+      // New root (internal node)
+      if (((IX_PageHdr *)pNode)->numKeys > 0) {
+         rootNodeNum = nodeNum;
+         pRootNode = pNode;
+      }
+      // Dispose the current node and recurse if there is only one pointer
+      else {
+         PageNum childNodeNum;
+         memcpy(&childNodeNum, InternalPtr(pNode, 0), sizeof(PageNum));
+
+         // Dispose
+         if (rc = pfFileHandle.UnpinPage(nodeNum))
+            goto err_return;
+         if (rc = pfFileHandle.DisposePage(nodeNum))
+            goto err_return;
+
+         // Recursion
+         if (rc = FindNewRootNode(childNodeNum, rootNodeNum, pRootNode))
+            goto err_return;
+      }
+   }
+
+   // Return ok
+   return (0);
+
+   // Return error
+err_return:
+   return (rc);
+}
+
+//
+// ForcePages
+//
+// Desc: 
+// Ret:  PF return code
+//
 RC IX_IndexHandle::ForcePages()
 {
-    RC rc;
+   RC rc;
+   
+   // Call PF_FileHandle::ForcePages()
+   if (rc = pfFileHandle.ForcePages())
+      goto err_return;
 
-    // Write back the file header if any changes made to the header
-    // while the file is open
-    if (bHdrChanged) {
-       PF_PageHandle pageHandle;
-       char* pData;
+   // Return ok
+   return (0);
 
-       // Get the header page
-       if ((rc = pfFileHandle.GetFirstPage(pageHandle)))
-          // Test: unopened(closed) fileHandle, invalid file
-          goto err_return;
-
-       // Get a pointer where header information will be written
-       if ((rc = pageHandle.GetData(pData)))
-          // Should not happen
-          goto err_unpin;
-
-       // Write the file header (to the buffer pool)
-       memcpy(pData, &fileHdr, sizeof(fileHdr));
-
-       // Mark the header page as dirty
-       if (rc = pfFileHandle.MarkDirty(IX_HEADER_PAGE_NUM))
-          // Should not happen
-          goto err_unpin;
-
-       // Unpin the header page
-       if (rc = pfFileHandle.UnpinPage(IX_HEADER_PAGE_NUM))
-          // Should not happen
-          goto err_return;
-
-       if (rc = pfFileHandle.ForcePages(IX_HEADER_PAGE_NUM))
-          // Should not happen
-          goto err_return;
-
-       // Set file header to be not changed
-       bHdrChanged = FALSE;
-    }
-
-    // Call PF_FileHandle::ForcePages()
-    if (rc = pfFileHandle.ForcePages(ALL_PAGES))
-       goto err_return;
-
-    // Return ok
-    return (0);
-
-    // Recover from inconsistent state due to unexpected error
- err_unpin:
-    pfFileHandle.UnpinPage(IX_HEADER_PAGE_NUM);
- err_return:
-    // Return error
-    return (rc);
+   // Return error
+err_return:
+   return (rc);
 }
 
-
 //
-// GetBitmap
+// InternalEntrySize, InternalKey, InternalPtr
 //
-// Desc: Return a bit corresponding to the given index
-// In:   map - address of bitmap
-//       idx - bit index
-// Ret:  TRUE or FALSE
+// Desc: Compute various size/pointer for an internal node
+// In:   base - pointer returned by PF_PageHandle.GetData()
+//       idx - entry index
+// Ret:  
 //
-int IX_IndexHandle::GetBitmap(char *map, int idx) const
+inline int IX_IndexHandle::InternalEntrySize(void)
 {
-   return (map[idx / 8] & (1 << (idx % 8))) != 0;
+   return sizeof(PageNum) + attrLength;
+}
+
+inline char* IX_IndexHandle::InternalPtr(char *base, int idx)
+{
+   return base + IX_PAGEHDR_SIZE + idx * InternalEntrySize();
+}
+
+inline char* IX_IndexHandle::InternalKey(char *base, int idx)
+{
+   return InternalPtr(base, idx) + sizeof(PageNum);
 }
 
 //
-// SetBitmap
+// LeafEntrySize, LeafKey, LeafRID
 //
-// Desc: Set a bit corresponding to the given index
-// In:   map - address of bitmap
-//       idx - bit index
+// Desc: Compute various size/pointer for a leaf node
+// In:   base - pointer returned by PF_PageHandle.GetData()
+//       idx - entry index
+// Ret:  
 //
-void IX_IndexHandle::SetBitmap(char *map, int idx) const
+inline int IX_IndexHandle::LeafEntrySize(void)
 {
-   map[idx / 8] |= (1 << (idx % 8));
+   return attrLength + sizeof(RID);
+}
+
+inline char* IX_IndexHandle::LeafKey(char *base, int idx)
+{
+   return base + IX_PAGEHDR_SIZE + idx * LeafEntrySize();
+}
+
+inline char* IX_IndexHandle::LeafRID(char *base, int idx)
+{
+   return LeafKey(base, idx) + attrLength;
 }
 
 //
-// ClrBitmap
+// Compare
 //
-// Desc: Clear a bit corresponding to the given index
-// In:   map - address of bitmap
-//       idx - bit index
-//
-void IX_IndexHandle::ClrBitmap(char *map, int idx) const
+float IX_IndexHandle::Compare(void *_value, char *value)
 {
-   map[idx / 8] &= ~(1 << (idx % 8));
+   float cmp;
+   int i;
+   float f;
+
+   // Do comparison according to the attribute type
+   switch (attrType) {
+   case INT:
+      memcpy(&i, _value, sizeof(int));
+      cmp = i - *((int *)value);
+      break;
+
+   case FLOAT:
+      memcpy(&f, _value, sizeof(float));
+      cmp = f - *((float *)value);
+      break;
+
+   case STRING:
+      cmp = memcmp(_value, value, attrLength);
+      break;
+   }
+
+   return cmp;
 }
+
+#ifdef DEBUG_IX
+//
+// PrintNode
+//
+RC IX_IndexHandle::PrintNode(const PageNum pNum)
+{
+   RC rc;
+   PF_PageHandle pageHandle;
+   char *pNode;
+   int j;
+   int i;
+   float f;
+   char s[MAXSTRINGLEN+1];
+
+   // Pin
+   if (rc = pfFileHandle.GetThisPage(pNum, pageHandle))
+      goto err_return;
+   if (rc = pageHandle.GetData(pNode))
+      goto err_return;
+
+   // Current node is LEAF node
+   if (((IX_PageHdr *)pNode)->flags & IX_LEAF_NODE) {
+      RID rid;
+      PageNum pn;
+      SlotNum sn;
+
+      printf("Leaf (%d) %u (%d): ", 
+             ((IX_PageHdr *)pNode)->prevNode, pNum,
+             ((IX_PageHdr *)pNode)->nextNode);
+
+      for (j = 0; j < ((IX_PageHdr *)pNode)->numKeys; j++) {
+         switch (attrType) {
+         case INT:
+            memcpy(&i, LeafKey(pNode, j), sizeof(int));
+            printf("[%d] ", i);
+            break;
+         case FLOAT:
+            memcpy(&f, LeafKey(pNode, j), sizeof(float));
+            printf("[%f] ", f);
+            break;
+         case STRING:
+            strncpy(s, LeafKey(pNode, j), attrLength);
+            printf("[%s] ", s);
+            break;
+         }
+
+         memcpy(&rid, LeafRID(pNode, j), sizeof(RID));
+         rid.GetPageNum(pn);
+         rid.GetSlotNum(sn);
+         printf("(%d,%d) ", pn, sn);
+      }
+      printf("\n");
+   }
+   // Current node is INTERNAL node
+   else {
+      PageNum pn;
+
+      printf("Intl (%d) %u (%d): ", 
+             ((IX_PageHdr *)pNode)->prevNode, pNum,
+             ((IX_PageHdr *)pNode)->nextNode);
+
+      for (j = 0; j < ((IX_PageHdr *)pNode)->numKeys; j++) {
+         memcpy(&pn, InternalPtr(pNode, j), sizeof(PageNum));
+         printf("%u ", pn);
+
+         switch (attrType) {
+         case INT:
+            memcpy(&i, InternalKey(pNode, j), sizeof(int));
+            printf("<%d> ", i);
+            break;
+         case FLOAT:
+            memcpy(&f, InternalKey(pNode, j), sizeof(float));
+            printf("<%f> ", f);
+            break;
+         case STRING:
+            strncpy(s, InternalKey(pNode, j), attrLength);
+            printf("<%s> ", s);
+            break;
+         }
+      }
+      memcpy(&pn, InternalPtr(pNode, j), sizeof(PageNum));
+      printf("%u\n", pn);
+   }
+
+   // Unpin
+   if (rc = pfFileHandle.UnpinPage(pNum))
+      goto err_return;
+
+   // Return ok
+   return (0);
+
+   // Return error
+err_return:
+   return (rc);
+}
+
+//
+// VerifyOrder
+//
+RC IX_IndexHandle::VerifyOrder(PageNum nodeNum)
+{
+   RC rc;
+   PF_PageHandle pageHandle;
+   char *pNode;
+   int j;
+   int i;
+   int iOld = 0x80000000;
+   float f;
+   float fOld = -1e32;
+   char s[MAXSTRINGLEN]; 
+   PageNum nextNode;
+   PageNum prevNode = IX_NO_MORE_NODE;
+
+   // Pin
+   if (rc = pfFileHandle.GetThisPage(nodeNum, pageHandle))
+      goto err_return;
+   if (rc = pageHandle.GetData(pNode))
+      goto err_return;
+
+   // Current node is LEAF node
+   if (((IX_PageHdr *)pNode)->flags & IX_LEAF_NODE) {
+      // Unpin
+      if (rc = pfFileHandle.UnpinPage(nodeNum))
+         goto err_return;
+
+      do {
+         // Pin
+         if (rc = pfFileHandle.GetThisPage(nodeNum, pageHandle))
+            goto err_return;
+         if (rc = pageHandle.GetData(pNode))
+            goto err_return;
+   
+         //
+         assert(nodeNum == 0 || ((IX_PageHdr *)pNode)->prevNode == prevNode);
+
+         for (j = 0; j < ((IX_PageHdr *)pNode)->numKeys; j++) {
+            switch (attrType) {
+            case INT:
+               memcpy(&i, LeafKey(pNode, j), sizeof(int));
+//             printf("[%d] ", i);
+               assert(iOld <= i);
+               iOld = i;
+               break;
+            case FLOAT:
+               memcpy(&f, LeafKey(pNode, j), sizeof(float));
+//             printf("[%f] ", f);
+               assert(fOld <= f);
+               fOld = f;
+               break;
+            case STRING:
+               strncpy(s, LeafKey(pNode, j), attrLength);
+//             printf("[%s] ", s);
+               break;
+            }
+   
+            RID rid;
+            PageNum pn;
+            SlotNum sn;
+
+            memcpy(&rid, LeafRID(pNode, j), sizeof(RID));
+            rid.GetPageNum(pn);
+            rid.GetSlotNum(sn);
+//          printf("(%d,%d)\n", pn, sn);
+         }
+         nextNode = ((IX_PageHdr *)pNode)->nextNode;
+         
+         // Unpin
+         if (rc = pfFileHandle.UnpinPage(nodeNum))
+            goto err_return;
+   
+         if (nodeNum == 0)
+            break;
+
+         prevNode = nodeNum;
+         nodeNum = nextNode;
+      }
+      while (nodeNum != IX_NO_MORE_NODE);
+   }
+
+   // Current node is INTERNAL node
+   else {
+      PageNum childNodeNum;
+      memcpy(&childNodeNum, InternalPtr(pNode, 0), sizeof(PageNum));
+
+      // Unpin
+      if (rc = pfFileHandle.UnpinPage(nodeNum))
+         goto err_return;
+
+      // Recursion
+      if (rc = VerifyOrder(childNodeNum))
+         goto err_return;
+   }
+
+   // Return ok
+   return (0);
+
+   // Return error
+err_return:
+   assert(0);
+   return (rc);
+}
+
+//
+// VerifyStructure
+//
+RC IX_IndexHandle::VerifyStructure(const PageNum nodeNum)
+{
+   RC rc;
+   PF_PageHandle pageHandle;
+   char *pNode;
+
+   // Pin
+   if (rc = pfFileHandle.GetThisPage(nodeNum, pageHandle))
+      goto err_return;
+   if (rc = pageHandle.GetData(pNode))
+      goto err_return;
+
+   // Current node is LEAF node
+   if (((IX_PageHdr *)pNode)->flags & IX_LEAF_NODE) {
+      // Unpin
+      if (rc = pfFileHandle.UnpinPage(nodeNum))
+         goto err_return;
+   }
+
+   // Current node is INTERNAL node
+   else {
+      int j;
+
+      for (j = 0; j < ((IX_PageHdr *)pNode)->numKeys; j++) {
+         PageNum childNodeNum;
+         char *key;
+
+         memcpy(&childNodeNum, InternalPtr(pNode, j + 1), sizeof(PageNum));
+         if (rc = GetSmallestKey(childNodeNum, key))
+            goto err_return;
+         assert(memcmp(key, InternalKey(pNode, j), attrLength) == 0);
+         delete [] key;
+      }
+
+      for (j = 0; j <= ((IX_PageHdr *)pNode)->numKeys; j++) {
+         PageNum childNodeNum;
+
+         memcpy(&childNodeNum, InternalPtr(pNode, j), sizeof(PageNum));
+         if (rc = VerifyStructure(childNodeNum))
+            goto err_return;
+      }
+
+      // Unpin
+      if (rc = pfFileHandle.UnpinPage(nodeNum))
+         goto err_return;
+   }
+
+   // Return ok
+   return (0);
+
+   // Return error
+err_return:
+   assert(0);
+   return (rc);
+}
+
+//
+// GetSmallestKey
+//
+RC IX_IndexHandle::GetSmallestKey(const PageNum nodeNum, char *&key)
+{
+   RC rc;
+   PF_PageHandle pageHandle;
+   char *pNode;
+
+   // Pin
+   if (rc = pfFileHandle.GetThisPage(nodeNum, pageHandle))
+      goto err_return;
+   if (rc = pageHandle.GetData(pNode))
+      goto err_return;
+
+   // Current node is LEAF node
+   if (((IX_PageHdr *)pNode)->flags & IX_LEAF_NODE) {
+      // Copy the smallest key
+      key = new char[MAXSTRINGLEN];
+      memcpy(key, LeafKey(pNode, 0), attrLength);
+
+      // Unpin
+      if (rc = pfFileHandle.UnpinPage(nodeNum))
+         goto err_return;
+   }
+
+   // Current node is INTERNAL node
+   else {
+      // Follow the most left pointer
+      PageNum childNodeNum;
+      memcpy(&childNodeNum, InternalPtr(pNode, 0), sizeof(PageNum));
+
+      // Unpin
+      if (rc = pfFileHandle.UnpinPage(nodeNum))
+         goto err_return;
+
+      // Recursion
+      if (rc = GetSmallestKey(childNodeNum, key))
+         goto err_return;
+   }
+
+   // Return ok
+   return (0);
+
+   // Return error
+err_return:
+   assert(0);
+   return (rc);
+}
+#endif
 

@@ -1,0 +1,92 @@
+
+                           CS346 RedBase Part 2: IX
+
+                                                      05433063  Hyunjung Park
+                                                      <hyunjung@stanford.edu>
+
+*** Outline ***
+
+-Design
+-Testing
+-Etc.
+
+
+*** Design ***
+
+[Duplicates in B+ tree]
+Dealing with duplicated search key is an important issue. To reduce I/O counts, 
+I stored index entries (value/RID pairs) at leaf nodes themselves instead of 
+maintaining separate bucket pages. To allow multiple occurrences of the search
+key at the leaves, each key at internal nodes should be always the smallest key 
+of the subtree accessible from its associated pointer. For example, consider
+<ptr0 key1 ptr1 key2 ptr2>. key1 is the smallest key of the subtree accessible
+from ptr1, so all entries in the subtree are greater than or equal to key1.
+However, this doesn't imply that those entries are less than key2. They might
+have entries with key2. 
+(This design is able to accommodate any number of RIDs for a key value)
+
+[Search in B+ tree]
+With the above rule, search and insertion are quite straightforward and as 
+efficient as the typical B+ tree with no duplicates. Specifically, we can find
+the rightmost leaf node which should contain a specific value, and find all 
+entries (if any) by following the pointer to the previous leaf node.
+
+[Insertion in B+ tree]
+When inserting a new entry with existing key (and non-existing RID), the new 
+entry is inserted at the leftmost leaf node which contains at least one entry 
+with the same key and has a free entry slot. If there is no such slot, the 
+rightmost leaf node with the same key is splitted. 
+
+[Deletion in B+ tree]
+Deletion requires more work to maintain the consistency. For example, we need 
+to update an internal node when deleting the smallest value at a leaf node 
+(which must be the smallest value of a certain subtree). My implementation is
+lazy deletion described in the IX document.
+
+[File/Page layout of B+ Tree]
+Each node of a B+ tree is stored in one page of the PF file, and page 0 is
+always the root node. Each page has 12-byte header. 8 bytes are required to 
+maintain doubly linked list among all nodes at the same depth. Another 4 bytes
+contains the number of keys in the node and a flag indicating the node is 
+internal or leaf. Exploiting the fact that the root node doesn't need 8 bytes
+for doubly linked list, I stored attribute type and length instead. Thus, we
+don't need the index file header at all. If index attribute is 4 bytes, a leaf
+node can accomodate up to 340(=4080/12) index entries.
+
+[Index Scan]
+When opening a scan handle, we search the first entry to be retrieved. After
+that, index scan always return RIDs such that the corresponding attribute 
+values are in nondecreasing order. Every time index scan returns a RID, it also
+decide that the next entry in the same node satisfies the scan condition. If 
+not, the next call doesn't have to read the page and just returns IX_EOF. To 
+support a deletion scan, index scan keeps track of the last returned RID.
+
+
+*** Testing ***
+
+[Correctness]
+First of all, I carefully tested the insertion/deletion/scan algorithm by 
+creating certain index depending on the aspect I want to confirm. I was able to
+decrease fanout easily by changing IX_PAGEHDR_SIZE in ix_internal.h, which was
+essential during development and debugging.
+After that, I modified the provided tester so that I can inserted much more 
+entries and adjust the duplicates. Since I cannot verify a large B+ tree by 
+myself, I also implemented IX_IndexHandle::VerifyStructure() and VerifyOrder()
+functions which confirms the consistency.
+(Test5/6/7 in ix_test.cc are some example tests I wrote)
+
+[Robustness]
+Since the interface was almost same as the RM component, it was not difficult
+for me to take care of unexpected situations. I examined all possible error
+handlings, and one of the shared testers also tested many situations.
+
+
+*** Etc. ***
+
+-No known bugs.
+-Some of shared testers in /usr/class/cs346/redbase/testers/ was used in the
+testing process.
+
+
+*** Thank you ***
+
