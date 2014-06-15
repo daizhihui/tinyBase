@@ -18,6 +18,7 @@
                                         // in a relation
 
 #define yywrap() 1
+#define YY_SKIP_YYWRAP
 void yyerror(const char *);
 
 //

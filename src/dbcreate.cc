@@ -12,6 +12,7 @@
 #include "rm.h"
 #include "sm.h"
 #include "redbase.h"
+#include "printer.h"
 
 using namespace std;
 
@@ -50,7 +51,7 @@ main(int argc, char *argv[])
     //create Catelog relcat, record type: Struct Relation
     rmn.CreateFile("relcat", sizeof(Relation));
     //create Catelog attrcat, record type: Struct Attr_Relation
-    rmn.CreateFile("attrcat", sizeof(Attr_Relation));
+    rmn.CreateFile("attrcat", sizeof(DataAttrInfo));
 
     // Fair amount to be filled in here!!
 
