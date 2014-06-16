@@ -523,7 +523,7 @@ RC SM_Manager::Load(const char *relName,
     //close the scan
     if((rc=filescan.CloseScan())) return (rc);
     
-    DataAttrInfo * d_a;
+    DataAttrInfo d_a[MAXATTRS];
     //open scan of attrcat
     if((rc=filescan.OpenScan(fileHandle_Attrcat,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
     
@@ -536,16 +536,12 @@ RC SM_Manager::Load(const char *relName,
             cout<<"hehe"<<endl;
             if((rc=rec.GetData(data))) return (rc);
             if(!strcmp(((DataAttrInfo*)data)->relName,relName)) {
-                cout<<"offset1"<<((DataAttrInfo*)data)->offset<<endl;
                 
                 //memcpy(&d_a[i],data,sizeof(DataAttrInfo));
                 strcpy(d_a[i].relName,((DataAttrInfo*)data)->relName);
                 strcpy(d_a[i].attrName,((DataAttrInfo*)data)->attrName);
                 d_a[i].attrType=((DataAttrInfo*)data)->attrType;
                 d_a[i].attrLength=((DataAttrInfo*)data)->attrLength;
-                d_a[i].offset=((DataAttrInfo*)data)->offset;
-                d_a[i].indexNo=((DataAttrInfo*)data)->indexNo;
-                cout<<"offset2"<<d_a[i].offset<<endl;
                 i++;
             }
         }
@@ -578,33 +574,32 @@ RC SM_Manager::Load(const char *relName,
         
         //seperate string by commas;
         while ((pos = str.find(delimiter)) != string::npos) {
-            cout<<"r1"<<endl;
             const char * token;
-            cout<<"r2"<<endl;
-            str.erase(0, pos + delimiter.length());
-            cout<<"r3"<<endl;
             token=str.substr(0, pos).c_str();
-            cout<<"r4"<<endl;
+            str.erase(0, pos + delimiter.length());
             switch (d_a[i].attrType) {
                     
                 case INT:{
-                    cout<<"offset"<<d_a[i].offset<<endl;
                     int data_int=atoi(token);
                     cout<<data_int<<endl;
                     *((int*)(record_data+d_a[i].offset+sizeof(int))) = data_int;
                     int wakeup_code = *((int*)(record_data+d_a[i].offset+sizeof(int)));
                     cout<<wakeup_code<<endl;
-                    cout<<"reach here"<<endl;
                     break;
                 }
                 case FLOAT:{
-                    int data_float=atof(token);
+                    float data_float=atof(token);
                     *((float*)(record_data+d_a[i].offset+sizeof(float))) = data_float;
+                    float wakeup_code = *((float*)(record_data+d_a[i].offset+sizeof(float)));
+                    cout<<wakeup_code<<endl;
                     break;
                 }
                     
                 case STRING:{
-                    strcat(record_data, token);
+                    memcpy(record_data+d_a[i].offset,token,d_a[i].attrLength);
+                    char data_char[d_a[i].attrLength];
+                    memcpy(data_char,record_data+d_a[i].offset,d_a[i].attrLength);
+                    cout<<data_char<<endl;
                     break;
                 }
                 default:
@@ -613,19 +608,33 @@ RC SM_Manager::Load(const char *relName,
             }
             i++;
         }
-        char token[d_a[i].attrLength];;
-        strncpy(token,str.c_str(),d_a[i].attrLength);
-        strncpy(token,str.substr(0, pos).c_str(),d_a[i].attrLength);
+        const char * token;
+        token=str.c_str();
         switch (d_a[i].attrType) {
-            case INT:
-                *((int*)(record_data+d_a[i].offset+sizeof(int))) = atoi(token);
+                
+            case INT:{
+                int data_int=atoi(token);
+                cout<<data_int<<endl;
+                *((int*)(record_data+d_a[i].offset+sizeof(int))) = data_int;
+                int wakeup_code = *((int*)(record_data+d_a[i].offset+sizeof(int)));
+                cout<<wakeup_code<<endl;
                 break;
-            case FLOAT:
-                *((float*)(record_data+d_a[i].offset+sizeof(float))) = atof(token);
+            }
+            case FLOAT:{
+                float data_float=atof(token);
+                *((float*)(record_data+d_a[i].offset+sizeof(float))) = data_float;
+                float wakeup_code = *((float*)(record_data+d_a[i].offset+sizeof(float)));
+                cout<<wakeup_code<<endl;
                 break;
-            case STRING:
-                strcat(record_data, token);
+            }
+                
+            case STRING:{
+                memcpy(record_data+d_a[i].offset,token,d_a[i].attrLength);
+                char data_char[d_a[i].attrLength];
+                memcpy(data_char,record_data+d_a[i].offset,d_a[i].attrLength);
+                cout<<data_char<<endl;
                 break;
+            }
             default:
                 // Test: wrong _attrType
                 return (SM_INVALIDATTR);
@@ -634,7 +643,7 @@ RC SM_Manager::Load(const char *relName,
         RID rid;
         //store the record to relation file
         if((rc=filehandle_r.InsertRec(record_data, rid))) return (rc);
-        cout<<"record_data"<<record_data<<endl;
+       // cout<<"record_data"<<record_data<<endl;
         strcpy(record_data,"");
     }
 
@@ -642,7 +651,7 @@ RC SM_Manager::Load(const char *relName,
     //close the data file
     myfile.close();
     
- /*   //open scan of attrcat
+    //open scan of attrcat
     if((rc=filescan.OpenScan(filehandle_r,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
     
     //scan all the records in attrcat
@@ -652,12 +661,38 @@ RC SM_Manager::Load(const char *relName,
         if(rc!=0 && rc!=RM_EOF) return (rc);
         if(rc!=RM_EOF){
             if((rc=rec.GetData(data))) return (rc);
-            cout<<data<<endl;
+            for (int i=0;i<attr_count;i++){
+                switch (d_a[i].attrType) {
+                        
+                    case INT:{
+                        int wakeup_code = *((int*)(data+d_a[i].offset+sizeof(int)));
+                        cout<<wakeup_code<<endl;
+                        break;
+                    }
+                    case FLOAT:{
+                        float wakeup_code = *((float*)(data+d_a[i].offset+sizeof(float)));
+                        cout<<wakeup_code<<endl;
+                        break;
+                    }
+                        
+                    case STRING:{
+                        char data_char[d_a[i].attrLength];
+                        memcpy(data_char,data+d_a[i].offset,d_a[i].attrLength);
+                        cout<<data_char<<endl;
+                        break;
+                        break;
+                    }
+                    default:
+                        // Test: wrong _attrType
+                        return (SM_INVALIDATTR);
                 }
+            }
+            
+        }
     }
     
     //close the scan
-    if((rc=filescan.CloseScan())) return (rc);*/
+    if((rc=filescan.CloseScan())) return (rc);
     
     //close the relation file
     if((rc=Rmm->CloseFile(filehandle_r))) return (rc);
