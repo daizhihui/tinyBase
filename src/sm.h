@@ -60,7 +60,29 @@ private:
 
 //struct for Catalog relcat
 struct Relation{
-    const char *relName; //relation name
+    // Default constructor
+    Relation() {
+        memset(relName, 0, MAXNAME + 1);
+    };
+    // Copy constructor
+    Relation( const Relation &d ) {
+        strcpy (relName, d.relName);
+        tupleLength = d.tupleLength;
+        attrCount = d.attrCount;
+        indexCount = d.indexCount;
+    };
+    
+    Relation& operator=(const Relation &d) {
+        if (this != &d) {
+            strcpy (relName, d.relName);
+            tupleLength = d.tupleLength;
+            attrCount = d.attrCount;
+            indexCount = d.indexCount;
+        }
+        return (*this);
+    };
+
+    char relName[MAXNAME+1]; //relation name
     int tupleLength; //tuple length in bytes
     int attrCount; //number of attributes
     int indexCount; //number of indexed attributes
