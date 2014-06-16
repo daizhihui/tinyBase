@@ -39,6 +39,10 @@ int main(int argc, char *argv[])
     //
     // *********************************
 
+    // The database name is the second argument
+   // dbname = strrchr( argv[1], '/' );
+    dbname=argv[1];
+    
 // initialize RedBase components
     PF_Manager pfm;
     RM_Manager rmm(pfm);
