@@ -322,9 +322,6 @@ RC SM_Manager::DropTable(const char *relName)
 RC SM_Manager::CreateIndex(const char *relName,
                            const char *attrName)
 {
-    cout << "CreateIndex\n"
-    << "   relName =" << relName << "\n"
-    << "   attrName=" << attrName << "\n";
     
     RC rc;
     
@@ -337,9 +334,12 @@ RC SM_Manager::CreateIndex(const char *relName,
     
     bool flag_rel_attr_exist=false;
     // check if the index already exists
-    int max_index=0;
-    //pointer to the record
+    int max_index=-1;
+    
+    //store in DataAttrInfo of the attribute that we want to create index
     DataAttrInfo attr_relation;
+    //pointer to the record in attrcat
+    RID record_change;
     char * data;
     while(rc!=RM_EOF){
         //get records until the end
@@ -347,35 +347,32 @@ RC SM_Manager::CreateIndex(const char *relName,
         if(rc!=0 && rc!=RM_EOF) return (rc);
         if(rc!=RM_EOF){
             if((rc=rec.GetData(data))) return (rc);
-            // copy record to attr_relation
-            memcpy(&attr_relation,data,sizeof(DataAttrInfo));
             
             //calculate the max index already exists, then create index max_index+1
-            if(attr_relation.indexNo>max_index) max_index=attr_relation.indexNo;
-            
+            if(((DataAttrInfo*)data)->indexNo>max_index) max_index=((DataAttrInfo*)data)->indexNo;
+
             // the index already exists, return error SM_INDEXEXIST
-            if(attr_relation.relName==relName && attr_relation.attrName==attrName && attr_relation.indexNo!=-1) {
+            if((!strcmp(((DataAttrInfo*)data)->relName,relName))&& (!strcmp(((DataAttrInfo*)data)->attrName,attrName)) && (((DataAttrInfo*)data)->indexNo!=-1)) {
                 flag_rel_attr_exist=true;
                 return (SM_INDEXEXIST);
             }
-            if(attr_relation.relName==relName && attr_relation.attrName==attrName && attr_relation.indexNo==-1) {
+            
+            //the index doesn't exist
+            if((!strcmp(((DataAttrInfo*)data)->relName,relName))&& (!strcmp(((DataAttrInfo*)data)->attrName,attrName)) && (((DataAttrInfo*)data)->indexNo==-1)) {
+                rec.GetRid(record_change);
                 flag_rel_attr_exist=true;
-                break;
+                memcpy(&attr_relation,data,sizeof(DataAttrInfo));
             }
             
         }
     }
     
     // relation name or attribute name not exist in attrcat
-    if(flag_rel_attr_exist==false) return (SM_INVALIDRELNAME);
+    if(!flag_rel_attr_exist) return (SM_INVALIDRELNAME);
     
     // close the filescan
     if((rc=filescan.CloseScan())) return (rc);
     
-    /*char filename[(unsigned)strlen(relName)+(unsigned)strlen(attrName)+1];//filename = relname.attribute name as the new filename
-    strcpy(filename, relName);
-    strcat(filename,".");
-    strcat(filename, attrName);*/
     
     // Call IX_IndexHandle::CreateIndex to create a index file
     if((rc=Ixm->CreateIndex(relName, max_index+1, attr_relation.attrType, attr_relation.attrLength))) return (rc);
@@ -384,6 +381,7 @@ RC SM_Manager::CreateIndex(const char *relName,
     IX_IndexHandle indexhandle;
     if((rc=Ixm->OpenIndex(relName, max_index+1, indexhandle))) return (rc);
     
+    //file handle of table
     RM_FileHandle filehandle_rel;
     // Call RM_Manager::OpenFile to open relation file
     if((rc=Rmm->OpenFile(relName, filehandle_rel))) return (rc);
@@ -408,11 +406,16 @@ RC SM_Manager::CreateIndex(const char *relName,
         }
     }
     
-    // update information in attrcat
-    attr_relation.indexNo=max_index+1;
-    
-    // update attrcat to disk
+    // update information in attrcat to disk
+    RM_Record r;
+    if((rc=fileHandle_Attrcat.GetRec(record_change, r))) return (rc);
+    char * data_change;
+    r.GetData(data_change);
+    ((DataAttrInfo*)data_change)->indexNo=max_index+1;
+    fileHandle_Attrcat.UpdateRec(r);
+    //update relcat in disk
     if((rc=fileHandle_Attrcat.ForcePages())) return (rc);
+    
     
     //Close scan
     if((rc=filescan.CloseScan())) return (rc);
@@ -422,7 +425,40 @@ RC SM_Manager::CreateIndex(const char *relName,
     
     //close index file
     if(Ixm->CloseIndex(indexhandle)) return (rc);
+
+    //open scan of relcat
+    if((rc=filescan.OpenScan(fileHandle_Relcat,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
     
+    //pointer to the record in relcat and attrcat
+    char * data_relcat;
+    //scan all the records in relcat
+    while(rc!=RM_EOF){
+        //get records until the end
+        rc=filescan.GetNextRec(rec);
+        if(rc!=0 && rc!=RM_EOF){
+            return (rc);
+        }
+        if(rc!=RM_EOF){
+            if((rc=rec.GetData(data_relcat))) return (rc);
+            
+            if(!strcmp(((Relation*)data_relcat)->relName,relName)) {
+                int indexC=0;
+                indexC=((Relation*)data_relcat)->indexCount;
+                ((Relation*)data_relcat)->indexCount=indexC+1;
+                fileHandle_Relcat.UpdateRec(rec);
+                //update relcat in disk
+                if((rc=fileHandle_Relcat.ForcePages())) return (rc);
+                break;
+            }
+        }
+    }
+    
+    // close the scan
+    if((rc=filescan.CloseScan())) return (rc);
+
+    cout << "CreateIndex\n"
+    << "   relName =" << relName << "\n"
+    << "   attrName=" << attrName << "\n";
     return (0);
 }
 
@@ -631,6 +667,21 @@ RC SM_Manager::Load(const char *relName,
         RID rid;
         //store the record to relation file
         if((rc=filehandle_r.InsertRec(record_data, rid))) return (rc);
+        
+        //insert index if index file exists
+        for (int k=0;k<attr_count;k++) {
+            if(d_a[k].indexNo!=-1){
+                // Call IX_IndexHandle::OpenIndex to open the index file
+                IX_IndexHandle indexhandle;
+                if((rc=Ixm->OpenIndex(relName, d_a[k].indexNo, indexhandle))) return (rc);
+                char data_index[d_a[k].attrLength];
+                memcpy(data_index,record_data+d_a[k].offset,d_a[k].attrLength);
+                if((rc=indexhandle.InsertEntry(data_index, rid))) return (rc);
+                //close index file
+                if(Ixm->CloseIndex(indexhandle)) return (rc);
+
+            }
+        }
        // cout<<"record_data"<<record_data<<endl;
         strcpy(record_data,"");
     }
