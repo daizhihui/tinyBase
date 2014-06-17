@@ -332,7 +332,8 @@ RC SM_Manager::CreateIndex(const char *relName,
     // scan all the records in attrcat
     if((rc=filescan.OpenScan(fileHandle_Attrcat, INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
     
-    bool flag_rel_attr_exist=false;
+    bool flag_rel_exist=false;
+    bool flag_attr_exist=false;
     // check if the index already exists
     int max_index=-1;
     
@@ -351,16 +352,20 @@ RC SM_Manager::CreateIndex(const char *relName,
             //calculate the max index already exists, then create index max_index+1
             if(((DataAttrInfo*)data)->indexNo>max_index) max_index=((DataAttrInfo*)data)->indexNo;
 
+            //check if relation name exists
+            if(!strcmp(((DataAttrInfo*)data)->relName,relName)) flag_rel_exist=true;
+            
+            //check if attribute name exists
+            if(!strcmp(((DataAttrInfo*)data)->attrName,attrName)) flag_attr_exist=true;
+            
             // the index already exists, return error SM_INDEXEXIST
             if((!strcmp(((DataAttrInfo*)data)->relName,relName))&& (!strcmp(((DataAttrInfo*)data)->attrName,attrName)) && (((DataAttrInfo*)data)->indexNo!=-1)) {
-                flag_rel_attr_exist=true;
                 return (SM_INDEXEXIST);
             }
             
             //the index doesn't exist
             if((!strcmp(((DataAttrInfo*)data)->relName,relName))&& (!strcmp(((DataAttrInfo*)data)->attrName,attrName)) && (((DataAttrInfo*)data)->indexNo==-1)) {
                 rec.GetRid(record_change);
-                flag_rel_attr_exist=true;
                 memcpy(&attr_relation,data,sizeof(DataAttrInfo));
             }
             
@@ -368,7 +373,8 @@ RC SM_Manager::CreateIndex(const char *relName,
     }
     
     // relation name or attribute name not exist in attrcat
-    if(!flag_rel_attr_exist) return (SM_INVALIDRELNAME);
+    if(!flag_rel_exist) return (SM_INVALIDRELNAME);
+    if(!flag_attr_exist) return(SM_INVALIDATTRNAME);
     
     // close the filescan
     if((rc=filescan.CloseScan())) return (rc);
@@ -718,56 +724,6 @@ RC SM_Manager::Load(const char *relName,
     //close the relation file
     if((rc=Rmm->CloseFile(filehandle_r))) return (rc);
     
-/*    // open relation file to store records read from file
-    if((rc=Rmm->OpenFile(relName, filehandle_r))) return (rc);
-    
-    //open scan of attrcat
-    if((rc=filescan.OpenScan(filehandle_r,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
-    
-    //scan all the records in attrcat
-    while(rc!=RM_EOF){
-        //get records until the end
-        rc=filescan.GetNextRec(rec);
-        if(rc!=0 && rc!=RM_EOF) return (rc);
-        if(rc!=RM_EOF){
-            if((rc=rec.GetData(data))) return (rc);
-            for (int i=0;i<4;i++){
-                switch (d_a[i].attrType) {
-                    case INT:{
-                        int wakeup_code = *((int*)(data+d_a[i].offset));
-                        cout<<d_a[i].offset<<endl;
-                        cout<<wakeup_code<<endl;
-                        break;
-                    }
-                    case FLOAT:{
-                        float wakeup_code = *((float*)(data+d_a[i].offset));
-                        cout<<d_a[i].offset<<endl;
-                        cout<<wakeup_code<<endl;
-                        break;
-                    }
-                        
-                    case STRING:{
-                        char data_char[d_a[i].attrLength];
-                        cout<<d_a[i].offset<<endl;
-                        memcpy(data_char,data+d_a[i].offset,d_a[i].attrLength);
-                        cout<<data_char<<endl;
-                        break;
-                    }
-                    default:
-                        // Test: wrong _attrType
-                        return (SM_INVALIDATTR);
-                }
-            }
-            
-        }
-    }
-    
-    //close the scan
-    if((rc=filescan.CloseScan())) return (rc);
-    
-    //close the relation file
-    if((rc=Rmm->CloseFile(filehandle_r))) return (rc);*/
-
     cout << "Load\n"
     << "   relName =" << relName << "\n"
     << "   fileName=" << fileName << "\n";
