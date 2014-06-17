@@ -533,7 +533,6 @@ RC SM_Manager::Load(const char *relName,
         rc=filescan.GetNextRec(rec);
         if(rc!=0 && rc!=RM_EOF) return (rc);
         if(rc!=RM_EOF){
-            cout<<"hehe"<<endl;
             if((rc=rec.GetData(data))) return (rc);
             if(!strcmp(((DataAttrInfo*)data)->relName,relName)) {
                 
@@ -542,6 +541,8 @@ RC SM_Manager::Load(const char *relName,
                 strcpy(d_a[i].attrName,((DataAttrInfo*)data)->attrName);
                 d_a[i].attrType=((DataAttrInfo*)data)->attrType;
                 d_a[i].attrLength=((DataAttrInfo*)data)->attrLength;
+                d_a[i].offset=((DataAttrInfo*)data)->offset;
+                d_a[i].indexNo=((DataAttrInfo*)data)->indexNo;
                 i++;
             }
         }
@@ -566,7 +567,6 @@ RC SM_Manager::Load(const char *relName,
         string str;
         //read file line by line
         getline(myfile, str);
-        cout<<"str"<<str<<endl;
         string delimiter = ",";
         
         size_t pos = 0;
@@ -581,25 +581,19 @@ RC SM_Manager::Load(const char *relName,
                     
                 case INT:{
                     int data_int=atoi(token);
-                    cout<<data_int<<endl;
-                    *((int*)(record_data+d_a[i].offset+sizeof(int))) = data_int;
-                    int wakeup_code = *((int*)(record_data+d_a[i].offset+sizeof(int)));
-                    cout<<wakeup_code<<endl;
+                    *((int*)(record_data+d_a[i].offset)) = data_int;
                     break;
                 }
                 case FLOAT:{
                     float data_float=atof(token);
-                    *((float*)(record_data+d_a[i].offset+sizeof(float))) = data_float;
-                    float wakeup_code = *((float*)(record_data+d_a[i].offset+sizeof(float)));
-                    cout<<wakeup_code<<endl;
+                    *((float*)(record_data+d_a[i].offset)) = data_float;
                     break;
                 }
                     
                 case STRING:{
-                    memcpy(record_data+d_a[i].offset,token,d_a[i].attrLength);
                     char data_char[d_a[i].attrLength];
-                    memcpy(data_char,record_data+d_a[i].offset,d_a[i].attrLength);
-                    cout<<data_char<<endl;
+                    memcpy(data_char,token,d_a[i].attrLength);
+                    memcpy(record_data+d_a[i].offset,data_char,d_a[i].attrLength);
                     break;
                 }
                 default:
@@ -614,25 +608,19 @@ RC SM_Manager::Load(const char *relName,
                 
             case INT:{
                 int data_int=atoi(token);
-                cout<<data_int<<endl;
-                *((int*)(record_data+d_a[i].offset+sizeof(int))) = data_int;
-                int wakeup_code = *((int*)(record_data+d_a[i].offset+sizeof(int)));
-                cout<<wakeup_code<<endl;
+                *((int*)(record_data+d_a[i].offset)) = data_int;
                 break;
             }
             case FLOAT:{
                 float data_float=atof(token);
-                *((float*)(record_data+d_a[i].offset+sizeof(float))) = data_float;
-                float wakeup_code = *((float*)(record_data+d_a[i].offset+sizeof(float)));
-                cout<<wakeup_code<<endl;
+                *((float*)(record_data+d_a[i].offset)) = data_float;
                 break;
             }
                 
             case STRING:{
-                memcpy(record_data+d_a[i].offset,token,d_a[i].attrLength);
                 char data_char[d_a[i].attrLength];
-                memcpy(data_char,record_data+d_a[i].offset,d_a[i].attrLength);
-                cout<<data_char<<endl;
+                memcpy(data_char,token,d_a[i].attrLength);
+                memcpy(record_data+d_a[i].offset,token,d_a[i].attrLength);
                 break;
             }
             default:
@@ -651,6 +639,12 @@ RC SM_Manager::Load(const char *relName,
     //close the data file
     myfile.close();
     
+    //close the relation file
+    if((rc=Rmm->CloseFile(filehandle_r))) return (rc);
+    
+/*    // open relation file to store records read from file
+    if((rc=Rmm->OpenFile(relName, filehandle_r))) return (rc);
+    
     //open scan of attrcat
     if((rc=filescan.OpenScan(filehandle_r,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
     
@@ -661,25 +655,26 @@ RC SM_Manager::Load(const char *relName,
         if(rc!=0 && rc!=RM_EOF) return (rc);
         if(rc!=RM_EOF){
             if((rc=rec.GetData(data))) return (rc);
-            for (int i=0;i<attr_count;i++){
+            for (int i=0;i<4;i++){
                 switch (d_a[i].attrType) {
-                        
                     case INT:{
-                        int wakeup_code = *((int*)(data+d_a[i].offset+sizeof(int)));
+                        int wakeup_code = *((int*)(data+d_a[i].offset));
+                        cout<<d_a[i].offset<<endl;
                         cout<<wakeup_code<<endl;
                         break;
                     }
                     case FLOAT:{
-                        float wakeup_code = *((float*)(data+d_a[i].offset+sizeof(float)));
+                        float wakeup_code = *((float*)(data+d_a[i].offset));
+                        cout<<d_a[i].offset<<endl;
                         cout<<wakeup_code<<endl;
                         break;
                     }
                         
                     case STRING:{
                         char data_char[d_a[i].attrLength];
+                        cout<<d_a[i].offset<<endl;
                         memcpy(data_char,data+d_a[i].offset,d_a[i].attrLength);
                         cout<<data_char<<endl;
-                        break;
                         break;
                     }
                     default:
@@ -695,7 +690,7 @@ RC SM_Manager::Load(const char *relName,
     if((rc=filescan.CloseScan())) return (rc);
     
     //close the relation file
-    if((rc=Rmm->CloseFile(filehandle_r))) return (rc);
+    if((rc=Rmm->CloseFile(filehandle_r))) return (rc);*/
 
     cout << "Load\n"
     << "   relName =" << relName << "\n"
@@ -708,7 +703,7 @@ RC SM_Manager::Print(const char *relName)
     cout << "Print\n"
          << "   relName=" << relName << "\n";
     
-    DataAttrInfo * attributes;
+    DataAttrInfo attributes[MAXATTRS];
     
     RC rc;
     RM_FileScan filescan;
@@ -716,7 +711,6 @@ RC SM_Manager::Print(const char *relName)
     if((rc=filescan.OpenScan(fileHandle_Attrcat,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
     
     //scan all the records in attrcat
-    DataAttrInfo a_r;
     bool flag_exist=false;
     RM_Record rec;
     int i=0;
@@ -729,10 +723,9 @@ RC SM_Manager::Print(const char *relName)
         if(rc!=RM_EOF){
             //copy record to a_r
             rc=rec.GetData(data);
-            memcpy(&a_r,data,sizeof(DataAttrInfo));
-            if(!strcmp(a_r.relName,relName)) {
+            if(!strcmp(((DataAttrInfo*)data)->relName,relName)) {
                 // take all the DataAttrInfo of the relation relName
-                attributes[i]=a_r;
+                memcpy(&attributes[i],data,sizeof(DataAttrInfo));
                 flag_exist=true;
                 i++;
                 attr_count++;
