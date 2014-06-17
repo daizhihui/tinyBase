@@ -63,6 +63,7 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
     for (i = 0; i < nConditions; i++)
         cout << "   conditions[" << i << "]:" << conditions[i] << "\n";
 
+
     return 0;
 }
 
@@ -129,6 +130,12 @@ RC QL_Manager::Update(const char *relName,
         cout << "   conditions[" << i << "]:" << conditions[i] << "\n";
 
     return 0;
+}
+
+RC QL_Manager::createQueryTree(int nSelAttrs, const RelAttr selAttrs[],
+                               int nRelations, const char * const relations[],
+                               int nConditions, const Condition conditions[]){
+
 }
 
 //
