@@ -7,86 +7,82 @@
 #include "redbase.h"
 #include "ql.h"
 
-void QueryNode::addChild(QueryNode* n)
+
+inline QueryTree::const_iterator QueryTree::begin() const
 {
-  n->remove_parent_ptr(); // if n has a parent, disconnect it
-  n->parent() = this;
-  _children.push_back(n);
+    QueryNode *curr = root;
+    // if the tree is not empty, the first node
+      // inorder is the farthest node left from root
+      if (curr != NULL)
+        while (curr->left != NULL)
+          curr = curr->left;
+ return const_iterator(curr,this);
 }
 
-
-
-void QueryNode::remove_parent_ptr()
-{
-  if (parent()) {
-    auto i = parent()->arg_begin();
-    while (*i != this) ++i; // Must be found, don't check arg_end()
-    parent()->arg_erase(i);
-  }
-}
-
-inline QueryNode::const_iterator QueryNode::begin() const
-{
- return const_iterator(this,this);
-}
-
-inline QueryNode::const_iterator QueryNode::end() const
+inline QueryTree::const_iterator QueryTree::end() const
 {
  return const_iterator(nullptr,this);
 }
 
 // Prefix increment
- nodeIterato& nodeIterator::operator++() {
-  if (nptr->is_leaf()) {
-   // This is a leaf node, so we need to climb up
-   for (;;) {
-    if (nptr == root) {
-     nptr = nullptr;
-     break;
-    }
-    // note: if nptr is not root, it must have a parent
-    const QueryNode* par = nptr->parent();
-    // Determine which child we are
-    auto next = par->arg_begin();
-    for ( ; *next != nptr ; ++next); // no bounds check: nptr is in array
-    ++next; // bring to next
-    if (next != par->arg_end()) {
-     // Branch down to next child
-     nptr = *next;
-     break;
-    } else {
-     // We were the last child of parent node, so continue up
-     nptr = par;
-    }
-   }
-  } else {
-   // Not a leaf node, so move down one step to the left
-   nptr = nptr->arg_first();
-  }
-  return *this;
+ nodeIterator & nodeIterator::operator++() {
+     QueryNode *p;
+
+      if (nptr == NULL)
+        {
+        // ++ from end(). get the root of the tree
+        nptr = tree->root;
+
+        // error! ++ requested for an empty tree
+        if (nptr == NULL)
+          throw
+            underflowError("nodeIterator iterator operator++ (): tree empty");
+
+        // move to the smallest value in the tree,
+        // which is the first node inorder
+        while (nptr->left != NULL) {
+          nptr = nptr->left;
+          }
+        }
+      else
+        if (nptr->right != NULL)
+          {
+           // successor is the furthest left node of
+           // right subtree
+           nptr = nptr->right;
+
+           while (nptr->left != NULL) {
+             nptr = nptr->left;
+             }
+          }
+        else
+          {
+            p = nptr->parent;
+            while (p != NULL && nptr == p->right)
+              {
+                nptr = p;
+                p = p->parent;
+              }
+            nptr = p;
+          }
+
+      return *this;
  }
 
  // Prefix decrement
- nodeIterato& nodeIterator::operator--() {
+ nodeIterator& nodeIterator::operator--() {
    if (nptr) {
     // note: -- on first element is undefined => we may safely move up if not left
-    if (nptr == nptr->parent()->arg_first()) {
-     // nptr is first child => move up
-     nptr = nptr->parent();
+    if (nptr->left) {
+     // nptr has child => move down
+     nptr = nptr->left;
     } else {
-     // nptr is not first child => move up one step, then traverse down
-     // find pointer from parent
-     auto prev = --nptr->parent()->arg_end();
-     for ( ; *prev != nptr; --prev);
-     --prev; // previous from nptr (prev can't be argv.front())
-     nptr = *prev;
-     // Now traverse down right most
-     while (!nptr->is_leaf()) nptr = nptr->arg_last();
+     nptr = nptr->parent;
     }
    } else {
     // nptr at end, so we need to use root to get to last element
-    for (nptr = root; !nptr->is_leaf(); ) {
-     nptr = nptr->arg_last();
+    for (nptr = root; nptr->left != NULL; ) {
+     nptr = nptr->left;
     }
    }
    return *this;

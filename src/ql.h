@@ -52,74 +52,102 @@ public:
         const Condition conditions[]);   // conditions in where clause
 
 private:
-    QueryNode *queryNode;
+    SM_Manager *_smm;
+    IX_Manager *_ixm;
+    RM_Manager *_rmm;
+    QueryTree *queryTree;
+    char* getRelNameForUniqueAttr(const RelAttr &relAttr, int nRelations, const char * const relations[]);
     RC createQueryTree(int nSelAttrs, const RelAttr selAttrs[],
                        int nRelations, const char * const relations[],
                        int nConditions, const Condition conditions[]);    //create a query logic tree for the execution plan
 
 };
 
+enum Operation{
+    IdexScanSelection,
+    FileScanSelection,
+    Projection,
+    NestedJoin,
+    HashJoin,
+    SortMergeJoin
+};
+
+struct InternalNodeValue{
+    Operation operation;
+    //int nRelations; //1 for projection or restriction or 2 for join
+    const Condition *condition; //operation condition
+};
+
+struct LeafValue{
+    const char * const relation; //
+};
+
+union NodeValue{
+    InternalNodeValue internalValue;
+    LeafValue leafValue;
+};
 
 class QueryNode{
 public:
     QueryNode() : _parent(nullptr) { }
     // Construct node with one child
     QueryNode(QueryNode* n) : _parent(nullptr) { addChild(n); }
-    typedef std::vector<QueryNode*>::iterator arg_iterator;
-    typedef std::vector<QueryNode*>::const_iterator const_arg_iterator;
-    typedef std::vector<QueryNode*>::size_type arity_type;
 
-    void addChild(QueryNode* n);
-    //void delChild(QueryNode* n);
-    arity_type arity() const { return _children.size(); }
-    bool is_leaf() const { return _children.empty(); }
-    // Set/Get parent
-    QueryNode*& parent() { return _parent; }
-    const QueryNode* parent() const { return _parent; }
-    // Iterator access to arguments
-    arg_iterator arg_begin() { return _children.begin(); }
-    const_arg_iterator arg_begin() const { return _children.begin(); }
-    arg_iterator arg_end() { return _children.end(); }
+    //constructor
+    QueryNode (const NodeValue& item, QueryNode *lptr = NULL,
+         QueryNode*rptr = NULL, QueryNode *pptr = NULL):
+       nodeValue(item), left(lptr), right(rptr), parent(pptr){
+    }
 
-    const_arg_iterator arg_end() const { return _children.end(); }
-    // Erase argument (use const_arg_iterator if your compiler properly supports C++11)
-    arg_iterator  arg_erase(arg_iterator i) { return _children.erase(i); }
-    // Get argument
-    QueryNode* arg_first() { return _children.front(); }
-    QueryNode* arg_last() { return _children.back(); }
-    QueryNode* arg(arity_type i) { return _children[i]; }
 private:
-    QueryNode* _parent;
-    std::vector<QueryNode*> _children;
-    void remove_parent_ptr();
-
+    QueryNode* parent;
+    QueryNode* left;
+    QueryNode* right;
+    NodeValue nodeValue;     //content in a node
+    bool isLeaf; //the leaf node contains original relations
 };
 
+
+class QueryTree{
+    typedef const nodeIterator const_iterator;
+    typedef nodeIterator iterator;
+    //iterator operation
+    inline const_iterator begin() const; //return an iterator
+    inline const_iterator end() const; //return an iterator
+
+private:
+    QueryNode* root;
+};
+
+
+
+
+
 class nodeIterator {
-        const QueryNode* nptr; // pointer to node
-        const QueryNode* root; // pointer to subtree root
+
 public:
- typedef std::bidirectional_iterator_tag iterator_category;
- typedef QueryNode value_type;
- typedef QueryNode* pointer;
- typedef QueryNode& reference;
- typedef ptrdiff_t difference_type;
-
-        // Construct iterator from pointer to node
- nodeIterator(const QueryNode* fp,const QueryNode* r) : nptr(fp),root(r) { }
+    // Compare two iterators
+    bool operator==(const nodeIterator& di) const { return nptr == di.nptr; }
+    bool operator!=(const nodeIterator& di) const { return !(*this == di); }
 
 
-        // Compare two iterators
- bool operator==(const nodeIterator& di) const { return nptr == di.nptr; }
- bool operator!=(const nodeIterator& di) const { return !(*this == di); }
+    // Dereferencing
+    const QueryNode& operator*() const { return *nptr;  }
+    const QueryNode* operator->() const { return nptr; }
+    nodeIterator& operator++();
+    nodeIterator& operator--();
 
-
-        // Dereferencing
-
- const QueryNode& operator*() const { return *nptr;  }
- const QueryNode* operator->() const { return nptr; }
- nodeIterator& operator++();
- nodeIterator& operator--();
+private:
+    // nptr is the current location in the tree. we can move
+    // freely about the tree using left, right, and parent.
+    // tree is the address of the stree object associated
+    // with this iterator. it is used only to access the
+    // root pointer, which is needed for ++ and --
+    // when the iterator value is end()
+    const QueryNode* nptr; // pointer to node
+    const QueryTree* tree; // pointer to tree
+    // Construct iterator from pointer to node
+    nodeIterator(const QueryNode* fp,const QueryTree* t) : nptr(fp),tree(t) { }
 };
 //
 // Print-error function

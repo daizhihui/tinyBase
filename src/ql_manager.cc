@@ -28,7 +28,11 @@ using namespace std;
 QL_Manager::QL_Manager(SM_Manager &smm, IX_Manager &ixm, RM_Manager &rmm)
 {
     // Can't stand unused variable warnings!
-    assert (&smm && &ixm && &rmm);
+    //assert (&smm && &ixm && &rmm);
+    _smm = &smm;
+    _ixm = &ixm;
+    _rmm = &rmm;
+
 }
 
 //
@@ -136,6 +140,44 @@ RC QL_Manager::createQueryTree(int nSelAttrs, const RelAttr selAttrs[],
                                int nRelations, const char * const relations[],
                                int nConditions, const Condition conditions[]){
 
+    //if rhs is a value, it's restriction, must be done before join
+    for (i = 0; i < nConditions; i++){
+        if(!conditions[i].bRhsIsAttr) {
+            char * relationL = getRelNameForUniqueAttr(conditions[i].lhsAttr,nRelations,relations[]);
+            //verify if this relation has index on attribut
+            //TODO
+            bool isIndexed = true;
+            //define an internal node
+            NodeValue item;
+            InternalNodeValue iv;
+            iv.condition = &conditions[i];
+            if(isIndexed){
+                iv.operation = IdexScanSelection;
+            }
+            item.internalValue =iv;
+            QueryNode *pptr = new QueryNode(item,0,0,0);
+            //define a leaf node
+            LeafValue leaf;
+            leaf.relation = relationL;
+            item.leafValue =leaf;
+            QueryNode * leafNode = new QueryNode(item,0,0,pptr);
+            pptr->left = leafNode;
+        }
+        else{
+
+        }
+    }
+}
+
+//to get relation name for relAttr even relAttr is not "rel.attr"
+char* QL_Manager::getRelName(const RelAttr &relAttr, int nRelations, const char * const relations[]){
+    if(relAttr.relName != NULL) return relAttr.relName;
+    char* relName;
+    //to search metadata about all the relations and find the attribut
+        //TODO
+    //_smm->
+    //relAttr.attrName;
+    return relName;
 }
 
 //
