@@ -827,8 +827,30 @@ RC SM_Manager::Help()
     attributes[0].offset=0;
     attributes[0].indexNo=-1;
     
+    strcpy(attributes[1].relName,"Help");
+    strcpy(attributes[1].attrName,"TupleLength");
+    attributes[1].attrLength=sizeof(int);
+    attributes[1].attrType=INT;
+    attributes[1].offset=MAXNAME;
+    attributes[1].indexNo=-1;
+    
+    strcpy(attributes[2].relName,"Help");
+    strcpy(attributes[2].attrName,"AttrCount");
+    attributes[2].attrLength=sizeof(int);
+    attributes[2].attrType=INT;
+    attributes[2].offset=MAXNAME+sizeof(int);
+    attributes[2].indexNo=-1;
+    
+    strcpy(attributes[3].relName,"Help");
+    strcpy(attributes[3].attrName,"IndexCount");
+    attributes[3].attrLength=sizeof(int);
+    attributes[3].attrType=INT;
+    attributes[3].offset=MAXNAME+2*sizeof(int);
+    attributes[3].indexNo=-1;
+
+    
     // set a printer
-    Printer p(attributes,1);
+    Printer p(attributes,4);
     
     //print the header
     p.PrintHeader(cout);
@@ -849,10 +871,13 @@ RC SM_Manager::Help()
         if(rc!=RM_EOF){
             //get record data
             if((rc=rec.GetData(data))) return (rc);
-            char p_relname[MAXNAME];
-            memcpy(p_relname,((Relation*)data)->relName,MAXNAME);
+            char p_relation[MAXNAME+3*sizeof(int)];
+            memcpy(p_relation+attributes[0].offset,((Relation*)data)->relName,attributes[0].attrLength);
+            *((int*)(p_relation+attributes[1].offset))=((Relation*)data)->tupleLength;
+            *((int*)(p_relation+attributes[2].offset))=((Relation*)data)->attrCount;
+            *((int*)(p_relation+attributes[3].offset))=((Relation*)data)->indexCount;
             //print the relation name
-            p.Print(cout, p_relname);
+            p.Print(cout, p_relation);
         }
     }
 
