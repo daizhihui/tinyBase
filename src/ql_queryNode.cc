@@ -7,6 +7,7 @@
 #include "redbase.h"
 #include "ql.h"
 
+QueryTree::QueryTree(QueryNode * r):root(r){}
 
 inline QueryTree::const_iterator QueryTree::begin() const
 {
@@ -23,6 +24,7 @@ inline QueryTree::const_iterator QueryTree::end() const
 {
  return const_iterator(nullptr,this);
 }
+
 
 // Prefix increment
  nodeIterator & nodeIterator::operator++() {

@@ -56,6 +56,7 @@ private:
     IX_Manager *_ixm;
     RM_Manager *_rmm;
     QueryTree *queryTree;
+    RC iteratorExecution(QueryTree * tree, const PF_PageHandle&inputPageHandle, const PF_PageHandle&outputPageHandle);
     char* getRelNameForUniqueAttr(const RelAttr &relAttr, int nRelations, const char * const relations[]);
     RC createQueryTree(int nSelAttrs, const RelAttr selAttrs[],
                        int nRelations, const char * const relations[],
@@ -75,7 +76,7 @@ enum Operation{
 struct InternalNodeValue{
     Operation operation;
     //int nRelations; //1 for projection or restriction or 2 for join
-    const Condition *condition; //operation condition
+    const Condition **condition; //operation condition
 };
 
 struct LeafValue{
@@ -111,12 +112,14 @@ private:
 class QueryTree{
     typedef const nodeIterator const_iterator;
     typedef nodeIterator iterator;
+    QueryTree();
     //iterator operation
     inline const_iterator begin() const; //return an iterator
     inline const_iterator end() const; //return an iterator
 
 private:
     QueryNode* root;
+    int numLayer;
 };
 
 
