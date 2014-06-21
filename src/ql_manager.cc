@@ -17,6 +17,7 @@
 #include "sm.h"
 #include "ix.h"
 #include "rm.h"
+#include "printer.h"
 
 using namespace std;
 
@@ -67,6 +68,40 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
     for (i = 0; i < nConditions; i++)
         cout << "   conditions[" << i << "]:" << conditions[i] << "\n";
 
+
+    DataAttrInfo attributes[nSelAttrs];
+    //DataAttrInfo records
+    for (int i=0;i<nSelAttrs;i++){
+        //get attribut length
+        //TODO
+        int attrLength = 0;
+        AttrType attrType = INT;
+        strcpy(attributes[i].relName,"table_OUT");
+        strcpy(attributes[i].attrName,selAttrs[i].attrName);
+        //calculate offset
+        int offset=0;
+        for (int j=0;j<i;j++){
+            offset+= length;
+        }
+        attributes[i].offset = offset;
+        attributes[i].attrType= attrType;
+        attributes[i].attrLength= attrLength;
+        attributes[i].indexNo=-1;
+    }
+          //define a printer
+    Printer p(attributes,nSelAttrs);
+    p.PrintHeader(cout);
+    QueryTree *queryTree = new QueryTree(NULL);
+    queryTree->createQueryTree(nSelAttrs, selAttrs[],nRelations, relations[],nConditions, conditions[]);
+
+    //RM_Record *input = new RM_Record();
+    RM_Record* output = new RM_Record();
+    if(queryTree->root->nodeValue->get_next(output)!=endOfIteration){
+        char *data;
+        output->GetData(data);
+        p.Print(cout,data);
+    };
+    p.PrintFooter(cout);
 
     return 0;
 }
@@ -136,104 +171,113 @@ RC QL_Manager::Update(const char *relName,
     return 0;
 }
 
-RC QL_Manager::createQueryTree(int nSelAttrs, const RelAttr selAttrs[],
-                               int nRelations, const char * const relations[],
-                               int nConditions, const Condition conditions[]){    
-    //
-    QueryNode * nodes = new QueryNode[nRelations];
-    for(int i = 0; i<nRelations; i++){
-        char * rel = relations[i];
-        //get all the selection conditions about rel
-        int nConReturn;
-        Condition conditions[nConReturn];
-        //getSelCondition
-        if(nConReturn == 0){
-        //create a node with the relation
-            nodes[i] = ;
-        }
-        else{
-            //create a subtree with the relation and its selection conditions
-            nodes[i] = ;
-        }
-    }
 
-    //reorder nRelations nodes to a tree
-    queryTree->root = nodes[0];
-    for(int i = 1; i<nRelations; i++){
-        //get all the join conditions between relation i and relation 0 -> (i-1)
-        int nConJoin;
-        const Condition* condsJoin[nConJoin]; //condsJoin is a list of pointers to the conditions
-        //TODO
-
-
-        //create a new root node with old root and node[i] as children
-        queryTree->root = new QueryNode();
-        queryTree->root->left = queryTree->root;
-        queryTree->root->right = node[i];
-        //define nodeValue for the root
-        NodeValue item;
-        InternalNodeValue iv;
-        iv.condition = condsJoin; //iv.condition points to an array of conditions
-        iv.operation = NestedJoin; //if change algo, need change the value
-        item.internalValue =iv;
-        queryTree->root->nodeValue = item;
-    }
-
-//    //at the end, do projection
-//    //create a new root node, who has only one child
-//    //define nodeValue for the root
-//    NodeValue item;
-//    InternalNodeValue iv;
-//    iv.condition = condsJoin; //iv.condition points to an array of conditions
-//    iv.operation = Projection; //if change algo, need change the value
-//    item.internalValue =iv;
-//    queryTree->root->nodeValue = item;
-
-}
 
 RC QL_Manager::runQuery(){
-    //create input page
-    PF_FileHandle fileHandle;
-    PF_PageHandle inputPageHandle;
-    fileHandle.AllocatePage(inputPageHandle);
 
-    //create output page
-    PF_PageHandle outputPageHandle;
-    fileHandle.AllocatePage(outputPageHandle);
 
-    iteratorExecution(this,inputPageHandle,outputPageHandle)
 }
 
-RC QL_Manager::iteratorExecution(QueryTree * tree, const PF_PageHandle&inputPageHandle, const PF_PageHandle&outputPageHandle){
-    char * inputData;
-    inputPageHandle.GetData(inputData);
 
-    char * outputData;
-    outputPageHandle.GetData(outputData);
 
-    //iterator to get inputData
-    PF_FileHandle fileHandle;
-    PF_PageHandle inputPageHandle1;
-    fileHandle.AllocatePage(inputPageHandle1);
-
+Status QL_Manager::iteratorExecution(QueryTree * tree, RM_Record* &input, RM_Record* &output){
+    // input of the last iteration
+    RM_Record * outputLast = new RM_Record();
     //iterator to the subtree
     QueryTree * subTree = new QueryTree();
     subTree->root = tree->root->left;
     //input of this iteration is output of next iteration
-    iteratorExecution(subTree,inputPageHandle1,inputPageHandle);
+    iteratorExecution(subTree,outputLast,input);
+    //do query execution in this iteration, if tree is not leaf
+    if (!tree->root->isLeaf){
+        if(tree->root->isRoot){
+            Return (tree->root->nodeValue->get_next(output));
+        }
+        else{
+            tree->root->nodeValue->get_next(output);
+            return success;
+        }
+    }else{
+        return success;
+    }
 
-    //do query execution in this iteration
+
+
+//    if(tree->root->nodeValue.internalValue.operation==Join){
+//        nested_loops_join joinIter = new nested_loops_join();
+//        RM_Record *tuple;
+//        if(joinIter.get_next(tuple)!=endOfIteration)
+//            ;
+//    }
+
+}
+
+void QL_Manager::getDataAttributsByRelation(char *relName, DataAttrInfo ** attributs, int &attr_count){
+    //DataAttrInfo attributes[MAXATTRS];
+    RC rc;
+    RM_FileScan filescan;
+
+    //open scan of attrcat
+    if((rc=filescan.OpenScan(_smm->fileHandle_Attrcat,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
+
+    //scan all the records in attrcat
+    bool flag_exist=false;
+    RM_Record rec;
+    int i=0;
+    attr_count=0;
+    char * data;
+    while(rc!=RM_EOF){
+        //get records until the end
+        rc=filescan.GetNextRec(rec);
+        if(rc!=0 && rc!=RM_EOF)return (rc);
+        if(rc!=RM_EOF){
+            //copy record to a_r
+            rc=rec.GetData(data);
+            if(!strcmp(((DataAttrInfo*)data)->relName,relName)) {
+                // take all the DataAttrInfo of the relation relName
+                attributes[i] = new DataAttrInfo();
+                memcpy(attributes[i],data,sizeof(DataAttrInfo));
+                flag_exist=true;
+                i++;
+                attr_count++;
+            }
+        }
+    }
+
+}
+ //get all selection conditions
+void QL_Manager::getSelCondition(int nConditions, const Condition conditions[], const char * rel,
+                                 int &nConReturn, Condition **selConds, int &offset[],int & length[]
+                     ){
+    DataAttrInfo ** attributs;
+    int attr_count;
+    getDataAttributsByRelation(rel,attributs,attr_count);
+
+    nConReturn = 0;
+    for(int i=0; i< nConditions; i++){
+        if(conditions[i].bRhsIsAttr!=0 && !strcomp(conditions[i].lhsAttr.relName,rel)){
+            selConds[i] = &conditions[i];
+            nConReturn++;
+            for(int j = 0; j< attr_count; i++){
+                //to check
+                //TODO
+                if(!strcomp(attributs[j]->attrName,conditions[i].lhsAttr.attrName)){
+                    offset[i] = attributs[j]->offset;
+                    length[i] = attributs[j]->attrLength;
+                    break;
+                }
+            }
+
+        }
+    }
 
 }
 
 
-void getSelCondition(int nConditions, const Condition conditions[], const char * rel,
-                     int &nConReturn, int &conNum[]){
+ void QL_Manager::getJoinConditions(const int &numRel, int nConditions, const Condition conditions[],
+                   int &nConReturn, Condition **selConds, int &offset[],int & length[]){
 
-
-
-}
-
+ }
 
 //RC QL_Manager::createQueryTree(int nSelAttrs, const RelAttr selAttrs[],
 //                               int nRelations, const char * const relations[],
@@ -307,6 +351,9 @@ char* QL_Manager::getRelName(const RelAttr &relAttr, int nRelations, const char 
     return relName;
 }
 
+RC QL_Manager::printResultSelection(){
+
+}
 //
 // void QL_PrintError(RC rc)
 //
