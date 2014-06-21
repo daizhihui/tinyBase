@@ -86,6 +86,7 @@ RC QL_Manager::Insert(const char *relName,
     // check if exists the same attribute name in relcat
     char * data;
     int attr_count=0;
+    int tuplelength=0;
     bool flag_rel_exist=false;
     //scan all the records in relcat
     while(rc!=RM_EOF){
@@ -100,6 +101,7 @@ RC QL_Manager::Insert(const char *relName,
             if(!strcmp(((Relation*)data)->relName,relName)) {
                 flag_rel_exist=true;
                 attr_count=((Relation*)data)->attrCount;
+                tuplelength=((Relation*)data)->tupleLength;
                 break;
             }
         }
@@ -133,7 +135,7 @@ RC QL_Manager::Insert(const char *relName,
     
     if((rc=filescan.CloseScan())) return (rc);
     
-    char * record_data;
+    char record_data[tuplelength];
     
     for (int s=0; s<nValues; s++) {
         
