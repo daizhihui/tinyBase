@@ -71,6 +71,10 @@ private:
 //
 // Print-error function
 //
+#define QL_INVALIDRELNAME     (START_QL_WARN + 0) // invalid relation name
+#define QL_INVALID_ATTR_NUM        (START_QL_WARN + 1) //invalid attribute number
+#define QL_INVALID_ATTR_TYPE  (START_QL_WARN + 2) //invalid attribute type
+
 void QL_PrintError(RC rc);
 
 #endif

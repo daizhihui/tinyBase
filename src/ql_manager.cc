@@ -112,6 +112,122 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
 RC QL_Manager::Insert(const char *relName,
                       int nValues, const Value values[])
 {
+        RC rc;
+    // define de RM_FileScan
+    RM_FileScan filescan;
+    RM_Record rec;
+    if((rc=filescan.OpenScan(_smm->fileHandle_Relcat, INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
+    // check if exists the same attribute name in relcat
+    char * data;
+    int attr_count=0;
+    int tuplelength=0;
+    bool flag_rel_exist=false;
+    //scan all the records in relcat
+    while(rc!=RM_EOF){
+        //get records until the end
+        rc=filescan.GetNextRec(rec);
+        if(rc!=0 && rc!=RM_EOF) return (rc);
+        if(rc!=RM_EOF){
+            //copy record to relation
+            if((rc=rec.GetData(data))) return (rc);
+            
+            //compare two strings: strcmp (equal return 0)
+            if(!strcmp(((Relation*)data)->relName,relName)) {
+                flag_rel_exist=true;
+                attr_count=((Relation*)data)->attrCount;
+                tuplelength=((Relation*)data)->tupleLength;
+                break;
+            }
+        }
+    }
+
+    if((rc=filescan.CloseScan())) return (rc);
+    
+    if(attr_count!=nValues) return(QL_INVALID_ATTR_NUM);
+    DataAttrInfo attributes[MAXATTRS];
+    int k=0;
+    
+    if((rc=filescan.OpenScan(_smm->fileHandle_Attrcat, INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
+    // check if exists the same attribute name in relcat
+
+    //scan all the records in relcat
+    while(rc!=RM_EOF){
+        //get records until the end
+        rc=filescan.GetNextRec(rec);
+        if(rc!=0 && rc!=RM_EOF) return (rc);
+        if(rc!=RM_EOF){
+            //copy record to relation
+            if((rc=rec.GetData(data))) return (rc);
+            
+            //compare two strings: strcmp (equal return 0)
+            if(!strcmp(((DataAttrInfo*)data)->relName,relName)) {
+                memcpy(&attributes[k],data,sizeof(DataAttrInfo));
+                k++;
+            }
+        }
+    }
+    
+    if((rc=filescan.CloseScan())) return (rc);
+    
+    char record_data[tuplelength];
+    
+    for (int s=0; s<nValues; s++) {
+        
+        switch (attributes[s].attrType) {
+                
+            case INT:{
+                if(values[k].type!=attributes[s].attrType) return (QL_INVALID_ATTR_TYPE);
+                int data_int=*((int*)(values[s].data));
+                *((int*)(record_data+attributes[s].offset)) = data_int;
+                break;
+            }
+            case FLOAT:{
+                if(values[k].type!=attributes[s].attrType) return (QL_INVALID_ATTR_TYPE);
+                int data_float=*((float*)(values[s].data));
+                *((float*)(record_data+attributes[s].offset)) = data_float;
+                break;
+            }
+                
+            case STRING:{
+                if(values[k].type!=attributes[s].attrType) return (QL_INVALID_ATTR_TYPE);
+                char data_string[attributes[s].attrLength];
+                memcpy(data_string,values[s].data,attributes[k].attrLength);
+                memcpy(record_data+attributes[s].offset,data_string,attributes[k].attrLength);
+                break;
+            }
+            default:
+                // Test: wrong _attrType
+                return (QL_INVALID_ATTR_TYPE);
+        }
+
+    }
+    
+    RM_FileHandle filehandle_r;
+    
+    // open relation file to store records read from file
+    if((rc=_rmm->OpenFile(relName, filehandle_r))) return (rc);
+    RID rid;
+    if((rc=filehandle_r.InsertRec(record_data, rid))) return (rc);
+    
+    //close the relation file
+    if((rc=_rmm->CloseFile(filehandle_r))) return (rc);
+    
+    //insert index if index file exists
+
+    for (int k=0;k<attr_count;k++) {
+        if(attributes[k].indexNo!=-1){
+            // Call IX_IndexHandle::OpenIndex to open the index file
+            IX_IndexHandle indexhandle;
+            if((rc=_ixm->OpenIndex(relName, attributes[k].indexNo, indexhandle))) return (rc);
+            char data_index[attributes[k].attrLength];
+            memcpy(data_index,record_data+attributes[k].offset,attributes[k].attrLength);
+            if((rc=indexhandle.InsertEntry(data_index, rid))) return (rc);
+            //close index file
+            if(_ixm->CloseIndex(indexhandle)) return (rc);
+            
+        }
+    }
+
     int i;
 
     cout << "Insert\n";
