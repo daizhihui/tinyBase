@@ -1,6 +1,11 @@
 #ifndef QL_ITERATOR_H
 #define QL_ITERATOR_H
 //#include "ql.h"
+#include "rm.h"
+#include "redbase.h"
+#include "parser.h"
+#include <cstring>
+
 enum Status{
     endOfIteration,
     success,
@@ -9,7 +14,8 @@ enum Status{
 
 //iterator
 class Iterator{
-    virtual RC get_next(RM_Record * &tuple) = 0;
+public:
+    virtual Status get_next(char * &tuple) = 0;
 
 };
 
@@ -20,24 +26,27 @@ class Iterator{
 
 
 class filterIterator : public Iterator{
-    filterIterator(const char *relName,
-                   int n, Condition **selCon, int attrLength[], int offset[] );
-    Status get_next(RM_Record * &tuple);  // The tuple is returned.
 
+public:
+    filterIterator(const char *relName,
+                   int n, const Condition **selCon, int attrLength[], int offset[] );
+    Status get_next(char * &tuple);  // The tuple is returned.
+    ~filterIterator();
 private:
+    PF_Manager pfm;
+    RM_Manager* rmm;
+    RM_FileHandle handle;
+    RM_FileScan fileScan; //to file scan
     const char *relName;
     int n;
-    Condition **selCon;
+    const Condition **selCon;
     int * offset;
-    RM_FileHandle handle;
-    RM_Manager *rmm;
-    RM_FileScan fileScan;
     int *attrLength;
     float Compare(void *_value, void *value1,AttrType attrType, int attrLength1,int attrLength2);
 
 };
 
-
+/*
 class Select : public Iterator
 {
  public:
@@ -202,4 +211,5 @@ private:
    int     join_col_in1;   // The col of R to be joined with
    int     join_col_in2;
 };
+*/
 #endif // QL_ITERATOR_H

@@ -17,6 +17,8 @@
 #include "sm.h"
 #include "ix.h"
 #include "rm.h"
+#include "ql_queryTree.h"
+#include "ql_conditionconvertion.h"
 
 using namespace std;
 
@@ -70,6 +72,8 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
     //define a printer
     Printer *p;
 
+    //define a convertion of conditions
+    ql_conditionConvertion pcc(this->_smm);
 
     int nRelAttrs = 0;
     //consider situdation : select * from where nSelAttrs = 1 selAttrs[0]:NULL.*
@@ -80,7 +84,7 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
         for(int j=0;j<nRelations;j++){
             DataAttrInfo l_attributes[MAXATTRS];
             int l_nR=0;
-            getDataAttributsByRelation(relations[j],l_attributes,l_nR);
+            pcc.getDataAttributsByRelation(relations[j],l_attributes,l_nR);
             memcpy(attributes+nRelAttrs,l_attributes,l_nR*sizeof(DataAttrInfo));
             nRelAttrs+=l_nR;
         }
@@ -109,12 +113,12 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
         //DataAttrInfo records
         for (int i=0;i<nSelAttrs;i++){
             //get complete relation-attribut
-            const char * relName = getRelName(selAttrs[i],nRelations,relations);
+            const char * relName = pcc.getRelName(selAttrs[i],nRelations,relations);
             char rN[MAXNAME];
             strcpy(rN,relName);
             RelAttr realRA = {rN,selAttrs[i].attrName};
             DataAttrInfo dataAttr;
-            getDataAttributByRelAttr(realRA,dataAttr);
+            pcc.getDataAttributByRelAttr(realRA,dataAttr);
             strcpy(attributes[i].relName,"table_OUT");
             strcpy(attributes[i].attrName,selAttrs[i].attrName);
             //calculate offset
@@ -131,16 +135,16 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
     }
 
     p->PrintHeader(cout);
-    QueryTree *queryTree = new QueryTree(NULL);
-    queryTree->createQueryTree(nSelAttrs, selAttrs[],nRelations, relations[],nConditions, conditions[]);
+    QueryTree *queryTree = new QueryTree(NULL,&pcc);
+    queryTree->createQueryTree(nSelAttrs, selAttrs,nRelations, relations,nConditions, conditions);
 
-//    //RM_Record *input = new RM_Record();
-//    RM_Record* output = new RM_Record();
-//    if(queryTree->root->nodeValue->get_next(output)!=endOfIteration){
-//        char *data;
-//        output->GetData(data);
-//        p.Print(cout,data);
-//    };
+    char* output;
+    cout << "tree created" << endl;
+    if(queryTree->root!=NULL) cout << "tree not empty" << endl;
+    while(queryTree->root->nodeValue.iterator->get_next(output)!=endOfIteration){
+        //TODO restructure the output to char* a[]
+       p->Print(cout,output);
+    }
     p->PrintFooter(cout);
 
     return 0;
@@ -329,236 +333,13 @@ RC QL_Manager::Update(const char *relName,
 
 
 
-//RC QL_Manager::runQuery(){
 
 
-//}
-
-
-/*
-Status QL_Manager::iteratorExecution(QueryTree * tree, RM_Record* &input, RM_Record* &output){
-    // input of the last iteration
-    RM_Record * outputLast = new RM_Record();
-    //iterator to the subtree
-    QueryTree * subTree = new QueryTree();
-    subTree->root = tree->root->left;
-    //input of this iteration is output of next iteration
-    iteratorExecution(subTree,outputLast,input);
-    //do query execution in this iteration, if tree is not leaf
-    if (!tree->root->isLeaf){
-        if(tree->root->isRoot){
-            Return (tree->root->nodeValue->get_next(output));
-        }
-        else{
-            tree->root->nodeValue->get_next(output);
-            return success;
-        }
-    }else{
-        return success;
-    }
-
-
-
-//    if(tree->root->nodeValue.internalValue.operation==Join){
-//        nested_loops_join joinIter = new nested_loops_join();
-//        RM_Record *tuple;
-//        if(joinIter.get_next(tuple)!=endOfIteration)
-//            ;
-//    }
-
-}
-*/
-
-RC QL_Manager::getDataAttributsByRelation(const char *relName, DataAttrInfo attributs[], int &attr_count){
-    //DataAttrInfo attributes[MAXATTRS];
-    RC rc;
-    RM_FileScan filescan;
-
-    //open scan of attrcat
-    if((rc=filescan.OpenScan(_smm->fileHandle_Attrcat,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
-
-    //scan all the records in attrcat
-    bool flag_exist=false;
-    RM_Record rec;
-    int i=0;
-    attr_count=0;
-    char * data;
-    while(rc!=RM_EOF){
-        //get records until the end
-        rc=filescan.GetNextRec(rec);
-        if(rc!=0 && rc!=RM_EOF)return (rc);
-        if(rc!=RM_EOF){
-            //copy record to a_r
-            rc=rec.GetData(data);
-            if(!strcmp(((DataAttrInfo*)data)->relName,relName)) {
-                // take all the DataAttrInfo of the relation relName
-                memcpy(&attributs[i],data,sizeof(DataAttrInfo));
-                flag_exist=true;
-                i++;
-                attr_count++;
-            }
-        }
-    }
-    if(flag_exist) return 0;
-    else return -1;
-}
-
-
-RC QL_Manager::getDataAttributByRelAttr(const RelAttr &relAttr, DataAttrInfo &attribut){
-    //DataAttrInfo attributes[MAXATTRS];
-    RC rc;
-    RM_FileScan filescan;   
-    //open scan of attrcat
-    if((rc=filescan.OpenScan(_smm->fileHandle_Attrcat,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
-    //scan all the records in attrcat
-    bool flag_exist=false;
-    RM_Record rec;
-    char * data;
-    while(rc!=RM_EOF){
-        //get records until the end
-        rc=filescan.GetNextRec(rec);
-        if(rc!=0 && rc!=RM_EOF)return (rc);
-        if(rc!=RM_EOF){
-            //copy record to a_r
-            rc=rec.GetData(data);
-            if(!strcmp(((DataAttrInfo*)data)->relName,relAttr.relName)) {
-                // take all the DataAttrInfo of the relation relName
-                memcpy(&attribut,data,sizeof(DataAttrInfo));
-                if(!strcmp(attribut.attrName,relAttr.attrName)){
-                    flag_exist=true;
-                    break;
-                }
-
-            }
-        }
-    }
-    if(flag_exist) return 0;
-    else return -1;
-
-}
-
-
- //get all selection conditions
-void QL_Manager::getSelCondition(int nConditions, const Condition conditions[], const char * rel,
-                                 int &nConReturn, const Condition **selConds, int offset[],int  length[]
-                     ){
-    DataAttrInfo attributs[MAXATTRS];
-    int attr_count;
-    getDataAttributsByRelation(rel,attributs,attr_count);
-
-    nConReturn = 0;
-    for(int i=0; i< nConditions; i++){
-        if(conditions[i].bRhsIsAttr!=0 && !strcmp(conditions[i].lhsAttr.relName,rel)){
-            selConds[i] = &conditions[i];
-            nConReturn++;
-            for(int j = 0; j< attr_count; i++){
-                //to check
-                //TODO
-                if(!strcmp(attributs[j].attrName,conditions[i].lhsAttr.attrName)){
-                    offset[i] = attributs[j].offset;
-                    length[i] = attributs[j].attrLength;
-                    break;
-                }
-            }
-
-        }
-    }
-
-}
-
-
- void QL_Manager::getJoinConditions(const int &numRel, int nConditions, const Condition conditions[],
-                   int &nConReturn, Condition **selConds, int offset[], int length[]){
-
- }
-
-//RC QL_Manager::createQueryTree(int nSelAttrs, const RelAttr selAttrs[],
-//                               int nRelations, const char * const relations[],
-//                               int nConditions, const Condition conditions[]){
-//    int i;
-//    char * relationL;
-//    //if rhs is a value, it's restriction, must be done before join, as the most left node
-//    for (i = 0; i < nConditions; i++){
-//        if(!conditions[i].bRhsIsAttr) {
-//            relationL = getRelNameForUniqueAttr(conditions[i].lhsAttr,nRelations,relations[]);
-//            //verify if this relation has index on attribut
-//            //TODO
-//            bool isLeftIndexed = true;
-//             //is a index scan selection
-//            if(isLeftIndexed){
-//                //define an internal node
-//                NodeValue item;
-//                InternalNodeValue iv;
-//                iv.condition = &conditions[i];
-//                iv.operation = IdexScanSelection;
-//                item.internalValue =iv;
-//                QueryNode *pptr = new QueryNode(item,0,0,0);
-//                //define a leaf node
-//                LeafValue leaf;
-//                leaf.relation = relationL;
-//                item.leafValue =leaf;
-//                QueryNode * leafNode = new QueryNode(item,0,0,pptr);
-//                pptr->left = leafNode;
-//                queryTree = new QueryTree(pptr); //initialiser the tree
-//                queryTree->numLayer = 2;
-//                break;
-//            }
-//        }
-//    }
-//    //there is not index scan selection
-//    if(i==nConditions) {
-//        relationL = getRelNameForUniqueAttr(conditions[0].lhsAttr,nRelations,relations[]);
-//        char * relationR = getRelNameForUniqueAttr(conditions[0].rhsAttr,nRelations,relations[]);
-//        //verify if this relation has index on attribut
-//        //TODO
-//        bool isLeftIndexed = false;
-//        bool isRightIndexed = true;
-
-//        NodeValue item;
-//        InternalNodeValue iv;
-//        iv.condition = &conditions[0];
-//        iv.operation = IdexScanSelection;
-//        item.internalValue =iv;
-//        QueryNode *pptr = new QueryNode(item,0,0,0);
-//        //define a leaf node
-//        LeafValue leaf;
-//        leaf.relation = relationL;
-//        item.leafValue =leaf;
-//        QueryNode * leafNode = new QueryNode(item,0,0,pptr);
-//        pptr->left = leafNode;
-//        queryTree = new QueryTree(pptr); //initialiser the tree
-
-//    }
-
-
-//}
-
-//to get relation name for relAttr even relAttr is not "rel.attr"
-const char* QL_Manager::getRelName(const RelAttr &relAttr, int nRelations, const char * const relations[]){
-    if(relAttr.relName != NULL) return relAttr.relName;
-    for(int j=0;j<nRelations;j++){
-        DataAttrInfo l_attribut;
-        char emptyName[MAXNAME+1]; //initial
-        memset(emptyName, 0, MAXNAME + 1);
-        char r[MAXNAME+1], a[MAXNAME+1];
-        strcpy(r,relations[j]);
-        strcpy(a,relAttr.attrName);
-        RelAttr l_RA = {r,a};
-        getDataAttributByRelAttr(l_RA,l_attribut);
-        if(memcmp(l_attribut.relName,emptyName,MAXNAME+1)){
-            return l_attribut.relName;
-        }
-
-    }
-    //to search metadata about all the relations and find the attribut
-        //TODO
-    //_smm->
-    //relAttr.attrName;
-}
 
 RC QL_Manager::printResultSelection(){
 
 }
+
 //
 // void QL_PrintError(RC rc)
 //

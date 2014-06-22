@@ -1,7 +1,9 @@
 #ifndef QL_QUERYTREE_H
 #define QL_QUERYTREE_H
 #include "redbase.h"
+#include "ql.h"
 #include "ql_iterator.h"
+#include "ql_conditionconvertion.h"
 enum RelSpec {outer, inner};
 
 struct FldSpec {
@@ -32,16 +34,15 @@ struct LeafValue{
 
 union NodeValue{
     Iterator * iterator;
-    const char * const relation;
+    const char * relation;
 };
 
 
 class QueryNode{
     friend class QL_Manager;
+    friend class QueryTree;
 public:
-    QueryNode() : _parent(nullptr) { }
-    // Construct node with one child
-    QueryNode(QueryNode* n) : _parent(nullptr) { addChild(n); }
+    QueryNode() : parent(nullptr) { }
 
     //constructor
     QueryNode (const NodeValue& item, QueryNode *lptr = NULL,
@@ -49,24 +50,42 @@ public:
        nodeValue(item), left(lptr), right(rptr), parent(pptr){
     }
 
+    //constructor for inner node
+    QueryNode (Iterator* ite, QueryNode *lptr = NULL,
+         QueryNode*rptr = NULL, QueryNode *pptr = NULL):
+        left(lptr), right(rptr), parent(pptr){
+        this->nodeValue.iterator = ite;
+        //cout << "construtorIterator" << endl;
+
+    }
+
+    //constructor for relation node
+    QueryNode (const char * rel, QueryNode *lptr = NULL,
+         QueryNode*rptr = NULL, QueryNode *pptr = NULL):
+        left(lptr), right(rptr), parent(pptr){
+
+        this->nodeValue.relation = rel;
+        //cout << "construtor" << endl;
+    }
+
 private:
     QueryNode* parent;
     QueryNode* left;
     QueryNode* right;
     NodeValue nodeValue;     //content in a node
-//    bool isLeaf; //the leaf node contains original relations
-//    bool isRoot;
 };
 
 
 class QueryTree{
     friend class QL_Manager;
-    QueryTree(QueryTree *r);
+    QueryTree(QueryNode *r, ql_conditionConvertion * pcc);
     RC createQueryTree(int nSelAttrs, const RelAttr selAttrs[],
                        int nRelations, const char * const relations[],
                        int nConditions, const Condition conditions[]);    //create a query logic tree for the execution plan
 private:
     QueryNode* root;
+    ql_conditionConvertion *pcc; //indicate the ptr of ql_manager
+
 
     //int numLayer;
 };

@@ -1,9 +1,95 @@
 #include "ql_iterator.h"
 
-ql_iterator::ql_iterator()
-{
+using namespace std;
+filterIterator::filterIterator(const char *l_relName,
+                               int l_n, const Condition **l_selCon, int l_attrLength[], int l_offset[]){
+    rmm = new RM_Manager(pfm);
+    rmm->OpenFile(l_relName,handle);
+    this->relName = l_relName;
+    this->n = l_n;
+    this->selCon = l_selCon;
+    this->offset = l_offset;
+    this->attrLength = l_attrLength;
+    RC rc = fileScan.OpenScan(handle,selCon[0]->rhsValue.type,attrLength[0],offset[0],selCon[0]->op,selCon[0]->rhsValue.data,NO_HINT);
+//    std::cout << "RC=" << rc <<endl;
+}
+filterIterator::~filterIterator(){
+    fileScan.CloseScan();
+    rmm->CloseFile(handle);
+    delete rmm;
 }
 
+Status filterIterator::get_next(char * &tuple){
+//    cout << "getnext" << endl;
+    RM_Record rec;
+    //search left relation to match the current rightvalue
+    bool tupleFound = false;
+    char * pdata;
+    while(!tupleFound){
+        RC rc = fileScan.GetNextRec(rec);
+        if(rc==RM_EOF)    {
+            return endOfIteration;
+        }
+
+        rc = rec.GetData(pdata);
+//        cout << *(int*)(tuple) << endl;
+        tupleFound = true;
+        //compare all other data
+        for(int i = 1; i<n; i++){
+            float cmp = Compare(pdata+offset[i],selCon[i]->rhsValue.data,
+                                selCon[i]->rhsValue.type,0,attrLength[i]);       
+            if(cmp==0&&(selCon[i]->op!=EQ_OP||selCon[i]->op!=LE_OP||selCon[i]->op!=GE_OP)) {
+                tupleFound=false;
+                break;
+            }
+            else if(cmp>0&&(selCon[i]->op!=GT_OP||selCon[i]->op!=GE_OP)){
+                tupleFound=false;
+                break;
+            }
+            else if(cmp<0&&(selCon[i]->op!=LT_OP||selCon[i]->op!=LE_OP)){
+                tupleFound=false;
+                break;
+            }
+        }
+    }
+    tuple = new char[strlen(pdata)+1];  //to remember rec is local variable, at the end of this function, deconstructer is called to delete the pdata
+    strcpy(tuple,pdata);
+    return success;
+}  // The tuple is returned.
+
+//
+// Compare
+//
+float filterIterator::Compare(void *_value, void *value1,AttrType attrType, int attrLength1,int attrLength2 )
+{
+   float cmp;
+   int i1, i2;
+   float f1, f2;
+
+   // Do comparison according to the attribute type
+   switch (attrType) {
+   case INT:
+      memcpy(&i1, _value, sizeof(int));
+      memcpy(&i2, _value, sizeof(int));
+      cmp = i1 - i2;
+      break;
+
+   case FLOAT:
+      memcpy(&f1, _value, sizeof(float));
+      memcpy(&f2, _value, sizeof(float));
+      cmp = f1 - f2;
+      break;
+
+   case STRING:
+      cmp = attrLength1 - attrLength2;
+      if(cmp ==0){
+        cmp = memcmp(_value, value1, attrLength1);
+      }
+      break;
+   }
+    return cmp;
+}
+/*
 nested_loops_join::nested_loops_join(AttrType    in1[],      // Array containing field types of R.
                                      int     len_in1,        // # of columns in R.
                                      short   t1_str_sizes[],
@@ -89,81 +175,4 @@ Status nested_loops_join::get_next(RM_Record *&tuple){
     return success;
 }
 
-filterIterator::filterIterator(const char *l__relName,
-                               int l_n, Condition **l_selCon, int l_attrLength[], int l_offset[]){
-    this->rmm->OpenFile(relationName,handle);
-    this->relName = l__relName;
-    this->n = l_n;
-    this->selCon = l_selCon;
-    this->offset = l_offset;
-    this->attrLength = l_attrLength;
-    fileScan.OpenScan(handle,selCon[0]->rhsValue.type,offset[0],selCon[0]->rhsValue.type,selCon[0]->rhsValue.data,NO_HINT);
-}
-Status filterIterator::get_next(RM_Record * &tuple){
-
-//    RM_Record *tuple1;
-//    RM_Record *tuple2;
-    char *pdata1;
-    //char *pdata2;
-
-
-    //search right relation to match the current leftvalue
-
-    bool tupleFound = false;
-    while(!tupleFound){
-        fileScan.GetNextRec(tuple);
-        tuple->GetData(pdata1);
-        tupleFound = true;
-        //compare all other data
-        for(int i = 0; i<n; i++){
-            float cmp = Compare(pdata1+offset[i],selCon[i]->rhsValue.data,
-                                selCon[i]->rhsValue.type,0,attrLength[i]);
-            if(cmp==0&&(selCon[i]->op!=EQ_OP||selCon[i]->op!=LE_OP||selCon[i]->op!=GE_OP)) {
-                tupleFound=false;
-                break;
-            }
-            else if(cmp>0&&(selCon[i]->op!=GT_OP||selCon[i]->op!=GE_OP)){
-                tupleFound=false;
-                break;
-            }
-            else if(cmp<0&&(selCon[i]->op!=LT_OP||selCon[i]->op!=LE_OP)){
-                tupleFound=false;
-                break;
-            }
-        }
-    }
-
-}  // The tuple is returned.
-
-//
-// Compare
-//
-float filterIterator::Compare(void *_value, void *value1,AttrType attrType, int attrLength1,int attrLength2 )
-{
-   float cmp;
-   int i1, i2;
-   float f1, f2;
-
-   // Do comparison according to the attribute type
-   switch (attrType) {
-   case INT:
-      memcpy(&i1, _value, sizeof(int));
-      memcpy(&i2, _value, sizeof(int));
-      cmp = i1 - i2;
-      break;
-
-   case FLOAT:
-      memcpy(&f1, _value, sizeof(float));
-      memcpy(&f2, _value, sizeof(float));
-      cmp = f1 - f2;
-      break;
-
-   case STRING:
-      cmp = attrLength1 - attrLength2;
-      if(cmp ==0){
-        cmp = memcmp(_value, value1, attrLength1);
-      }
-      break;
-   }
-    return cmp;
-}
+*/
