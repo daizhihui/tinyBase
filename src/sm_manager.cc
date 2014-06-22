@@ -79,7 +79,7 @@ RC SM_Manager::CreateTable(const char *relName,
     RC rc;
     
     //check if relation name begin with letter
-    if(!(relName[0] <= 'z' && relName[0] >= 'a') || (relName[0] <= 'Z' && relName[0] >= 'A')) return (SM_INVALIDRELNAME);
+    if(!((relName[0] <= 'z' && relName[0] >= 'a') || (relName[0] <= 'Z' && relName[0] >= 'A'))) return (SM_INVALIDRELNAME);
     
     // relation name can't be longer than MAXNAME
     if ((unsigned)strlen(relName)>=MAXNAME) return (SM_INVALIDRELNAME);
@@ -131,7 +131,7 @@ RC SM_Manager::CreateTable(const char *relName,
     for (int i=0;i<attrCount;i++){
         
         //check if attribute name begin with letter
-        if(!(attributes[i].attrName[0] <= 'z' && attributes[i].attrName[0] >= 'a') || (attributes[i].attrName[0] <= 'Z' && attributes[i].attrName[0] >= 'A')) return (SM_INVALIDATTRNAME);
+        if(!((attributes[i].attrName[0] <= 'z' && attributes[i].attrName[0] >= 'a') || (attributes[i].attrName[0] <= 'Z' && attributes[i].attrName[0] >= 'A'))) return (SM_INVALIDATTRNAME);
         
         // attribute name can't be longer than MAXNAME
         if ((unsigned)strlen(attributes[i].attrName)>=MAXNAME) return (SM_INVALIDATTRNAME);
@@ -322,9 +322,6 @@ RC SM_Manager::DropTable(const char *relName)
 RC SM_Manager::CreateIndex(const char *relName,
                            const char *attrName)
 {
-    cout << "CreateIndex\n"
-    << "   relName =" << relName << "\n"
-    << "   attrName=" << attrName << "\n";
     
     RC rc;
     
@@ -335,11 +332,15 @@ RC SM_Manager::CreateIndex(const char *relName,
     // scan all the records in attrcat
     if((rc=filescan.OpenScan(fileHandle_Attrcat, INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
     
-    bool flag_rel_attr_exist=false;
+    bool flag_rel_exist=false;
+    bool flag_attr_exist=false;
     // check if the index already exists
-    int max_index=0;
-    //pointer to the record
+    int max_index=-1;
+    
+    //store in DataAttrInfo of the attribute that we want to create index
     DataAttrInfo attr_relation;
+    //pointer to the record in attrcat
+    RID record_change;
     char * data;
     while(rc!=RM_EOF){
         //get records until the end
@@ -347,35 +348,37 @@ RC SM_Manager::CreateIndex(const char *relName,
         if(rc!=0 && rc!=RM_EOF) return (rc);
         if(rc!=RM_EOF){
             if((rc=rec.GetData(data))) return (rc);
-            // copy record to attr_relation
-            memcpy(&attr_relation,data,sizeof(DataAttrInfo));
             
             //calculate the max index already exists, then create index max_index+1
-            if(attr_relation.indexNo>max_index) max_index=attr_relation.indexNo;
+            if(((DataAttrInfo*)data)->indexNo>max_index) max_index=((DataAttrInfo*)data)->indexNo;
+
+            //check if relation name exists
+            if(!strcmp(((DataAttrInfo*)data)->relName,relName)) flag_rel_exist=true;
+            
+            //check if attribute name exists
+            if(!strcmp(((DataAttrInfo*)data)->attrName,attrName)) flag_attr_exist=true;
             
             // the index already exists, return error SM_INDEXEXIST
-            if(attr_relation.relName==relName && attr_relation.attrName==attrName && attr_relation.indexNo!=-1) {
-                flag_rel_attr_exist=true;
+            if((!strcmp(((DataAttrInfo*)data)->relName,relName))&& (!strcmp(((DataAttrInfo*)data)->attrName,attrName)) && (((DataAttrInfo*)data)->indexNo!=-1)) {
                 return (SM_INDEXEXIST);
             }
-            if(attr_relation.relName==relName && attr_relation.attrName==attrName && attr_relation.indexNo==-1) {
-                flag_rel_attr_exist=true;
-                break;
+            
+            //the index doesn't exist
+            if((!strcmp(((DataAttrInfo*)data)->relName,relName))&& (!strcmp(((DataAttrInfo*)data)->attrName,attrName)) && (((DataAttrInfo*)data)->indexNo==-1)) {
+                rec.GetRid(record_change);
+                memcpy(&attr_relation,data,sizeof(DataAttrInfo));
             }
             
         }
     }
     
     // relation name or attribute name not exist in attrcat
-    if(flag_rel_attr_exist==false) return (SM_INVALIDRELNAME);
+    if(!flag_rel_exist) return (SM_INVALIDRELNAME);
+    if(!flag_attr_exist) return(SM_INVALIDATTRNAME);
     
     // close the filescan
     if((rc=filescan.CloseScan())) return (rc);
     
-    /*char filename[(unsigned)strlen(relName)+(unsigned)strlen(attrName)+1];//filename = relname.attribute name as the new filename
-    strcpy(filename, relName);
-    strcat(filename,".");
-    strcat(filename, attrName);*/
     
     // Call IX_IndexHandle::CreateIndex to create a index file
     if((rc=Ixm->CreateIndex(relName, max_index+1, attr_relation.attrType, attr_relation.attrLength))) return (rc);
@@ -384,6 +387,7 @@ RC SM_Manager::CreateIndex(const char *relName,
     IX_IndexHandle indexhandle;
     if((rc=Ixm->OpenIndex(relName, max_index+1, indexhandle))) return (rc);
     
+    //file handle of table
     RM_FileHandle filehandle_rel;
     // Call RM_Manager::OpenFile to open relation file
     if((rc=Rmm->OpenFile(relName, filehandle_rel))) return (rc);
@@ -408,11 +412,16 @@ RC SM_Manager::CreateIndex(const char *relName,
         }
     }
     
-    // update information in attrcat
-    attr_relation.indexNo=max_index+1;
-    
-    // update attrcat to disk
+    // update information in attrcat to disk
+    RM_Record r;
+    if((rc=fileHandle_Attrcat.GetRec(record_change, r))) return (rc);
+    char * data_change;
+    r.GetData(data_change);
+    ((DataAttrInfo*)data_change)->indexNo=max_index+1;
+    fileHandle_Attrcat.UpdateRec(r);
+    //update relcat in disk
     if((rc=fileHandle_Attrcat.ForcePages())) return (rc);
+    
     
     //Close scan
     if((rc=filescan.CloseScan())) return (rc);
@@ -422,16 +431,46 @@ RC SM_Manager::CreateIndex(const char *relName,
     
     //close index file
     if(Ixm->CloseIndex(indexhandle)) return (rc);
+
+    //open scan of relcat
+    if((rc=filescan.OpenScan(fileHandle_Relcat,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
     
+    //pointer to the record in relcat and attrcat
+    char * data_relcat;
+    //scan all the records in relcat
+    while(rc!=RM_EOF){
+        //get records until the end
+        rc=filescan.GetNextRec(rec);
+        if(rc!=0 && rc!=RM_EOF){
+            return (rc);
+        }
+        if(rc!=RM_EOF){
+            if((rc=rec.GetData(data_relcat))) return (rc);
+            
+            if(!strcmp(((Relation*)data_relcat)->relName,relName)) {
+                int indexC=0;
+                indexC=((Relation*)data_relcat)->indexCount;
+                ((Relation*)data_relcat)->indexCount=indexC+1;
+                fileHandle_Relcat.UpdateRec(rec);
+                //update relcat in disk
+                if((rc=fileHandle_Relcat.ForcePages())) return (rc);
+                break;
+            }
+        }
+    }
+    
+    // close the scan
+    if((rc=filescan.CloseScan())) return (rc);
+
+    cout << "CreateIndex\n"
+    << "   relName =" << relName << "\n"
+    << "   attrName=" << attrName << "\n";
     return (0);
 }
 
 RC SM_Manager::DropIndex(const char *relName,
                          const char *attrName)
 {
-    cout << "DropIndex\n"
-    << "   relName =" << relName << "\n"
-    << "   attrName=" << attrName << "\n";
     
     RC rc;
     RM_FileScan filescan;
@@ -439,7 +478,6 @@ RC SM_Manager::DropIndex(const char *relName,
     //open scan of attrcat
     if((rc=filescan.OpenScan(fileHandle_Attrcat,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
     
-    DataAttrInfo a_r;
     RM_Record rec;
     
     bool flag_exist=false;
@@ -451,25 +489,21 @@ RC SM_Manager::DropIndex(const char *relName,
         if(rc!=0 && rc!=RM_EOF)return (rc);
         if(rc!=RM_EOF){
             if((rc=rec.GetData(data))) return (rc);
-            //copy record to a_r
-            memcpy(&a_r,data,sizeof(DataAttrInfo));
             
-            if(a_r.relName==relName && a_r.attrName==attrName && a_r.indexNo!=-1) {
+            if((!strcmp(((DataAttrInfo*)data)->relName,relName)) && (!strcmp(((DataAttrInfo*)data)->attrName,attrName)) && (((DataAttrInfo*)data)->indexNo!=-1)) {
                 
                 flag_exist=true;
-                RID rid;
-                // get record RID
-                if((rc=rec.GetRid(rid))) return (rc);
                 
-                //delete attribute record in attrcat
-                if((rc=fileHandle_Attrcat.DeleteRec(rid))) return (rc);
+                int index=((DataAttrInfo*)data)->indexNo;
+                // destroy index file
+                if((rc=Ixm->DestroyIndex(relName, index))) return (rc);
+                
+                // update indexNo in attrcat
+                ((DataAttrInfo*)data)->indexNo=-1;
+                fileHandle_Attrcat.UpdateRec(rec);
                 
                 //update attrcat in disk
                 if((rc=fileHandle_Attrcat.ForcePages())) return (rc);
-                
-                int index=a_r.indexNo;
-                // destroy index file
-                if((rc=Ixm->DestroyIndex(relName, index))) return (rc);
                 break;
             }
         }
@@ -480,6 +514,38 @@ RC SM_Manager::DropIndex(const char *relName,
     
     //close scan
     if((rc=filescan.CloseScan())) return (rc);
+    
+    //open scan of attrcat
+    if((rc=filescan.OpenScan(fileHandle_Attrcat,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
+    
+    //update attr_count in relcat
+    while(rc!=RM_EOF){
+        //get records until the end
+        rc=filescan.GetNextRec(rec);
+        if(rc!=0 && rc!=RM_EOF)return (rc);
+        if(rc!=RM_EOF){
+            if((rc=rec.GetData(data))) return (rc);
+            
+            if(!strcmp(((Relation*)data)->relName,relName)) {
+
+                int attrCount=((Relation*)data)->attrCount;
+                ((Relation*)data)->attrCount=attrCount-1;
+
+                fileHandle_Relcat.UpdateRec(rec);
+                
+                //update attrcat in disk
+                if((rc=fileHandle_Relcat.ForcePages())) return (rc);
+                break;
+            }
+        }
+    }
+    
+    //close scan
+    if((rc=filescan.CloseScan())) return (rc);
+
+    cout << "DropIndex\n"
+    << "   relName =" << relName << "\n"
+    << "   attrName=" << attrName << "\n";
     
     return (0);
 }
@@ -567,6 +633,7 @@ RC SM_Manager::Load(const char *relName,
         string str;
         //read file line by line
         getline(myfile, str);
+        if(str=="") break;
         string delimiter = ",";
         
         size_t pos = 0;
@@ -631,6 +698,21 @@ RC SM_Manager::Load(const char *relName,
         RID rid;
         //store the record to relation file
         if((rc=filehandle_r.InsertRec(record_data, rid))) return (rc);
+        
+        //insert index if index file exists
+        for (int k=0;k<attr_count;k++) {
+            if(d_a[k].indexNo!=-1){
+                // Call IX_IndexHandle::OpenIndex to open the index file
+                IX_IndexHandle indexhandle;
+                if((rc=Ixm->OpenIndex(relName, d_a[k].indexNo, indexhandle))) return (rc);
+                char data_index[d_a[k].attrLength];
+                memcpy(data_index,record_data+d_a[k].offset,d_a[k].attrLength);
+                if((rc=indexhandle.InsertEntry(data_index, rid))) return (rc);
+                //close index file
+                if(Ixm->CloseIndex(indexhandle)) return (rc);
+
+            }
+        }
        // cout<<"record_data"<<record_data<<endl;
         strcpy(record_data,"");
     }
@@ -642,56 +724,6 @@ RC SM_Manager::Load(const char *relName,
     //close the relation file
     if((rc=Rmm->CloseFile(filehandle_r))) return (rc);
     
-/*    // open relation file to store records read from file
-    if((rc=Rmm->OpenFile(relName, filehandle_r))) return (rc);
-    
-    //open scan of attrcat
-    if((rc=filescan.OpenScan(filehandle_r,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
-    
-    //scan all the records in attrcat
-    while(rc!=RM_EOF){
-        //get records until the end
-        rc=filescan.GetNextRec(rec);
-        if(rc!=0 && rc!=RM_EOF) return (rc);
-        if(rc!=RM_EOF){
-            if((rc=rec.GetData(data))) return (rc);
-            for (int i=0;i<4;i++){
-                switch (d_a[i].attrType) {
-                    case INT:{
-                        int wakeup_code = *((int*)(data+d_a[i].offset));
-                        cout<<d_a[i].offset<<endl;
-                        cout<<wakeup_code<<endl;
-                        break;
-                    }
-                    case FLOAT:{
-                        float wakeup_code = *((float*)(data+d_a[i].offset));
-                        cout<<d_a[i].offset<<endl;
-                        cout<<wakeup_code<<endl;
-                        break;
-                    }
-                        
-                    case STRING:{
-                        char data_char[d_a[i].attrLength];
-                        cout<<d_a[i].offset<<endl;
-                        memcpy(data_char,data+d_a[i].offset,d_a[i].attrLength);
-                        cout<<data_char<<endl;
-                        break;
-                    }
-                    default:
-                        // Test: wrong _attrType
-                        return (SM_INVALIDATTR);
-                }
-            }
-            
-        }
-    }
-    
-    //close the scan
-    if((rc=filescan.CloseScan())) return (rc);
-    
-    //close the relation file
-    if((rc=Rmm->CloseFile(filehandle_r))) return (rc);*/
-
     cout << "Load\n"
     << "   relName =" << relName << "\n"
     << "   fileName=" << fileName << "\n";
@@ -786,7 +818,7 @@ RC SM_Manager::Set(const char *paramName, const char *value)
 RC SM_Manager::Help()
 {
     cout << "Help\n";
-    DataAttrInfo * attributes;
+    DataAttrInfo attributes[MAXATTRS];
     //initialize the attributes
     strcpy(attributes[0].relName,"Help");
     strcpy(attributes[0].attrName,"RelName");
@@ -795,8 +827,30 @@ RC SM_Manager::Help()
     attributes[0].offset=0;
     attributes[0].indexNo=-1;
     
+    strcpy(attributes[1].relName,"Help");
+    strcpy(attributes[1].attrName,"TupleLength");
+    attributes[1].attrLength=sizeof(int);
+    attributes[1].attrType=INT;
+    attributes[1].offset=MAXNAME;
+    attributes[1].indexNo=-1;
+    
+    strcpy(attributes[2].relName,"Help");
+    strcpy(attributes[2].attrName,"AttrCount");
+    attributes[2].attrLength=sizeof(int);
+    attributes[2].attrType=INT;
+    attributes[2].offset=MAXNAME+sizeof(int);
+    attributes[2].indexNo=-1;
+    
+    strcpy(attributes[3].relName,"Help");
+    strcpy(attributes[3].attrName,"IndexCount");
+    attributes[3].attrLength=sizeof(int);
+    attributes[3].attrType=INT;
+    attributes[3].offset=MAXNAME+2*sizeof(int);
+    attributes[3].indexNo=-1;
+
+    
     // set a printer
-    Printer p(attributes,1);
+    Printer p(attributes,4);
     
     //print the header
     p.PrintHeader(cout);
@@ -817,9 +871,13 @@ RC SM_Manager::Help()
         if(rc!=RM_EOF){
             //get record data
             if((rc=rec.GetData(data))) return (rc);
-            memcpy(&r,data,sizeof(Relation));
+            char p_relation[MAXNAME+3*sizeof(int)];
+            memcpy(p_relation+attributes[0].offset,((Relation*)data)->relName,attributes[0].attrLength);
+            *((int*)(p_relation+attributes[1].offset))=((Relation*)data)->tupleLength;
+            *((int*)(p_relation+attributes[2].offset))=((Relation*)data)->attrCount;
+            *((int*)(p_relation+attributes[3].offset))=((Relation*)data)->indexCount;
             //print the relation name
-            p.Print(cout, r.relName);
+            p.Print(cout, p_relation);
         }
     }
 
@@ -842,7 +900,7 @@ RC SM_Manager::Help(const char *relName)
     strcpy(attributes[0].relName,"Help");
     strcpy(attributes[0].attrName,"RelName");
     attributes[0].attrType=STRING;
-    attributes[0].attrLength=MAXNAME+1;
+    attributes[0].attrLength=MAXNAME;
     attributes[0].offset=0;
     attributes[0].indexNo=-1;
     
@@ -850,8 +908,8 @@ RC SM_Manager::Help(const char *relName)
     strcpy(attributes[1].relName,"Help");
     strcpy(attributes[1].attrName,"AttrName");
     attributes[1].attrType=STRING;
-    attributes[1].attrLength=MAXNAME+1;
-    attributes[1].offset=MAXNAME+1;
+    attributes[1].attrLength=MAXNAME;
+    attributes[1].offset=MAXNAME;
     attributes[1].indexNo=-1;
     
     //DataArrrInfo of offset
@@ -859,7 +917,7 @@ RC SM_Manager::Help(const char *relName)
     strcpy(attributes[2].attrName,"offset");
     attributes[2].attrType=INT;
     attributes[2].attrLength=4;
-    attributes[2].offset=2*(MAXNAME+1);
+    attributes[2].offset=2*(MAXNAME);
     attributes[2].indexNo=-1;
     
     //DataArrrInfo of attribute type
@@ -867,7 +925,7 @@ RC SM_Manager::Help(const char *relName)
     strcpy(attributes[3].attrName,"AttrType");
     attributes[3].attrType=STRING;
     attributes[3].attrLength=sizeof(AttrType);
-    attributes[3].offset=2*(MAXNAME+1)+4;
+    attributes[3].offset=2*(MAXNAME)+4;
     attributes[3].indexNo=-1;
   
     //DataArrrInfo of attribute length
@@ -875,7 +933,7 @@ RC SM_Manager::Help(const char *relName)
     strcpy(attributes[4].attrName,"AttrLength");
     attributes[4].attrType=INT;
     attributes[4].attrLength=4;
-    attributes[4].offset=2*(MAXNAME+1)+4+sizeof(AttrType);
+    attributes[4].offset=2*(MAXNAME)+4+sizeof(AttrType);
     attributes[4].indexNo=-1;
     
     //DataArrrInfo of attribute indexNo
@@ -883,7 +941,7 @@ RC SM_Manager::Help(const char *relName)
     strcpy(attributes[5].attrName,"IndexNo");
     attributes[5].attrType=INT;
     attributes[5].attrLength=4;
-    attributes[5].offset=2*(MAXNAME+1)+8+sizeof(AttrType);
+    attributes[5].offset=2*(MAXNAME)+8+sizeof(AttrType);
     attributes[5].indexNo=-1;
     
     Printer p(attributes,6);
@@ -895,7 +953,6 @@ RC SM_Manager::Help(const char *relName)
     RM_FileScan filescan;
     RM_Record rec;
     char * data;
-    DataAttrInfo r;
     
     //open scan of relcat
     if((rc=filescan.OpenScan(fileHandle_Attrcat,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
@@ -907,10 +964,16 @@ RC SM_Manager::Help(const char *relName)
         if(rc!=RM_EOF){
             //get record data
             if((rc=rec.GetData(data))) return (rc);
-            memcpy(&r,data,sizeof(DataAttrInfo));
-            if(r.relName==relName){
+            if(!strcmp(((DataAttrInfo*)data)->relName,relName)){
+                char attr_r[2*(MAXNAME)+3*sizeof(int)+sizeof(AttrType)];
+                memcpy(attr_r+attributes[0].offset,((DataAttrInfo*)data)->relName,attributes[0].attrLength);
+                memcpy(attr_r+attributes[1].offset,((DataAttrInfo*)data)->attrName,attributes[1].attrLength);
+                *((int*)(attr_r+attributes[2].offset)) =((DataAttrInfo*)data)->offset;
+                *((AttrType*)(attr_r+attributes[3].offset)) =((DataAttrInfo*)data)->attrType;
+                *((int*)(attr_r+attributes[4].offset)) =((DataAttrInfo*)data)->attrLength;
+                *((int*)(attr_r+attributes[5].offset)) =((DataAttrInfo*)data)->indexNo;
                 //print the relation name
-                p.Print(cout, data);
+                p.Print(cout, attr_r);
             }
         }
     }
