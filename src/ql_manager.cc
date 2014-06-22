@@ -67,31 +67,72 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
     for (i = 0; i < nConditions; i++)
         cout << "   conditions[" << i << "]:" << conditions[i] << "\n";
 
+    //define a printer
+    Printer *p;
 
-    DataAttrInfo attributes[nSelAttrs];
-    //DataAttrInfo records
-    for (int i=0;i<nSelAttrs;i++){
-        //get attribut length
-        //TODO
-        DataAttrInfo *dataAttr = NULL;
-        getDataAttributByRelAttr(selAttrs[i],dataAttr);
-        strcpy(attributes[i].relName,"table_OUT");
-        strcpy(attributes[i].attrName,selAttrs[i].attrName);
-        //calculate offset
-        int offset=0;
-        for (int j=0;j<i;j++){
-            offset+= attributes[j].attrLength;
+
+    int nRelAttrs = 0;
+    //consider situdation : select * from where nSelAttrs = 1 selAttrs[0]:NULL.*
+    if(nSelAttrs==1 && selAttrs[0].relName==NULL&&(!strcmp(selAttrs[0].attrName,"*"))){
+        //show all the attributs of all the relations
+        nRelAttrs = 0;
+        DataAttrInfo attributes[MAXATTRS];
+        for(int j=0;j<nRelations;j++){
+            DataAttrInfo l_attributes[MAXATTRS];
+            int l_nR=0;
+            getDataAttributsByRelation(relations[j],l_attributes,l_nR);
+            memcpy(attributes+nRelAttrs,l_attributes,l_nR*sizeof(DataAttrInfo));
+            nRelAttrs+=l_nR;
         }
-        attributes[i].offset = offset;
-        attributes[i].attrType= dataAttr->attrType;
-        attributes[i].attrLength= dataAttr->attrLength;
-        attributes[i].indexNo=-1;
+
+        for (int i=0;i<nRelAttrs;i++){
+            //get attribut length
+            DataAttrInfo dataAttr;
+            dataAttr = attributes[i];
+            strcpy(attributes[i].relName,"table_OUT");
+            strcpy(attributes[i].attrName,dataAttr.attrName);
+            //calculate offset
+            int offset=0;
+            for (int j=0;j<i;j++){
+                offset+= attributes[j].attrLength;
+            }
+            attributes[i].offset = offset;
+            attributes[i].attrType= dataAttr.attrType;
+            attributes[i].attrLength= dataAttr.attrLength;
+            attributes[i].indexNo=-1;
+        }
+
+        p = new Printer(attributes,nRelAttrs);
     }
-          //define a printer
-    Printer p(attributes,nSelAttrs);
-    p.PrintHeader(cout);
-//    QueryTree *queryTree = new QueryTree(NULL);
-//    queryTree->createQueryTree(nSelAttrs, selAttrs[],nRelations, relations[],nConditions, conditions[]);
+    else{
+        DataAttrInfo attributes[nSelAttrs];
+        //DataAttrInfo records
+        for (int i=0;i<nSelAttrs;i++){
+            //get complete relation-attribut
+            const char * relName = getRelName(selAttrs[i],nRelations,relations);
+            char rN[MAXNAME];
+            strcpy(rN,relName);
+            RelAttr realRA = {rN,selAttrs[i].attrName};
+            DataAttrInfo dataAttr;
+            getDataAttributByRelAttr(realRA,dataAttr);
+            strcpy(attributes[i].relName,"table_OUT");
+            strcpy(attributes[i].attrName,selAttrs[i].attrName);
+            //calculate offset
+            int offset=0;
+            for (int j=0;j<i;j++){
+                offset+= attributes[j].attrLength;
+            }
+            attributes[i].offset = offset;
+            attributes[i].attrType= dataAttr.attrType;
+            attributes[i].attrLength= dataAttr.attrLength;
+            attributes[i].indexNo=-1;
+        }
+        p = new Printer(attributes,nSelAttrs);
+    }
+
+    p->PrintHeader(cout);
+    QueryTree *queryTree = new QueryTree(NULL);
+    queryTree->createQueryTree(nSelAttrs, selAttrs[],nRelations, relations[],nConditions, conditions[]);
 
 //    //RM_Record *input = new RM_Record();
 //    RM_Record* output = new RM_Record();
@@ -100,7 +141,7 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
 //        output->GetData(data);
 //        p.Print(cout,data);
 //    };
-    p.PrintFooter(cout);
+    p->PrintFooter(cout);
 
     return 0;
 }
@@ -328,7 +369,7 @@ Status QL_Manager::iteratorExecution(QueryTree * tree, RM_Record* &input, RM_Rec
 }
 */
 
-RC QL_Manager::getDataAttributsByRelation(const char *relName, DataAttrInfo ** attributs, int &attr_count){
+RC QL_Manager::getDataAttributsByRelation(const char *relName, DataAttrInfo attributs[], int &attr_count){
     //DataAttrInfo attributes[MAXATTRS];
     RC rc;
     RM_FileScan filescan;
@@ -351,8 +392,7 @@ RC QL_Manager::getDataAttributsByRelation(const char *relName, DataAttrInfo ** a
             rc=rec.GetData(data);
             if(!strcmp(((DataAttrInfo*)data)->relName,relName)) {
                 // take all the DataAttrInfo of the relation relName
-                attributs[i] = new DataAttrInfo();
-                memcpy(attributs[i],data,sizeof(DataAttrInfo));
+                memcpy(&attributs[i],data,sizeof(DataAttrInfo));
                 flag_exist=true;
                 i++;
                 attr_count++;
@@ -364,14 +404,12 @@ RC QL_Manager::getDataAttributsByRelation(const char *relName, DataAttrInfo ** a
 }
 
 
-RC QL_Manager::getDataAttributByRelAttr(const RelAttr &relAttr, DataAttrInfo *attribut){
+RC QL_Manager::getDataAttributByRelAttr(const RelAttr &relAttr, DataAttrInfo &attribut){
     //DataAttrInfo attributes[MAXATTRS];
     RC rc;
-    RM_FileScan filescan;
-
+    RM_FileScan filescan;   
     //open scan of attrcat
     if((rc=filescan.OpenScan(_smm->fileHandle_Attrcat,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
-
     //scan all the records in attrcat
     bool flag_exist=false;
     RM_Record rec;
@@ -385,9 +423,8 @@ RC QL_Manager::getDataAttributByRelAttr(const RelAttr &relAttr, DataAttrInfo *at
             rc=rec.GetData(data);
             if(!strcmp(((DataAttrInfo*)data)->relName,relAttr.relName)) {
                 // take all the DataAttrInfo of the relation relName
-                attribut = new DataAttrInfo();
-                memcpy(attribut,data,sizeof(DataAttrInfo));
-                if(!strcmp(attribut->attrName,relAttr.attrName)){
+                memcpy(&attribut,data,sizeof(DataAttrInfo));
+                if(!strcmp(attribut.attrName,relAttr.attrName)){
                     flag_exist=true;
                     break;
                 }
@@ -405,7 +442,7 @@ RC QL_Manager::getDataAttributByRelAttr(const RelAttr &relAttr, DataAttrInfo *at
 void QL_Manager::getSelCondition(int nConditions, const Condition conditions[], const char * rel,
                                  int &nConReturn, const Condition **selConds, int offset[],int  length[]
                      ){
-    DataAttrInfo ** attributs;
+    DataAttrInfo attributs[MAXATTRS];
     int attr_count;
     getDataAttributsByRelation(rel,attributs,attr_count);
 
@@ -417,9 +454,9 @@ void QL_Manager::getSelCondition(int nConditions, const Condition conditions[], 
             for(int j = 0; j< attr_count; i++){
                 //to check
                 //TODO
-                if(!strcmp(attributs[j]->attrName,conditions[i].lhsAttr.attrName)){
-                    offset[i] = attributs[j]->offset;
-                    length[i] = attributs[j]->attrLength;
+                if(!strcmp(attributs[j].attrName,conditions[i].lhsAttr.attrName)){
+                    offset[i] = attributs[j].offset;
+                    length[i] = attributs[j].attrLength;
                     break;
                 }
             }
@@ -499,12 +536,24 @@ void QL_Manager::getSelCondition(int nConditions, const Condition conditions[], 
 //to get relation name for relAttr even relAttr is not "rel.attr"
 const char* QL_Manager::getRelName(const RelAttr &relAttr, int nRelations, const char * const relations[]){
     if(relAttr.relName != NULL) return relAttr.relName;
-    const char* relName;
+    for(int j=0;j<nRelations;j++){
+        DataAttrInfo l_attribut;
+        char emptyName[MAXNAME+1]; //initial
+        memset(emptyName, 0, MAXNAME + 1);
+        char r[MAXNAME+1], a[MAXNAME+1];
+        strcpy(r,relations[j]);
+        strcpy(a,relAttr.attrName);
+        RelAttr l_RA = {r,a};
+        getDataAttributByRelAttr(l_RA,l_attribut);
+        if(memcmp(l_attribut.relName,emptyName,MAXNAME+1)){
+            return l_attribut.relName;
+        }
+
+    }
     //to search metadata about all the relations and find the attribut
         //TODO
     //_smm->
     //relAttr.attrName;
-    return relName;
 }
 
 RC QL_Manager::printResultSelection(){

@@ -58,8 +58,8 @@ private:
     IX_Manager *_ixm;
     RM_Manager *_rmm;
     RC printResultSelection();
-    RC getDataAttributsByRelation(const char *relName, DataAttrInfo ** attributs, int &attr_count);
-    RC getDataAttributByRelAttr(const RelAttr &relAttr, DataAttrInfo *attribut);
+    RC getDataAttributsByRelation(const char *relName, DataAttrInfo attributs[], int &attr_count);
+    RC getDataAttributByRelAttr(const RelAttr &relAttr, DataAttrInfo &attribut);
     void getSelCondition(int nConditions, const Condition conditions[], const char * rel,
                          int &nConReturn, const Condition **selConds, int offset[], int  length[]);
     void getJoinConditions(const int &numRel, int nConditions, const Condition conditions[],
