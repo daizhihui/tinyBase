@@ -17,7 +17,6 @@
 #include "sm.h"
 #include "ix.h"
 #include "rm.h"
-#include "printer.h"
 
 using namespace std;
 
@@ -74,33 +73,33 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
     for (int i=0;i<nSelAttrs;i++){
         //get attribut length
         //TODO
-        int attrLength = 0;
-        AttrType attrType = INT;
+        DataAttrInfo *dataAttr = NULL;
+        getDataAttributByRelAttr(selAttrs[i],dataAttr);
         strcpy(attributes[i].relName,"table_OUT");
         strcpy(attributes[i].attrName,selAttrs[i].attrName);
         //calculate offset
         int offset=0;
         for (int j=0;j<i;j++){
-            offset+= length;
+            offset+= attributes[j].attrLength;
         }
         attributes[i].offset = offset;
-        attributes[i].attrType= attrType;
-        attributes[i].attrLength= attrLength;
+        attributes[i].attrType= dataAttr->attrType;
+        attributes[i].attrLength= dataAttr->attrLength;
         attributes[i].indexNo=-1;
     }
           //define a printer
     Printer p(attributes,nSelAttrs);
     p.PrintHeader(cout);
-    QueryTree *queryTree = new QueryTree(NULL);
-    queryTree->createQueryTree(nSelAttrs, selAttrs[],nRelations, relations[],nConditions, conditions[]);
+//    QueryTree *queryTree = new QueryTree(NULL);
+//    queryTree->createQueryTree(nSelAttrs, selAttrs[],nRelations, relations[],nConditions, conditions[]);
 
-    //RM_Record *input = new RM_Record();
-    RM_Record* output = new RM_Record();
-    if(queryTree->root->nodeValue->get_next(output)!=endOfIteration){
-        char *data;
-        output->GetData(data);
-        p.Print(cout,data);
-    };
+//    //RM_Record *input = new RM_Record();
+//    RM_Record* output = new RM_Record();
+//    if(queryTree->root->nodeValue->get_next(output)!=endOfIteration){
+//        char *data;
+//        output->GetData(data);
+//        p.Print(cout,data);
+//    };
     p.PrintFooter(cout);
 
     return 0;
@@ -289,13 +288,13 @@ RC QL_Manager::Update(const char *relName,
 
 
 
-RC QL_Manager::runQuery(){
+//RC QL_Manager::runQuery(){
 
 
-}
+//}
 
 
-
+/*
 Status QL_Manager::iteratorExecution(QueryTree * tree, RM_Record* &input, RM_Record* &output){
     // input of the last iteration
     RM_Record * outputLast = new RM_Record();
@@ -327,8 +326,9 @@ Status QL_Manager::iteratorExecution(QueryTree * tree, RM_Record* &input, RM_Rec
 //    }
 
 }
+*/
 
-void QL_Manager::getDataAttributsByRelation(char *relName, DataAttrInfo ** attributs, int &attr_count){
+RC QL_Manager::getDataAttributsByRelation(const char *relName, DataAttrInfo ** attributs, int &attr_count){
     //DataAttrInfo attributes[MAXATTRS];
     RC rc;
     RM_FileScan filescan;
@@ -351,19 +351,59 @@ void QL_Manager::getDataAttributsByRelation(char *relName, DataAttrInfo ** attri
             rc=rec.GetData(data);
             if(!strcmp(((DataAttrInfo*)data)->relName,relName)) {
                 // take all the DataAttrInfo of the relation relName
-                attributes[i] = new DataAttrInfo();
-                memcpy(attributes[i],data,sizeof(DataAttrInfo));
+                attributs[i] = new DataAttrInfo();
+                memcpy(attributs[i],data,sizeof(DataAttrInfo));
                 flag_exist=true;
                 i++;
                 attr_count++;
             }
         }
     }
+    if(flag_exist) return 0;
+    else return -1;
+}
+
+
+RC QL_Manager::getDataAttributByRelAttr(const RelAttr &relAttr, DataAttrInfo *attribut){
+    //DataAttrInfo attributes[MAXATTRS];
+    RC rc;
+    RM_FileScan filescan;
+
+    //open scan of attrcat
+    if((rc=filescan.OpenScan(_smm->fileHandle_Attrcat,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
+
+    //scan all the records in attrcat
+    bool flag_exist=false;
+    RM_Record rec;
+    char * data;
+    while(rc!=RM_EOF){
+        //get records until the end
+        rc=filescan.GetNextRec(rec);
+        if(rc!=0 && rc!=RM_EOF)return (rc);
+        if(rc!=RM_EOF){
+            //copy record to a_r
+            rc=rec.GetData(data);
+            if(!strcmp(((DataAttrInfo*)data)->relName,relAttr.relName)) {
+                // take all the DataAttrInfo of the relation relName
+                attribut = new DataAttrInfo();
+                memcpy(attribut,data,sizeof(DataAttrInfo));
+                if(!strcmp(attribut->attrName,relAttr.attrName)){
+                    flag_exist=true;
+                    break;
+                }
+
+            }
+        }
+    }
+    if(flag_exist) return 0;
+    else return -1;
 
 }
+
+
  //get all selection conditions
 void QL_Manager::getSelCondition(int nConditions, const Condition conditions[], const char * rel,
-                                 int &nConReturn, Condition **selConds, int &offset[],int & length[]
+                                 int &nConReturn, const Condition **selConds, int offset[],int  length[]
                      ){
     DataAttrInfo ** attributs;
     int attr_count;
@@ -371,13 +411,13 @@ void QL_Manager::getSelCondition(int nConditions, const Condition conditions[], 
 
     nConReturn = 0;
     for(int i=0; i< nConditions; i++){
-        if(conditions[i].bRhsIsAttr!=0 && !strcomp(conditions[i].lhsAttr.relName,rel)){
+        if(conditions[i].bRhsIsAttr!=0 && !strcmp(conditions[i].lhsAttr.relName,rel)){
             selConds[i] = &conditions[i];
             nConReturn++;
             for(int j = 0; j< attr_count; i++){
                 //to check
                 //TODO
-                if(!strcomp(attributs[j]->attrName,conditions[i].lhsAttr.attrName)){
+                if(!strcmp(attributs[j]->attrName,conditions[i].lhsAttr.attrName)){
                     offset[i] = attributs[j]->offset;
                     length[i] = attributs[j]->attrLength;
                     break;
@@ -391,7 +431,7 @@ void QL_Manager::getSelCondition(int nConditions, const Condition conditions[], 
 
 
  void QL_Manager::getJoinConditions(const int &numRel, int nConditions, const Condition conditions[],
-                   int &nConReturn, Condition **selConds, int &offset[],int & length[]){
+                   int &nConReturn, Condition **selConds, int offset[], int length[]){
 
  }
 
@@ -457,9 +497,9 @@ void QL_Manager::getSelCondition(int nConditions, const Condition conditions[], 
 //}
 
 //to get relation name for relAttr even relAttr is not "rel.attr"
-char* QL_Manager::getRelName(const RelAttr &relAttr, int nRelations, const char * const relations[]){
+const char* QL_Manager::getRelName(const RelAttr &relAttr, int nRelations, const char * const relations[]){
     if(relAttr.relName != NULL) return relAttr.relName;
-    char* relName;
+    const char* relName;
     //to search metadata about all the relations and find the attribut
         //TODO
     //_smm->

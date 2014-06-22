@@ -16,6 +16,8 @@
 #include "rm.h"
 #include "ix.h"
 #include "sm.h"
+#include "printer.h"
+
 using namespace std;
 //
 // QL_Manager: query language (DML)
@@ -56,13 +58,14 @@ private:
     IX_Manager *_ixm;
     RM_Manager *_rmm;
     RC printResultSelection();
-    void getDataAttributsByRelation(char *relName, DataAttrInfo ** attributs, int &attr_count);
+    RC getDataAttributsByRelation(const char *relName, DataAttrInfo ** attributs, int &attr_count);
+    RC getDataAttributByRelAttr(const RelAttr &relAttr, DataAttrInfo *attribut);
     void getSelCondition(int nConditions, const Condition conditions[], const char * rel,
-                         int &nConReturn, Condition **selConds, int &offset[],int & length[]);
+                         int &nConReturn, const Condition **selConds, int offset[], int  length[]);
     void getJoinConditions(const int &numRel, int nConditions, const Condition conditions[],
-                      int &nConReturn, Condition **selConds, int &offset[], int & length[]);
-    Status iteratorExecution(QueryTree * tree, RM_Record *&input, RM_Record *&output);
-    char* getRelNameForUniqueAttr(const RelAttr &relAttr, int nRelations, const char * const relations[]);
+                      int &nConReturn, Condition **selConds, int offset[], int  length[]);
+    //Status iteratorExecution(QueryTree * tree, RM_Record *&input, RM_Record *&output);
+    const char* getRelName(const RelAttr &relAttr, int nRelations, const char * const relations[]);
 };
 
 
