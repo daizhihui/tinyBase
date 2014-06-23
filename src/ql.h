@@ -10,15 +10,21 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <vector>
 #include "redbase.h"
 #include "parser.h"
 #include "rm.h"
 #include "ix.h"
 #include "sm.h"
+#include "printer.h"
 
+using namespace std;
 //
 // QL_Manager: query language (DML)
 //
+class QueryNode;
+class nodeIterator;
+
 class QL_Manager {
 public:
     QL_Manager (SM_Manager &smm, IX_Manager &ixm, RM_Manager &rmm);
@@ -48,11 +54,23 @@ public:
         const Condition conditions[]);   // conditions in where clause
 
 private:
+    SM_Manager *_smm;
+    IX_Manager *_ixm;
+    RM_Manager *_rmm;
+    RC printResultSelection();
+
 };
+
+
+
 
 //
 // Print-error function
 //
+#define QL_INVALIDRELNAME     (START_QL_WARN + 0) // invalid relation name
+#define QL_INVALID_ATTR_NUM        (START_QL_WARN + 1) //invalid attribute number
+#define QL_INVALID_ATTR_TYPE  (START_QL_WARN + 2) //invalid attribute type
+
 void QL_PrintError(RC rc);
 
 #endif
