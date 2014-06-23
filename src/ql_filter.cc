@@ -87,12 +87,13 @@ RC QL_ProjectOp::GetNext(RM_Record &rec){
     pChild->GetNext(rec);
     char * pDataRec;
     rec.GetData(pDataRec);
-    char * pData = new char[this->tupleLength + sizeof(RID)];
+    char * pData = new char[this->tupleLength];
     for(int i = 0; i< nProjAttrs; i++){
         QL_RelAttrInfo tInfo;
         pChild->SchemaLookup(projAttrs[i],tInfo);
         memcpy(pData+projAttrInfos[i].offset,pDataRec+tInfo.offset,tInfo.attrLength);
     }
+    memcpy(&rec+sizeof(RID),pData,sizeof(INT)); //to check
 }
 RC QL_ProjectOp::Finalize      (){
     pChild->Finalize();
@@ -121,3 +122,100 @@ QL_ProjectOp::QL_ProjectOp& operator=(const QL_ProjectOp &){}
 //    RelAttr          *projAttrs;
 //    QL_RelAttrInfo   *projAttrInfos;
 
+
+
+
+// nested loop join
+
+class QL_NLJOp : public QL_Operator {
+public:
+    QL_NLJOp         (QL_Operator *, QL_Operator *, const Condition &,
+                      SM_Manager *);
+    ~QL_NLJOp        ();
+    RC Initialize    (AttrType, int, char *);
+    RC GetNext       (RM_Record &);
+    RC Finalize      ();
+    RC SchemaLookup  (const RelAttr &, QL_RelAttrInfo &);
+    RC EstimateCard  (double &);
+    RC EstimateIO    (double &);
+    void Print       (ostream &, int);
+
+private:
+    QL_NLJOp  (const QL_NLJOp &);
+    QL_NLJOp& operator=(const QL_NLJOp &);
+
+    QL_Operator      *pLeftChild;
+    QL_Operator      *pRightChild;
+    const Condition  *pCondition;
+    SM_Manager       *pSmm;
+
+    CompOp           op;
+    QL_RelAttrInfo   leftAttrInfo;
+    RM_Record        leftRec;
+    char             *leftData;
+    QL_RelAttrInfo   rightAttrInfo;
+};
+
+QL_NLJOp::QL_NLJOp(QL_Operator *pLchild, QL_Operator *pRchild, const Condition &c, SM_Manager *smm){
+    pLeftChild = pLchild;
+    pRightChild = pRchild;
+    pCondition = &c;
+    pSmm = smm;
+
+    op = c.op;
+    pLchild->SchemaLookup(c.lhsAttr,leftAttrInfo);
+    pRchild->SchemaLookup(c.rhsAttr,rightAttrInfo);
+
+}
+
+QL_NLJOp::~QL_NLJOp(){
+    //TODO to rethink
+    delete pLeftChild;
+    delete pRightChild;
+    delete pSmm;
+
+}
+RC QL_NLJOp::Initialize    (AttrType at, int i, char * name){
+    pLeftChild->Initialize(at,i,name);
+    pRightChild->Initialize(at,i,name);
+
+}
+RC QL_NLJOp::GetNext(RM_Record &rec){
+    RM_Record tuple1;
+    RM_Record tuple2;
+    pLeftChild->GetNext(tuple1);
+    pRightChild->GetNext(tuple2);
+
+    char *pdata1;
+    char *pdata2;
+    tuple1.GetData(pdata1);
+    tuple2.GetData(pdata2);
+
+
+
+    //verify if two tuples satisfy condition
+    if(!memcmp(pdata1+leftAttrInfo.offset,pdata2+rightAttrInfo.offset,leftAttrInfo.attrLength)){
+        //structure the result of join, delete the attribut value in pdata2
+        // pdata1 + (pdata2 without attribut value)
+
+        char * pData = new char[this->tupleLength];
+        strcpy(pData,pdata1);
+
+    }
+
+
+}
+RC QL_NLJOp::Finalize      ();
+RC QL_NLJOp::SchemaLookup  (const RelAttr &relattr, QL_RelAttrInfo &info){
+    //calculer offset
+    RM_Record rc;
+    char *pdata;
+    pSmm->GetAttributeInfo(relattr.relName,relattr.attrName,rc,pdata);
+    info.attrLength = pdata[2*MAXNAME+sizeof(INT)+sizeof(AttrType)];
+    info.offset = *(int*)pdata[2*MAXNAME];
+}
+RC QL_NLJOp::EstimateCard  (double &);
+RC QL_NLJOp::EstimateIO    (double &);
+void QL_NLJOp::Print       (ostream &, int);
+QL_NLJOp::QL_NLJOp  (const QL_NLJOp &);
+QL_NLJOp::QL_NLJOp& operator=(const QL_NLJOp &);
