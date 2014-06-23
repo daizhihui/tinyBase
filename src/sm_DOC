@@ -1,0 +1,62 @@
+
+                           CS346 RedBase Part 3: SM
+
+                                                      05433063  Hyunjung Park
+                                                      <hyunjung@stanford.edu>
+
+*** Outline ***
+
+-Design
+-Testing
+-Etc.
+
+
+*** Design ***
+
+[Metadata Management]
+Two system catalogs(relcat and attrcat) are defined exactly same as the project
+description. 'relcat' relation consists of relName, tupleLength, attrCount, and
+indexCount. 'attrcat' relation consists of relName, attrName, offSet, attrType,
+attrLength, and indexNo. Since there is no index on these relations, they are 
+maintained only by RM component.
+
+When a database is opened, these catalogs are also opened and kept opened until
+the database is closed.
+
+[Index Management]
+When creating a new index, the offset of the indexed attribute is assigned to 
+the index number. Since only one index may be created for each attribute of a 
+relation, this scheme is obviously enough.
+
+[Other Assumptions]
+-DBname is max 24 bytes long, and doesn't contain spaces or '/' (in order to
+prevent security exploits).
+-Each line of data file (for load command) is max 2047 bytes long.
+
+
+*** Testing ***
+
+[Correctness]
+I was able to test most of commands implemented in this part very easily, due
+to the interactive prompt. However, there was no way to confirm whether the 
+index was working correctly or not. Thus, I implemented an indexscan based
+'print' command so that I could verify the index. If 'useindex' parameter 
+(which can be set by 'set' command) is nonnegative, its value means the index
+number to be scanned when printing all tuples. sm_test.3 includes test cases.
+
+[Robustness]
+Since the parser takes care of many invalid inputs, there were not many issues
+regarding robustness. sm_test.2 includes test cases, which include creating a
+table with duplicated attribute names, drop system catalogs, etc.
+
+
+*** Etc. ***
+
+-Makefile.parser was merged to Makefile.
+-No known bugs.
+-Some of shared data in /usr/class/cs346/redbase/data/ were used in the testing
+process.
+
+
+*** Thank you ***
+

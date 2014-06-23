@@ -46,69 +46,45 @@ public:
     RC Set        (const char *paramName,         // set parameter to
                    const char *value);            //   value
 
+    RC GetRelationInfo (const char *relName, RM_Record &rec, char *&data);
+    RC SetRelationInfo (const char *relName, int, int);
+    RC GetAttributeInfo(const char *relName, const char *attrName,
+                        RM_Record &rec, char *&data);
+
 private:
-    RM_Manager * Rmm;
-    IX_Manager * Ixm;
-    RM_FileHandle fileHandle_Relcat;
-    RM_FileHandle fileHandle_Attrcat;
-    
+    // Copy constructor
+    SM_Manager(const SM_Manager &manager);
+    // Overloaded =
+    SM_Manager& operator=(const SM_Manager &manager);
+
+    IX_Manager *pIxm;
+    RM_Manager *pRmm;
+    RM_FileHandle fhRelcat;
+    RM_FileHandle fhAttrcat;
+
+    int useIndexNo;
 };
 
 //
 // Print-error function
 //
-
-//struct for Catalog relcat
-struct Relation{
-    // Default constructor
-    Relation() {
-        memset(relName, 0, MAXNAME + 1);
-    };
-    // Copy constructor
-    Relation( const Relation &d ) {
-        strcpy (relName, d.relName);
-        tupleLength = d.tupleLength;
-        attrCount = d.attrCount;
-        indexCount = d.indexCount;
-    };
-    
-    Relation& operator=(const Relation &d) {
-        if (this != &d) {
-            strcpy (relName, d.relName);
-            tupleLength = d.tupleLength;
-            attrCount = d.attrCount;
-            indexCount = d.indexCount;
-        }
-        return (*this);
-    };
-
-    char relName[MAXNAME+1]; //relation name
-    int tupleLength; //tuple length in bytes
-    int attrCount; //number of attributes
-    int indexCount; //number of indexed attributes
-};
-
-//struct for Catalog attrcat in printer.h : DataAttrInfo
-
-//
-// Error table
-//
-static char *SM_WarnMsg[] = {
-    (char*)"inviable relation name",
-    (char*)"invalid attribute name",
-    (char*)"too much attributes",
-    (char*)"invalid attribute",
-    (char*)"index already exists",
-    (char*)"attribute index not exists",
-};
-
 void SM_PrintError(RC rc);
 
-#define SM_INVALIDRELNAME     (START_SM_WARN + 0) // invalid relation name
-#define SM_INVALIDATTRNAME     (START_SM_WARN + 1) // invalid attribute name
-#define SM_EXCEEDMAXATTRS     (START_SM_WARN + 2) //too much attributes
-#define SM_INVALIDATTR        (START_SM_WARN + 3) // invalid attribute
-#define SM_INDEXEXIST       (START_SM_WARN + 4) //index already exists
-#define SM_ATTRINDEX_NOT_EXIST (START_SM_WARN + 5) // attribute index not exists
-#define SM_LASTWARN        SM_ATTRINDEX_NOT_EXIST
+#define SM_INVALIDDBNAME   (START_SM_WARN + 0) // invalid DB name
+#define SM_CHDIRFAILED     (START_SM_WARN + 1) // cannot change directory
+#define SM_INVALIDRELNAME  (START_SM_WARN + 2) // invalid relation name
+#define SM_DUPLICATEDATTR  (START_SM_WARN + 3) // duplicated attribute names
+#define SM_RELEXISTS       (START_SM_WARN + 4) // relation already exists
+#define SM_RELNOTFOUND     (START_SM_WARN + 5) // relation not found
+#define SM_ATTRNOTFOUND    (START_SM_WARN + 6) // relation/attribute not found
+#define SM_INDEXEXISTS     (START_SM_WARN + 7) // index already exists
+#define SM_INDEXNOTFOUND   (START_SM_WARN + 8) // index not found
+#define SM_FILEIOFAILED    (START_SM_WARN + 9) // data file I/O failed
+#define SM_INVALIDFORMAT   (START_SM_WARN + 10) // invalid data file format
+#define SM_PARAMUNDEFINED  (START_SM_WARN + 11) // parameter undefined
+#define SM_LASTWARN        SM_PARAMUNDEFINED
+
+#define SM_NOMEM           (START_SM_ERR - 0)  // no memory
+#define SM_LASTERROR       SM_NOMEM
+
 #endif
