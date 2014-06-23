@@ -1,1011 +1,1201 @@
 //
-// File:        SM component stubs
-// Description: Print parameters of all SM_Manager methods
-// Authors:     Dallan Quass (quass@cs.stanford.edu)
+// File:        sm_manager.cc
+// Description: SM_Manager class implementation
+// Author:      Hyunjung Park (hyunjung@stanford.edu)
 //
 
-#include <cstdio>
-#include <iostream>
-#include <cstring>
-#include <unistd.h>
-#include <fstream>
-#include "redbase.h"
-#include "sm.h"
-#include "ix.h"
-#include "rm.h"
-#include "printer.h"
-
+#include "sm_internal.h"
+#include <stdio.h>
 using namespace std;
 
+//
+// SM_Manager
+//
+// Desc: Constructor
+//
 SM_Manager::SM_Manager(IX_Manager &ixm, RM_Manager &rmm)
 {
-    Ixm=&ixm;
-    Rmm=&rmm;
-    
+   // Set the associated {IX|RM}_Manager object
+   pIxm = &ixm;
+   pRmm = &rmm;
+
+   //
+   useIndexNo = -1;
 }
 
+//
+// ~SM_Manager
+//
+// Desc: Destructor
+//
 SM_Manager::~SM_Manager()
 {
-    Ixm=NULL;
-    Rmm=NULL;
+   // Clear the associated {IX|RM}_Manager object
+   pIxm = NULL;
+   pRmm = NULL;
 }
 
+//
+// OpenDb
+//
+// Desc: Open a DB
+// In:   dbName - name of DB to open
+// Ret:  SM_INVALIDDBNAME, SM_CHDIRFAILED, RM return code
+//
 RC SM_Manager::OpenDb(const char *dbName)
 {
-    //change to current directory
-    if (chdir(dbName) < 0) {
-        cerr << " chdir error to " << dbName << "\n";
-        exit(1);
-    }
-    
-    RC rc;
-    
-    // Call RM_Manager::OpenFile() to open Catalog relcat
-    if((rc=Rmm->OpenFile("relcat", fileHandle_Relcat))) goto err_return;
-    
-    // Call RM_Manager::OpenFile() to open Catalog attrcat
-    if((rc=Rmm->OpenFile("attrcat", fileHandle_Attrcat))) goto err_return;
+   RC rc;
 
+   // Sanity Check: Length of the argument should be less than MAXDBNAME
+   //               DBname cannot contain ' ' or '/'
+   if (strlen(dbName) > MAXDBNAME
+       || strchr(dbName, ' ') || strchr(dbName, '/')) {
+      rc = SM_INVALIDDBNAME;
+      goto err_return;
+   }
+
+   // Change the working directory
+   if (chdir(dbName) < 0) {
+      rc = SM_CHDIRFAILED;
+      goto err_return;
+   }
+
+   // Open a file scan for RELCAT
+   if ((rc = pRmm->OpenFile(RELCAT, fhRelcat)))
+      goto err_return;
+
+   // Open a file scan for ATTRCAT
+   if ((rc = pRmm->OpenFile(ATTRCAT, fhAttrcat)))
+      goto err_close;
+
+   // Return ok
+   return (0);
+
+   // Return error
+err_close:
+   pRmm->CloseFile(fhRelcat);
 err_return:
-    return (rc);
-    
-    return (0);
+   return (rc);
 }
 
+//
+// CloseDb
+//
+// Desc: Close a DB
+// Ret:  RM return code
+//
 RC SM_Manager::CloseDb()
 {
-    RC rc;
-    
-    //Call RM_Manager::CloseFile() to close Catalog relcat
-    if((rc=Rmm->CloseFile(fileHandle_Relcat))) goto err_return;
-    
-    //Call RM_Manager::CloseFile() to close Catalog relcat
-    if((rc=Rmm->CloseFile(fileHandle_Attrcat))) goto err_return;
-    
+   RC rc;
+
+   // Close a file scan for ATTRCAT
+   if ((rc = pRmm->CloseFile(fhAttrcat)))
+      goto err_close;
+
+   // Close a file scan for RELCAT
+   if ((rc = pRmm->CloseFile(fhRelcat)))
+      goto err_return;
+
+   // Return ok
+   return (0);
+
+   // Return error
+err_close:
+   pRmm->CloseFile(fhRelcat);
 err_return:
-    return (rc);
-    
-    return (0);
+   return (rc);
 }
 
+//
 // CreateTable
-// IN: relName, attrCount, attributes
-//RC: SM_INVALIDRELNAME, SM_INVALIDRELNAME, SM_EXCEEDMAXATTRS
+//
+// Desc: Create a table
+// In:   relName -
+//       attrCount -
+//       attributes -
+// Ret:  SM_INVALIDRELNAME, SM_DUPLICATEDATTR, SM_RELEXISTS, RM return code
+//
 RC SM_Manager::CreateTable(const char *relName,
-                           int        attrCount,
-                           AttrInfo   *attributes)
+                           int attrCount, AttrInfo *attributes)
 {
-    
-    RC rc;
-    
-    //check if relation name begin with letter
-    if(!((relName[0] <= 'z' && relName[0] >= 'a') || (relName[0] <= 'Z' && relName[0] >= 'A'))) return (SM_INVALIDRELNAME);
-    
-    // relation name can't be longer than MAXNAME
-    if ((unsigned)strlen(relName)>=MAXNAME) return (SM_INVALIDRELNAME);
-    
-    // define de RM_FileScan
-    RM_FileScan filescan;
-    RM_Record rec;
-    if((rc=filescan.OpenScan(fileHandle_Relcat, INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
-    // check if exists the same attribute name in relcat
-    Relation relation_r;
-    char * data_r;
-    //scan all the records in relcat
-    while(rc!=RM_EOF){
-        //get records until the end
-        rc=filescan.GetNextRec(rec);
-        if(rc!=0 && rc!=RM_EOF) return (rc);
-        if(rc!=RM_EOF){
-            //copy record to relation
-            if((rc=rec.GetData(data_r))) return (rc);
+   RC rc;
+   RM_Record tmpRec;
+   char *relcatData;
+   int tupleLength = 0;
+   int offset = 0;
+   SM_RelcatRec relcatRec;
+   SM_AttrcatRec attrcatRec;
+   RID rid;
 
-            //compare two strings: strcmp (equal return 0)
-            if(!strcmp(((Relation*)data_r)->relName,relName)) {
-                return (SM_INVALIDRELNAME);
-            }
-        }
-    }
+   // Sanity Check: relName should not be RELCAT or ATTRCAT
+   if (strcmp(relName, RELCAT) == 0 || strcmp(relName, ATTRCAT) == 0) {
+      rc = SM_INVALIDRELNAME;
+      goto err_return;
+   }
 
+   // Compute tupleLength by summing up attrLength
+   // Sanity Check: duplicated attribute names
+   for (int i = 0; i < attrCount; i++) {
+      tupleLength += attributes[i].attrLength;
+      for (int j = i + 1; j < attrCount; j++) {
+         if (strcmp(attributes[i].attrName, attributes[j].attrName) == 0) {
+            rc = SM_DUPLICATEDATTR;
+            goto err_return;
+         }
+      }
+   }
 
-    /*char * relname;
-    strcpy(relname,relName);
-    if((rc=filescan.OpenScan(fileHandle_Relcat,STRING, MAXNAME+1, 0, EQ_OP , relname))) return (rc);
-    if(rc!=RM_EOF) return (SM_INVALIDRELNAME);*/
-    
-    //close scan;
-    if((rc=filescan.CloseScan())) return (rc);
-    
-    // check number of attributes
-    if(!(attrCount>=1 && attrCount<=MAXATTRS)) return (SM_EXCEEDMAXATTRS);
-    
-    // check if two attributes name are the same
-    for(int j=0;j<attrCount-1;j++){
-        for (int k=j+1;k<attrCount;k++){
-            //attribute name has already exists in the relation 
-            if(!strcmp(attributes[j].attrName,attributes[k].attrName)) return (SM_INVALIDATTRNAME);
-        }
-    }
+   // Sanity Check: relName should not exist
+   if ((rc = GetRelationInfo(relName, tmpRec, relcatData)) != SM_RELNOTFOUND) {
+      rc = (rc == 0) ? SM_RELEXISTS : rc;
+      goto err_return;
+   }
 
-    int tuplelength=0;
-    for (int i=0;i<attrCount;i++){
-        
-        //check if attribute name begin with letter
-        if(!((attributes[i].attrName[0] <= 'z' && attributes[i].attrName[0] >= 'a') || (attributes[i].attrName[0] <= 'Z' && attributes[i].attrName[0] >= 'A'))) return (SM_INVALIDATTRNAME);
-        
-        // attribute name can't be longer than MAXNAME
-        if ((unsigned)strlen(attributes[i].attrName)>=MAXNAME) return (SM_INVALIDATTRNAME);
-        
-        // check attribute
-        switch (attributes[i].attrType) {
-            case INT:
-                if(attributes[i].attrLength!=4)
-                    // Test: wrong attribute length
-                    return (SM_INVALIDATTR);
-            case FLOAT:
-                if (attributes[i].attrLength != 4)
-                    // Test: wrong attribute length
-                    return (SM_INVALIDATTR);
-                break;
-                
-            case STRING:
-                if (attributes[i].attrLength < 1 || attributes[i].attrLength > MAXSTRINGLEN)
-                    // Test: wrong _attrLength
-                    return (SM_INVALIDATTR);
-                break;
-                
-            default:
-                // Test: wrong _attrType
-                return (SM_INVALIDATTR);
-        }
+   // Update RELCAT
+   SM_SetRelcatRec(relcatRec, relName, tupleLength, attrCount, 0, 0);
+   if ((rc = fhRelcat.InsertRec((char *)&relcatRec, rid)))
+      goto err_return;
+   if ((rc = SetRelationInfo(RELCAT, 1, fhRelcat.numPages())))
+      goto err_return;
+// if ((rc = fhRelcat.ForcePages()))
+//    goto err_return;
 
-        //calculate the total length of attributes
-        tuplelength += attributes[i].attrLength;
-    }
-    
-    // new Relation record
-    RID rid;
+   // Update ATTRCAT
+   for (int i = 0; i < attrCount; i++) {
+      SM_SetAttrcatRec(attrcatRec,
+                       relName, attributes[i].attrName,
+                       offset, attributes[i].attrType, attributes[i].attrLength,
+                       -1, 0, 0);
+      offset += attributes[i].attrLength;
+      if ((rc = fhAttrcat.InsertRec((char *)&attrcatRec, rid)))
+         goto err_return;
+   }
+   if ((rc = SetRelationInfo(ATTRCAT, attrCount, fhAttrcat.numPages())))
+      goto err_return;
+   if ((rc = fhAttrcat.ForcePages()))
+      goto err_return;
 
-    char data[sizeof(Relation)];
-    Relation relation=Relation();
-    strcpy(relation.relName,relName);
-    relation.tupleLength=tuplelength;
-    relation.attrCount=attrCount;
-    relation.indexCount=0;
-    memcpy(data,&relation,sizeof(Relation));
+   // Create file
+   if ((rc = pRmm->CreateFile(relName, tupleLength)))
+      goto err_return;
 
-    //store new Relation record to Catalog relcat
-    if((rc=fileHandle_Relcat.InsertRec(data, rid))) return (rc);
-    
-    //verifier store data is correct
-    /*RM_Record r;
-    fileHandle_Relcat.GetRec(rid, r);
-    char * datar;
-    r.GetData(datar);
-    cout<<((Relation*)data)->tupleLength<<endl;*/
-    
-    //call RM_Manager::ForcePage to force page relcat
-    if((rc=fileHandle_Relcat.ForcePages())) return (rc);
-    
-    DataAttrInfo attr_relation=DataAttrInfo();
-    //DataAttrInfo records
-    for (int i=0;i<attrCount;i++){
-        char data[sizeof(DataAttrInfo)];
-        strcpy(attr_relation.relName,relName);
-        strcpy(attr_relation.attrName,attributes[i].attrName);
-        //calculate offset
-        int offset=0;
-        for (int j=0;j<i;j++){
-            offset+=attributes[j].attrLength;
-        }
-        attr_relation.offset=offset;
-        attr_relation.attrType=attributes[i].attrType;
-        attr_relation.attrLength=attributes[i].attrLength;
-        attr_relation.indexNo=-1;
-        
-        memcpy(data,&attr_relation,sizeof(DataAttrInfo));
-        //store new Attr_Relation record to Catalog attrcat
-        if((rc=fileHandle_Attrcat.InsertRec(data, rid))) return (rc);
-    }
-    
-    //call RM_FileHandle::ForcePages to force page attrcat
-    if((rc=fileHandle_Attrcat.ForcePages())) return (rc);
-    
-    
-    //Call RM_Manager::CreateFile to create table file
-    if((rc=Rmm->CreateFile(relName, tuplelength))) return (rc);
-    
-    cout << "CreateTable\n"
-    << "   relName     =" << relName << "\n"
-    << "   attrCount   =" << attrCount << "\n";
-    for (int i = 0; i < attrCount; i++)
-        cout << "   attributes[" << i << "].attrName=" << attributes[i].attrName
-        << "   attrType="
-        << (attributes[i].attrType == INT ? "INT" :
-            attributes[i].attrType == FLOAT ? "FLOAT" : "STRING")
-        << "   attrLength=" << attributes[i].attrLength << "\n";
+   // Return ok
+   return (0);
 
-    return (0);
-    
+   // Return error
+err_return:
+   return (rc);
 }
 
+//
+// DropTable
+//
+// Desc: Drop a table
+// In:   relName -
+// Ret:  SM_INVALIDRELNAME, SM_RELNOTFOUND, RM return code
+//
 RC SM_Manager::DropTable(const char *relName)
 {
-    
-    RC rc;
-    RM_FileScan filescan;
-    
-    //open scan of relcat
-    if((rc=filescan.OpenScan(fileHandle_Relcat,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
-    
-    RM_Record rec;
-    //pointer to the record in relcat and attrcat
-    char * data;
-    bool flag=false;
-    //scan all the records in relcat
-    while(rc!=RM_EOF){
-        //get records until the end
-        rc=filescan.GetNextRec(rec);
-        if(rc!=0 && rc!=RM_EOF){
-            return (rc);
-        }
-        if(rc!=RM_EOF){
-            if((rc=rec.GetData(data))) return (rc);
-        
-            if(!strcmp(((Relation*)data)->relName,relName)) {
-                
-                flag=true;
-                RID rid;
-                // get record RID
-                if((rc=rec.GetRid(rid))) return (rc);
-                
-                //delete relation record in relcat
-                if((rc=fileHandle_Relcat.DeleteRec(rid))) return (rc);
-                
-                //update relcat in disk
-                if((rc=fileHandle_Relcat.ForcePages())) return (rc);
-                break;
-            }
-            
-        }
-    }
-   
-    // if no relation records in relcat, return invalid relation name
-    if(!flag) return (SM_INVALIDRELNAME);
-    
-    // close the scan
-    if((rc=filescan.CloseScan())) return (rc);
-    
-    // Call RM_Manager::DestroyFile to destroy the relation file
-    if((rc=Rmm->DestroyFile(relName))) return (rc);
-    
-    //open scan of attrcat
-    if((rc=filescan.OpenScan(fileHandle_Attrcat,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
-    
-    
-    //scan all the records in attrcat
-    while(rc!=RM_EOF){
-        //get records until the end
-        rc=filescan.GetNextRec(rec);
-        if(rc!=0 && rc!=RM_EOF) return (rc);
-        if(rc!=RM_EOF){
-            rec.GetData(data);
-            
-            if(!strcmp(((DataAttrInfo*)data)->relName,relName)) {
-                
-                RID rid;
-                // get record RID
-                if((rc=rec.GetRid(rid))) return (rc);
-                
-                //delete attribute record in attrcat
-                if((rc=fileHandle_Attrcat.DeleteRec(rid))) return (rc);
-                
-                //update relcat in disk
-                if((rc=fileHandle_Attrcat.ForcePages())) return (rc);
-                
-                // destroy index file if exists
-                if(((DataAttrInfo*)data)->indexNo!=-1) {
-                    if((rc=Ixm->DestroyIndex(relName, ((DataAttrInfo*)data)->indexNo))) return (rc);
-                }
-            }
-        }
-    }
-    
-    //c(lose scan
-    if((rc=filescan.CloseScan())) return (rc);
-    
-    cout << "DropTable\n   relName=" << relName << "\n";
-    
-    return (0);
+   RC rc;
+   RM_Record rec, _rec;
+   char *relcatData;
+   RID rid;
+   char _relName[MAXNAME];
+   RM_FileScan fs;
+   int i = 0;
+
+   // Sanity Check: relName should not be RELCAT or ATTRCAT
+   if (strcmp(relName, RELCAT) == 0 || strcmp(relName, ATTRCAT) == 0) {
+      rc = SM_INVALIDRELNAME;
+      goto err_return;
+   }
+
+   // Update RELCAT
+   if ((rc = GetRelationInfo(relName, rec, relcatData)))
+      goto err_return;
+   if ((rc = rec.GetRid(rid)))
+      goto err_return;
+   if ((rc = fhRelcat.DeleteRec(rid)))
+      goto err_return;
+   if ((rc = SetRelationInfo(RELCAT, -1, fhRelcat.numPages())))
+      goto err_return;
+// if ((rc = fhRelcat.ForcePages()))
+//    goto err_return;
+
+   // Update ATTRCAT
+   memset(_relName, '\0', sizeof(_relName));
+   strncpy(_relName, relName, MAXNAME);
+   if ((rc = fs.OpenScan(fhAttrcat, STRING, MAXNAME,
+                         OFFSET(SM_AttrcatRec, relName), EQ_OP, _relName)))
+      goto err_return;
+
+   while ((rc = fs.GetNextRec(_rec)) != RM_EOF) {
+      char *attrcatData;
+
+      if (rc != 0)
+         goto err_closescan;
+
+      // Delete the index on this attribute, if any
+      if ((rc = _rec.GetData(attrcatData)))
+         goto err_closescan;
+      if (((SM_AttrcatRec *)attrcatData)->indexNo != -1)
+         pIxm->DestroyIndex(relName,((SM_AttrcatRec *)attrcatData)->indexNo);
+
+      // Delete the record from ATTRCAT
+      if ((rc = _rec.GetRid(rid)))
+         goto err_closescan;
+      if ((rc = fhAttrcat.DeleteRec(rid)))
+         goto err_closescan;
+
+      if (++i == ((SM_RelcatRec *)relcatData)->attrCount)
+         break;
+   }
+
+   if ((rc = fs.CloseScan()))
+      goto err_return;
+   if ((rc = SetRelationInfo(ATTRCAT, -((SM_RelcatRec *)relcatData)->attrCount,
+                             fhAttrcat.numPages())))
+      goto err_return;
+   if ((rc = fhAttrcat.ForcePages()))
+      goto err_return;
+
+   // Destroy file
+   if ((rc = pRmm->DestroyFile(relName)))
+      goto err_return;
+
+   // Return ok
+   return (0);
+
+   // Return error
+err_closescan:
+   fs.CloseScan();
+err_return:
+   return (rc);
 }
 
-RC SM_Manager::CreateIndex(const char *relName,
-                           const char *attrName)
+//
+// CreateIndex
+//
+// Desc:
+// In:   relName -
+//       attrName -
+// Ret:  SM_ATTRNOTFOUND, SM_INDEXEXISTS, IX return code
+//
+RC SM_Manager::CreateIndex(const char *relName, const char *attrName)
 {
-    
-    RC rc;
-    
-    // define de RM_FileScan
-    RM_FileScan filescan;
-    RM_Record rec;
-    
-    // scan all the records in attrcat
-    if((rc=filescan.OpenScan(fileHandle_Attrcat, INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
-    
-    bool flag_rel_exist=false;
-    bool flag_attr_exist=false;
-    // check if the index already exists
-    int max_index=-1;
-    
-    //store in DataAttrInfo of the attribute that we want to create index
-    DataAttrInfo attr_relation;
-    //pointer to the record in attrcat
-    RID record_change;
-    char * data;
-    while(rc!=RM_EOF){
-        //get records until the end
-        rc=filescan.GetNextRec(rec);
-        if(rc!=0 && rc!=RM_EOF) return (rc);
-        if(rc!=RM_EOF){
-            if((rc=rec.GetData(data))) return (rc);
-            
-            //calculate the max index already exists, then create index max_index+1
-            if(((DataAttrInfo*)data)->indexNo>max_index) max_index=((DataAttrInfo*)data)->indexNo;
+   RC rc;
+   RM_Record rec;
+   char *attrcatData;
+   int indexNo = -1;
+   RM_FileScan fs;
+   RM_FileHandle fh;
+   RM_Record dataRec;
+   IX_IndexHandle ih;
 
-            //check if relation name exists
-            if(!strcmp(((DataAttrInfo*)data)->relName,relName)) flag_rel_exist=true;
-            
-            //check if attribute name exists
-            if(!strcmp(((DataAttrInfo*)data)->attrName,attrName)) flag_attr_exist=true;
-            
-            // the index already exists, return error SM_INDEXEXIST
-            if((!strcmp(((DataAttrInfo*)data)->relName,relName))&& (!strcmp(((DataAttrInfo*)data)->attrName,attrName)) && (((DataAttrInfo*)data)->indexNo!=-1)) {
-                return (SM_INDEXEXIST);
-            }
-            
-            //the index doesn't exist
-            if((!strcmp(((DataAttrInfo*)data)->relName,relName))&& (!strcmp(((DataAttrInfo*)data)->attrName,attrName)) && (((DataAttrInfo*)data)->indexNo==-1)) {
-                rec.GetRid(record_change);
-                memcpy(&attr_relation,data,sizeof(DataAttrInfo));
-            }
-            
-        }
-    }
-    
-    // relation name or attribute name not exist in attrcat
-    if(!flag_rel_exist) return (SM_INVALIDRELNAME);
-    if(!flag_attr_exist) return(SM_INVALIDATTRNAME);
-    
-    // close the filescan
-    if((rc=filescan.CloseScan())) return (rc);
-    
-    
-    // Call IX_IndexHandle::CreateIndex to create a index file
-    if((rc=Ixm->CreateIndex(relName, max_index+1, attr_relation.attrType, attr_relation.attrLength))) return (rc);
-    
-    // Call IX_IndexHandle::OpenIndex to open the index file
-    IX_IndexHandle indexhandle;
-    if((rc=Ixm->OpenIndex(relName, max_index+1, indexhandle))) return (rc);
-    
-    //file handle of table
-    RM_FileHandle filehandle_rel;
-    // Call RM_Manager::OpenFile to open relation file
-    if((rc=Rmm->OpenFile(relName, filehandle_rel))) return (rc);
-    
-    // Call RM_FileScan::OpenScan to scan all the tuples in the table
-    if((rc=filescan.OpenScan(filehandle_rel, INT, sizeof(int), 0, NO_OP, NULL))) return (rc);
-    
-    // scan all the tuples in the table
-    while(rc!=RM_EOF){
-        rc=filescan.GetNextRec(rec);
-        if(rc!=0 && rc!=RM_EOF) return (rc);
-        if(rc!=RM_EOF){
-            RID rid;
-            if((rc=rec.GetRid(rid))) return (rc);
-            char * data;
-            // get record data
-            if((rc=rec.GetData(data))) return (rc);
-            char data_rec[attr_relation.attrLength];
-            // get attribute value
-            memcpy(data_rec,data+attr_relation.offset,attr_relation.attrLength);
-            if((rc=indexhandle.InsertEntry(data_rec, rid))) return (rc);
-        }
-    }
-    
-    // update information in attrcat to disk
-    RM_Record r;
-    if((rc=fileHandle_Attrcat.GetRec(record_change, r))) return (rc);
-    char * data_change;
-    r.GetData(data_change);
-    ((DataAttrInfo*)data_change)->indexNo=max_index+1;
-    fileHandle_Attrcat.UpdateRec(r);
-    //update relcat in disk
-    if((rc=fileHandle_Attrcat.ForcePages())) return (rc);
-    
-    
-    //Close scan
-    if((rc=filescan.CloseScan())) return (rc);
-    
-    //close relation file
-    if((rc=Rmm->CloseFile(filehandle_rel))) return (rc);
-    
-    //close index file
-    if(Ixm->CloseIndex(indexhandle)) return (rc);
+   // Sanity Check: relName/attrName should exist, but its index should not
+   if ((rc = GetAttributeInfo(relName, attrName, rec, attrcatData)))
+      goto err_return;
+   if (((SM_AttrcatRec *)attrcatData)->indexNo != -1) {
+      rc = SM_INDEXEXISTS;
+      goto err_return;
+   }
+   // Determine indexNo
+   indexNo = ((SM_AttrcatRec *)attrcatData)->offset;
 
-    //open scan of relcat
-    if((rc=filescan.OpenScan(fileHandle_Relcat,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
-    
-    //pointer to the record in relcat and attrcat
-    char * data_relcat;
-    //scan all the records in relcat
-    while(rc!=RM_EOF){
-        //get records until the end
-        rc=filescan.GetNextRec(rec);
-        if(rc!=0 && rc!=RM_EOF){
-            return (rc);
-        }
-        if(rc!=RM_EOF){
-            if((rc=rec.GetData(data_relcat))) return (rc);
-            
-            if(!strcmp(((Relation*)data_relcat)->relName,relName)) {
-                int indexC=0;
-                indexC=((Relation*)data_relcat)->indexCount;
-                ((Relation*)data_relcat)->indexCount=indexC+1;
-                fileHandle_Relcat.UpdateRec(rec);
-                //update relcat in disk
-                if((rc=fileHandle_Relcat.ForcePages())) return (rc);
-                break;
-            }
-        }
-    }
-    
-    // close the scan
-    if((rc=filescan.CloseScan())) return (rc);
+   // Build index
+   if ((rc = pIxm->CreateIndex(relName, indexNo,
+                               ((SM_AttrcatRec *)attrcatData)->attrType,
+                               ((SM_AttrcatRec *)attrcatData)->attrLength)))
+      goto err_return;
+   if ((rc = pIxm->OpenIndex(relName, indexNo, ih)))
+      goto err_destroyindex;
 
-    cout << "CreateIndex\n"
-    << "   relName =" << relName << "\n"
-    << "   attrName=" << attrName << "\n";
-    return (0);
+   if ((rc = pRmm->OpenFile(relName, fh)))
+      goto err_closeindex;
+   if ((rc = fs.OpenScan(fh, INT, sizeof(int), 0, NO_OP, NULL)))
+      goto err_closefile;
+
+   while ((rc = fs.GetNextRec(dataRec)) != RM_EOF) {
+      char *data;
+      RID rid;
+
+      if (rc != 0)
+         goto err_closescan;
+
+      if ((rc = dataRec.GetData(data)))
+         goto err_closescan;
+      if ((rc = dataRec.GetRid(rid)))
+         goto err_closescan;
+
+      if ((rc = ih.InsertEntry(data + ((SM_AttrcatRec *)attrcatData)->offset, rid)))
+         goto err_closescan;
+   }
+
+   if ((rc = fs.CloseScan()))
+      goto err_closefile;
+   if ((rc = pRmm->CloseFile(fh)))
+      goto err_closeindex;
+
+   ((SM_AttrcatRec *)attrcatData)->distinctVals += ih.deltaDistinctVals();
+   ((SM_AttrcatRec *)attrcatData)->ixDepth      += ih.deltaDepth();
+   if ((rc = ih.GetMinKey(((SM_AttrcatRec *)attrcatData)->minValue)))
+      goto err_destroyindex;
+   if ((rc = ih.GetMaxKey(((SM_AttrcatRec *)attrcatData)->maxValue)))
+      goto err_destroyindex;
+
+   if ((rc = pIxm->CloseIndex(ih)))
+      goto err_destroyindex;
+
+   // Update indexNo
+   ((SM_AttrcatRec *)attrcatData)->indexNo = indexNo;
+   if ((rc = fhAttrcat.UpdateRec(rec)))
+      goto err_return;
+   if ((rc = fhAttrcat.ForcePages()))
+      goto err_return;
+
+   // Return ok
+   return (0);
+
+   // Return error
+err_closescan:
+   fs.CloseScan();
+err_closefile:
+   pRmm->CloseFile(fh);
+err_closeindex:
+   pIxm->CloseIndex(ih);
+err_destroyindex:
+   pIxm->DestroyIndex(relName, indexNo);
+err_return:
+   return (rc);
 }
 
-RC SM_Manager::DropIndex(const char *relName,
-                         const char *attrName)
+//
+// DropIndex
+//
+// Desc:
+// In:   relName -
+//       attrName -
+// Ret:  SM_ATTRNOTFOUND, SM_INDEXNOTFOUND, IX return code
+//
+RC SM_Manager::DropIndex(const char *relName, const char *attrName)
 {
-    
-    RC rc;
-    RM_FileScan filescan;
- 
-    //open scan of attrcat
-    if((rc=filescan.OpenScan(fileHandle_Attrcat,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
-    
-    RM_Record rec;
-    
-    bool flag_exist=false;
-    //scan all the records in attrcat
-    char * data;
-    while(rc!=RM_EOF){
-        //get records until the end
-        rc=filescan.GetNextRec(rec);
-        if(rc!=0 && rc!=RM_EOF)return (rc);
-        if(rc!=RM_EOF){
-            if((rc=rec.GetData(data))) return (rc);
-            
-            if((!strcmp(((DataAttrInfo*)data)->relName,relName)) && (!strcmp(((DataAttrInfo*)data)->attrName,attrName)) && (((DataAttrInfo*)data)->indexNo!=-1)) {
-                
-                flag_exist=true;
-                
-                int index=((DataAttrInfo*)data)->indexNo;
-                // destroy index file
-                if((rc=Ixm->DestroyIndex(relName, index))) return (rc);
-                
-                // update indexNo in attrcat
-                ((DataAttrInfo*)data)->indexNo=-1;
-                fileHandle_Attrcat.UpdateRec(rec);
-                
-                //update attrcat in disk
-                if((rc=fileHandle_Attrcat.ForcePages())) return (rc);
-                break;
-            }
-        }
-    }
+   RC rc;
+   RM_Record rec;
+   char *attrcatData;
+   RM_FileScan fs;
 
-    // no attribute index record in attrcat
-    if(!flag_exist) return (SM_ATTRINDEX_NOT_EXIST);
-    
-    //close scan
-    if((rc=filescan.CloseScan())) return (rc);
-    
-    //open scan of attrcat
-    if((rc=filescan.OpenScan(fileHandle_Attrcat,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
-    
-    //update attr_count in relcat
-    while(rc!=RM_EOF){
-        //get records until the end
-        rc=filescan.GetNextRec(rec);
-        if(rc!=0 && rc!=RM_EOF)return (rc);
-        if(rc!=RM_EOF){
-            if((rc=rec.GetData(data))) return (rc);
-            
-            if(!strcmp(((Relation*)data)->relName,relName)) {
+   // Sanity Check: relName/attrName and its index should exist
+   if ((rc = GetAttributeInfo(relName, attrName, rec, attrcatData)))
+      goto err_return;
+   if (((SM_AttrcatRec *)attrcatData)->indexNo == -1) {
+      rc = SM_INDEXNOTFOUND;
+      goto err_return;
+   }
 
-                int attrCount=((Relation*)data)->attrCount;
-                ((Relation*)data)->attrCount=attrCount-1;
+   // Destroy the index file
+   if ((rc = pIxm->DestroyIndex(relName, ((SM_AttrcatRec *)attrcatData)->indexNo)))
+      goto err_return;
 
-                fileHandle_Relcat.UpdateRec(rec);
-                
-                //update attrcat in disk
-                if((rc=fileHandle_Relcat.ForcePages())) return (rc);
-                break;
-            }
-        }
-    }
-    
-    //close scan
-    if((rc=filescan.CloseScan())) return (rc);
+   // Update indexNo
+   ((SM_AttrcatRec *)attrcatData)->indexNo = -1;
+   ((SM_AttrcatRec *)attrcatData)->distinctVals = 0;
+   ((SM_AttrcatRec *)attrcatData)->ixDepth      = 0;
+   ((SM_AttrcatRec *)attrcatData)->minValue = 0;
+   ((SM_AttrcatRec *)attrcatData)->maxValue = 0;
+   if ((rc = fhAttrcat.UpdateRec(rec)))
+      goto err_return;
+   if ((rc = fhAttrcat.ForcePages()))
+      goto err_return;
 
-    cout << "DropIndex\n"
-    << "   relName =" << relName << "\n"
-    << "   attrName=" << attrName << "\n";
-    
-    return (0);
+   // Return ok
+   return (0);
+
+   // Return error
+err_return:
+   return (rc);
 }
 
-RC SM_Manager::Load(const char *relName,
-                    const char *fileName)
+//
+// compareSMAttrcatRec
+//
+// Desc: for qsort
+//
+int compareSMAttrcatRec(const void *p1, const void *p2)
 {
-    
-    RC rc;
+   int offset1 = ((SM_AttrcatRec *)p1)->offset;
+   int offset2 = ((SM_AttrcatRec *)p2)->offset;
 
-    RM_Record rec;
-    RM_FileScan filescan;
-    bool flag_exist=false;
-    //store the attrlength of each attribute in relation relName
-    int i=0;
-    
-    int tuplelength=0;
-    int attr_count=0;
-    //open scan of relcat
-    if((rc=filescan.OpenScan(fileHandle_Relcat,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
-    
-    //scan all the records in attrcat
-    char * data;
-    while(rc!=RM_EOF){
-        //get records until the end
-        rc=filescan.GetNextRec(rec);
-        if(rc!=0 && rc!=RM_EOF) return (rc);
-        if(rc!=RM_EOF){
-            if((rc=rec.GetData(data))) return (rc);
-            if(!strcmp(((Relation*)data)->relName,relName)) {
-                flag_exist=true;
-                //get tuplelength of relation
-                tuplelength=((Relation*)data)->tupleLength;
-                attr_count=((Relation*)data)->attrCount;
-            }
-        }
-    }
-    
-    if(!flag_exist) return (SM_INVALIDRELNAME);
-    
-    //close the scan
-    if((rc=filescan.CloseScan())) return (rc);
-    
-    DataAttrInfo d_a[MAXATTRS];
-    //open scan of attrcat
-    if((rc=filescan.OpenScan(fileHandle_Attrcat,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
-    
-    //scan all the records in attrcat
-    while(rc!=RM_EOF){
-        //get records until the end
-        rc=filescan.GetNextRec(rec);
-        if(rc!=0 && rc!=RM_EOF) return (rc);
-        if(rc!=RM_EOF){
-            if((rc=rec.GetData(data))) return (rc);
-            if(!strcmp(((DataAttrInfo*)data)->relName,relName)) {
-                
-                //memcpy(&d_a[i],data,sizeof(DataAttrInfo));
-                strcpy(d_a[i].relName,((DataAttrInfo*)data)->relName);
-                strcpy(d_a[i].attrName,((DataAttrInfo*)data)->attrName);
-                d_a[i].attrType=((DataAttrInfo*)data)->attrType;
-                d_a[i].attrLength=((DataAttrInfo*)data)->attrLength;
-                d_a[i].offset=((DataAttrInfo*)data)->offset;
-                d_a[i].indexNo=((DataAttrInfo*)data)->indexNo;
-                i++;
-            }
-        }
-    }
-    
-    //close the scan
-    if((rc=filescan.CloseScan())) return (rc);
-    
-    
-    // open data file named fileName
-    ifstream myfile (fileName);
-    
-    RM_FileHandle filehandle_r;
-    
-    // open relation file to store records read from file
-    if((rc=Rmm->OpenFile(relName, filehandle_r))) return (rc);
-    
-    
-    //load the file
-    while(!myfile.eof()){
-        i=0;
-        string str;
-        //read file line by line
-        getline(myfile, str);
-        if(str=="") break;
-        string delimiter = ",";
-        
-        size_t pos = 0;
-        char record_data[tuplelength];
-        
-        //seperate string by commas;
-        while ((pos = str.find(delimiter)) != string::npos) {
-            const char * token;
-            token=str.substr(0, pos).c_str();
-            str.erase(0, pos + delimiter.length());
-            switch (d_a[i].attrType) {
-                    
-                case INT:{
-                    int data_int=atoi(token);
-                    *((int*)(record_data+d_a[i].offset)) = data_int;
-                    break;
-                }
-                case FLOAT:{
-                    float data_float=atof(token);
-                    *((float*)(record_data+d_a[i].offset)) = data_float;
-                    break;
-                }
-                    
-                case STRING:{
-                    char data_char[d_a[i].attrLength];
-                    memcpy(data_char,token,d_a[i].attrLength);
-                    memcpy(record_data+d_a[i].offset,data_char,d_a[i].attrLength);
-                    break;
-                }
-                default:
-                    // Test: wrong _attrType
-                    return (SM_INVALIDATTR);
-            }
-            i++;
-        }
-        const char * token;
-        token=str.c_str();
-        switch (d_a[i].attrType) {
-                
-            case INT:{
-                int data_int=atoi(token);
-                *((int*)(record_data+d_a[i].offset)) = data_int;
-                break;
-            }
-            case FLOAT:{
-                float data_float=atof(token);
-                *((float*)(record_data+d_a[i].offset)) = data_float;
-                break;
-            }
-                
-            case STRING:{
-                char data_char[d_a[i].attrLength];
-                memcpy(data_char,token,d_a[i].attrLength);
-                memcpy(record_data+d_a[i].offset,token,d_a[i].attrLength);
-                break;
-            }
-            default:
-                // Test: wrong _attrType
-                return (SM_INVALIDATTR);
-        }
-
-        RID rid;
-        //store the record to relation file
-        if((rc=filehandle_r.InsertRec(record_data, rid))) return (rc);
-        
-        //insert index if index file exists
-        for (int k=0;k<attr_count;k++) {
-            if(d_a[k].indexNo!=-1){
-                // Call IX_IndexHandle::OpenIndex to open the index file
-                IX_IndexHandle indexhandle;
-                if((rc=Ixm->OpenIndex(relName, d_a[k].indexNo, indexhandle))) return (rc);
-                char data_index[d_a[k].attrLength];
-                memcpy(data_index,record_data+d_a[k].offset,d_a[k].attrLength);
-                if((rc=indexhandle.InsertEntry(data_index, rid))) return (rc);
-                //close index file
-                if(Ixm->CloseIndex(indexhandle)) return (rc);
-
-            }
-        }
-       // cout<<"record_data"<<record_data<<endl;
-        strcpy(record_data,"");
-    }
-
-    
-    //close the data file
-    myfile.close();
-    
-    //close the relation file
-    if((rc=Rmm->CloseFile(filehandle_r))) return (rc);
-    
-    cout << "Load\n"
-    << "   relName =" << relName << "\n"
-    << "   fileName=" << fileName << "\n";
-    return (0);
+   return offset1 - offset2;
 }
 
+//
+// Load
+//
+// Desc:
+// In:   relName -
+//       fileName -
+// Ret:  SM_RELNOTFOUND, RM return code
+//
+RC SM_Manager::Load(const char *relName, const char *fileName)
+{
+   RC rc;
+   RM_Record tmpRec;
+   char *relcatData;
+   char _relName[MAXNAME];
+   SM_AttrcatRec *attributes;
+   IX_IndexHandle *ihs;
+   RM_FileHandle fh;
+   RM_FileScan fs;
+   RM_Record rec;
+   char *data;
+   FILE *fp;
+   char *buf;
+   int i = 0;
+   int tupleCount = 0;
+
+   // Sanity Check: relName should not be RELCAT or ATTRCAT
+   if (strcmp(relName, RELCAT) == 0 || strcmp(relName, ATTRCAT) == 0) {
+      rc = SM_INVALIDRELNAME;
+      goto err_return;
+   }
+
+   // Get the attribute count
+   if ((rc = GetRelationInfo(relName, tmpRec, relcatData)))
+      goto err_return;
+
+   // Allocate indexhandle array
+   ihs = new IX_IndexHandle[((SM_RelcatRec *)relcatData)->attrCount];
+   if (ihs == NULL) {
+      rc = SM_NOMEM;
+      goto err_return;
+   }
+
+   // Allocate attributes array
+   attributes = new SM_AttrcatRec[((SM_RelcatRec *)relcatData)->attrCount];
+   if (attributes == NULL) {
+      rc = SM_NOMEM;
+      goto err_deleteihs;
+   }
+
+   // Allocate buffer
+   buf = new char[MAXLINE];
+   if (buf == NULL) {
+      rc = SM_NOMEM;
+      goto err_deleteattributes;
+   }
+
+   // Allocate data
+   data = new char[((SM_RelcatRec *)relcatData)->tupleLength];
+   if (data == NULL) {
+      rc = SM_NOMEM;
+      goto err_deletebuf;
+   }
+
+   // Open a file scan for ATTRCAT
+   memset(_relName, '\0', sizeof(_relName));
+   strncpy(_relName, relName, MAXNAME);
+   if ((rc = fs.OpenScan(fhAttrcat, STRING, MAXNAME,
+                         OFFSET(SM_AttrcatRec, relName), EQ_OP, _relName)))
+      goto err_deletedata;
+
+   // Fill out attributes array
+   while ((rc = fs.GetNextRec(rec)) != RM_EOF) {
+      char *_data;
+
+      if (rc != 0) {
+         fs.CloseScan();
+         goto err_deletedata;
+      }
+      if ((rc = rec.GetData(_data))) {
+         fs.CloseScan();
+         goto err_deletedata;
+      }
+
+      memcpy(&attributes[i], _data, sizeof(SM_AttrcatRec));
+      if (++i == ((SM_RelcatRec *)relcatData)->attrCount)
+         break;
+   }
+
+   // Close a file scan for ATTRCAT
+   if ((rc = fs.CloseScan()))
+      goto err_deletedata;
+
+   qsort(attributes, ((SM_RelcatRec *)relcatData)->attrCount,
+         sizeof(SM_AttrcatRec), compareSMAttrcatRec);
+
+   // Open data file
+   fp = fopen(fileName, "r");
+   if (fp == NULL) {
+      rc = SM_FILEIOFAILED;
+      goto err_deletedata;
+   }
+
+   // Open relation file
+   if ((rc = pRmm->OpenFile(relName, fh)))
+      goto err_fclose;
+
+   // Open indexes
+   for (i = 0; i < ((SM_RelcatRec *)relcatData)->attrCount; i++) {
+      if (attributes[i].indexNo == -1)
+         continue;
+      if ((rc = pIxm->OpenIndex(relName, attributes[i].indexNo, ihs[i])))
+         goto err_closeindexes;
+   }
+
+   // Process every line
+   while (fgets(buf, MAXLINE, fp)) {
+      int numDelim = 0;
+      char *attr = buf;
+      RID rid;
+
+      // Count commas and confirm the whole line was read
+      for (i = 0; i < MAXLINE - 1; i++) {
+         if (buf[i] == '\n')
+            break;
+         else if (buf[i] == ',')
+            numDelim++;
+      }
+
+      // Allow blank lines
+      if (i == 0)
+         continue;
+
+      if (buf[i] != '\n' || buf[i+1] != '\0'
+          || numDelim + 1 != ((SM_RelcatRec *)relcatData)->attrCount) {
+         rc = SM_INVALIDFORMAT;
+         goto err_closeindexes;
+      }
+
+      // Make record data
+      for (i = 0; i < ((SM_RelcatRec *)relcatData)->attrCount; i++) {
+         int _i;
+         float _f;
+         char *delim = strpbrk(attr, ",\n");
+         *delim = '\0';
+
+         switch (attributes[i].attrType) {
+         case INT:
+            _i = atoi(attr);
+            memcpy(data + attributes[i].offset, &_i, sizeof(int));
+            break;
+         case FLOAT:
+            _f = atof(attr);
+            memcpy(data + attributes[i].offset, &_f, sizeof(float));
+            break;
+         case STRING:
+            memset(data + attributes[i].offset, '\0',
+                   attributes[i].attrLength);
+            strncpy(data + attributes[i].offset, attr,
+                    attributes[i].attrLength);
+            break;
+         }
+         attr = delim + 1;
+      }
+
+      // Insert the record
+      if ((rc = fh.InsertRec(data, rid)))
+         goto err_closeindexes;
+
+      tupleCount++;
+
+      // Update indexes
+      for (i = 0; i < ((SM_RelcatRec *)relcatData)->attrCount; i++) {
+         if (attributes[i].indexNo == -1)
+            continue;
+         if ((rc = ihs[i].InsertEntry(data + attributes[i].offset, rid)))
+            goto err_closeindexes;
+      }
+   }
+
+   // Update index statistics
+   for (i = 0; i < ((SM_RelcatRec *)relcatData)->attrCount; i++) {
+      char *attrcatData;
+
+      if (attributes[i].indexNo == -1)
+         continue;
+
+      if ((rc = GetAttributeInfo(relName, attributes[i].attrName,
+                                 rec, attrcatData)))
+         goto err_closeindexes;
+
+      ((SM_AttrcatRec *)attrcatData)->distinctVals += ihs[i].deltaDistinctVals();
+      ((SM_AttrcatRec *)attrcatData)->ixDepth      += ihs[i].deltaDepth();
+      if ((rc = ihs[i].GetMinKey(((SM_AttrcatRec *)attrcatData)->minValue)))
+         goto err_closeindexes;
+      if ((rc = ihs[i].GetMaxKey(((SM_AttrcatRec *)attrcatData)->maxValue)))
+         goto err_closeindexes;
+      if ((rc = fhAttrcat.UpdateRec(rec)))
+         goto err_closeindexes;
+   }
+   if ((rc = fhAttrcat.ForcePages()))
+      goto err_closeindexes;
+
+   // Close indexes
+   for (i = 0; i < ((SM_RelcatRec *)relcatData)->attrCount; i++) {
+      if (attributes[i].indexNo == -1)
+         continue;
+      if ((rc = pIxm->CloseIndex(ihs[i])))
+         goto err_closeindexes;
+   }
+
+   // Update the cardinality
+   if (tupleCount)
+      if ((rc = SetRelationInfo(relName, tupleCount, fh.numPages())))
+         goto err_fclose;
+
+   // Close relation file
+   if ((rc = pRmm->CloseFile(fh)))
+      goto err_fclose;
+
+   // Close data file
+   fclose(fp);
+
+   // Deallocate
+   delete [] data;
+   delete [] buf;
+   delete [] attributes;
+   delete [] ihs;
+
+   // Return ok
+   return (0);
+
+   // Return error
+err_closeindexes:
+   for (i = 0; i < ((SM_RelcatRec *)relcatData)->attrCount; i++)
+      if (attributes[i].indexNo != -1)
+         pIxm->CloseIndex(ihs[i]);
+   if (tupleCount)
+      SetRelationInfo(relName, tupleCount, fh.numPages());
+//err_closefile:
+   pRmm->CloseFile(fh);
+err_fclose:
+   fclose(fp);
+err_deletedata:
+   delete [] data;
+err_deletebuf:
+   delete [] buf;
+err_deleteattributes:
+   delete [] attributes;
+err_deleteihs:
+   delete [] ihs;
+err_return:
+   return (rc);
+}
+
+//
+// compareDataAttrInfo
+//
+// Desc: for qsort
+//
+int compareDataAttrInfo(const void *p1, const void *p2)
+{
+   int offset1 = ((DataAttrInfo *)p1)->offset;
+   int offset2 = ((DataAttrInfo *)p2)->offset;
+
+   return offset1 - offset2;
+}
+
+//
+// Print
+//
+// Desc:
+// In:   relName -
+// Ret:  SM_RELNOTFOUND, RM return code
+//
 RC SM_Manager::Print(const char *relName)
 {
-    cout << "Print\n"
-         << "   relName=" << relName << "\n";
-    
-    DataAttrInfo attributes[MAXATTRS];
-    
-    RC rc;
-    RM_FileScan filescan;
-    //open scan of attrcat
-    if((rc=filescan.OpenScan(fileHandle_Attrcat,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
-    
-    //scan all the records in attrcat
-    bool flag_exist=false;
-    RM_Record rec;
-    int i=0;
-    int attr_count=0;
-    char * data;
-    while(rc!=RM_EOF){
-        //get records until the end
-        rc=filescan.GetNextRec(rec);
-        if(rc!=0 && rc!=RM_EOF)return (rc);
-        if(rc!=RM_EOF){
-            //copy record to a_r
-            rc=rec.GetData(data);
-            if(!strcmp(((DataAttrInfo*)data)->relName,relName)) {
-                // take all the DataAttrInfo of the relation relName
-                memcpy(&attributes[i],data,sizeof(DataAttrInfo));
-                flag_exist=true;
-                i++;
-                attr_count++;
-            }
-        }
-    }
-    
-    //close the scan
-    if((rc=filescan.CloseScan())) return (rc);
-    
-    if(!flag_exist) return (SM_INVALIDRELNAME);
-    
-    //define a printer
-    Printer p(attributes,attr_count);
-    
-    //print header;
-    p.PrintHeader(cout);
-    
-    //open table file
-    RM_FileHandle filehandle_r;
-    if((rc=Rmm->OpenFile(relName, filehandle_r))) return (rc);
-    
-    //open scan of relation file
-    if((rc=filescan.OpenScan(filehandle_r,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
+   RC rc;
+   RM_Record tmpRec;
+   char *relcatData;
+   DataAttrInfo *attributes;
+   char _relName[MAXNAME];
+   RM_FileScan fs;
+   RM_Record rec;
+   RM_FileHandle fh;
+   int i = 0;
 
-    while(rc!=RM_EOF){
-        //get records until the end
-        rc=filescan.GetNextRec(rec);
-        if(rc!=0 && rc!=RM_EOF)return (rc);
-        if(rc!=RM_EOF){
-            //get record data
-            if((rc=rec.GetData(data))) return (rc);
-            
-            //print record
-            p.Print(cout, data);
-        }
-    }
-    
-    //print footer
-    p.PrintFooter(cout);
-    
-    //close the sccan
-    if((rc=filescan.CloseScan())) return (rc);
-    
-    //close relation file
-    if((rc=Rmm->CloseFile(filehandle_r))) return (rc);
-    return (0);
+   // Get the attribute count
+   if ((rc = GetRelationInfo(relName, tmpRec, relcatData)))
+      return (rc);
+
+   // Allocate attributes array
+   attributes = new DataAttrInfo[((SM_RelcatRec *)relcatData)->attrCount];
+   if (attributes == NULL)
+      return (SM_NOMEM);
+
+   // Open a file scan for ATTRCAT
+   memset(_relName, '\0', sizeof(_relName));
+   strncpy(_relName, relName, MAXNAME);
+   if ((rc = fs.OpenScan(fhAttrcat, STRING, MAXNAME,
+                         OFFSET(SM_AttrcatRec, relName), EQ_OP, _relName))) {
+      delete [] attributes;
+      return (rc);
+   }
+
+   // Fill out attributes array
+   while ((rc = fs.GetNextRec(rec)) != RM_EOF) {
+      char *data;
+
+      if (rc != 0) {
+         fs.CloseScan();
+         delete [] attributes;
+         return (rc);
+      }
+
+      if ((rc = rec.GetData(data))) {
+         fs.CloseScan();
+         delete [] attributes;
+         return (rc);
+      }
+
+      SetDataAttrInfo(attributes[i],
+                      ((SM_AttrcatRec *)data)->relName,
+                      ((SM_AttrcatRec *)data)->attrName,
+                      ((SM_AttrcatRec *)data)->offset,
+                      ((SM_AttrcatRec *)data)->attrType,
+                      ((SM_AttrcatRec *)data)->attrLength,
+                      ((SM_AttrcatRec *)data)->indexNo);
+      if (++i == ((SM_RelcatRec *)relcatData)->attrCount)
+         break;
+   }
+
+   // Close a file scan for ATTRCAT
+   if ((rc = fs.CloseScan())) {
+      delete [] attributes;
+      return (rc);
+   }
+
+   // Instantiate a Printer object
+   qsort(attributes, ((SM_RelcatRec *)relcatData)->attrCount,
+         sizeof(DataAttrInfo), compareDataAttrInfo);
+   Printer p(attributes, ((SM_RelcatRec *)relcatData)->attrCount);
+
+   // Open relation file
+   if ((rc = pRmm->OpenFile(relName, fh)))
+      goto err_delete;
+   // Print the header information
+   p.PrintHeader(cout);
+
+   // Normal Print
+   if (useIndexNo < 0) {
+      if ((rc = fs.OpenScan(fh, INT, sizeof(int), 0, NO_OP, NULL)))
+         goto err_closefile;
+
+      while ((rc = fs.GetNextRec(rec)) != RM_EOF) {
+         char *data;
+
+         if (rc != 0)
+            goto err_closescan;
+
+         if ((rc = rec.GetData(data)))
+            goto err_closescan;
+
+         p.Print(cout, data);
+      }
+
+      if ((rc = fs.CloseScan()))
+         goto err_closefile;
+   }
+   // Sorted Print
+   else {
+      IX_IndexHandle ih;
+      IX_IndexScan is;
+      RID rid;
+
+      if ((rc = pIxm->OpenIndex(relName, useIndexNo, ih)))
+         goto err_closefile;
+
+      if ((rc = is.OpenScan(ih, NO_OP, NULL))) {
+         pIxm->CloseIndex(ih);
+         goto err_closefile;
+      }
+
+      while ((rc = is.GetNextEntry(rid)) != IX_EOF) {
+         char *data;
+
+         if (rc != 0) {
+            is.CloseScan();
+            pIxm->CloseIndex(ih);
+            goto err_closefile;
+         }
+
+         if ((rc = fh.GetRec(rid, rec))) {
+            is.CloseScan();
+            pIxm->CloseIndex(ih);
+            goto err_closefile;
+         }
+
+         if ((rc = rec.GetData(data)))
+            goto err_closescan;
+
+         p.Print(cout, data);
+      }
+
+      if ((rc = is.CloseScan())) {
+         pIxm->CloseIndex(ih);
+         goto err_closefile;
+      }
+      if ((rc = pIxm->CloseIndex(ih)))
+         goto err_closefile;
+   }
+
+   // Print the footer information
+   p.PrintFooter(cout);
+   // Close relation file
+   if ((rc = pRmm->CloseFile(fh)))
+      goto err_delete;
+
+   // Deallocate attributes
+   delete [] attributes;
+
+   // Return ok
+   return (0);
+
+   // Return error
+err_closescan:
+   fs.CloseScan();
+err_closefile:
+   pRmm->CloseFile(fh);
+err_delete:
+   delete [] attributes;
+//err_return:
+   return (rc);
 }
 
+//
+// Set
+//
+// Desc:
+// In:   paramName -
+//       value -
+// Ret:
+//
 RC SM_Manager::Set(const char *paramName, const char *value)
 {
-    cout << "Set\n"
-         << "   paramName=" << paramName << "\n"
-         << "   value    =" << value << "\n";
-    return (0);
+   if (strcasecmp(paramName, "IxScan") == 0) {
+      bIxScan = atoi(value);
+   } else if (strcasecmp(paramName, "NLIJ") == 0) {
+      bNLIJ = atoi(value);
+   } else if (strcasecmp(paramName, "PushProj") == 0) {
+      bPushProj = atoi(value);
+   } else if (strcasecmp(paramName, "NBJ") == 0) {
+      bNBJ = atoi(value);
+   } else if (strcasecmp(paramName, "Rocking") == 0) {
+      bRocking = atoi(value);
+   } else if (strcasecmp(paramName, "Optimize") == 0) {
+      bOptimize = atoi(value);
+   } else if (strcasecmp(paramName, "PlanOnly") == 0) {
+      bPlanOnly = atoi(value);
+   } else {
+      return (SM_PARAMUNDEFINED);
+   }
+
+   cout << "IxScan  : " << bIxScan   << "\n";
+   cout << "NLIJ    : " << bNLIJ     << "\n";
+   cout << "PushProj: " << bPushProj << "\n";
+   cout << "NBJ     : " << bNBJ      << "\n";
+   cout << "Rocking : " << bRocking  << "\n";
+   cout << "Optimize: " << bOptimize << "\n";
+   cout << "PlanOnly: " << bPlanOnly << "\n";
+
+   // Return ok
+   return (0);
 }
 
+//
+// Help
+//
+// Desc:
+// Ret:  RM return code
+//
 RC SM_Manager::Help()
 {
-    cout << "Help\n";
-    DataAttrInfo attributes[MAXATTRS];
-    //initialize the attributes
-    strcpy(attributes[0].relName,"Help");
-    strcpy(attributes[0].attrName,"RelName");
-    attributes[0].attrLength=MAXNAME;
-    attributes[0].attrType=STRING;
-    attributes[0].offset=0;
-    attributes[0].indexNo=-1;
-    
-    strcpy(attributes[1].relName,"Help");
-    strcpy(attributes[1].attrName,"TupleLength");
-    attributes[1].attrLength=sizeof(int);
-    attributes[1].attrType=INT;
-    attributes[1].offset=MAXNAME;
-    attributes[1].indexNo=-1;
-    
-    strcpy(attributes[2].relName,"Help");
-    strcpy(attributes[2].attrName,"AttrCount");
-    attributes[2].attrLength=sizeof(int);
-    attributes[2].attrType=INT;
-    attributes[2].offset=MAXNAME+sizeof(int);
-    attributes[2].indexNo=-1;
-    
-    strcpy(attributes[3].relName,"Help");
-    strcpy(attributes[3].attrName,"IndexCount");
-    attributes[3].attrLength=sizeof(int);
-    attributes[3].attrType=INT;
-    attributes[3].offset=MAXNAME+2*sizeof(int);
-    attributes[3].indexNo=-1;
+   RC rc;
+   DataAttrInfo attributes[5];
+   RM_FileScan fs;
+   RM_Record rec;
 
-    
-    // set a printer
-    Printer p(attributes,4);
-    
-    //print the header
-    p.PrintHeader(cout);
-    
-    RC rc;
-    RM_FileScan filescan;
-    RM_Record rec;
-    char * data;
-    Relation r;
-    
-    //open scan of relcat
-    if((rc=filescan.OpenScan(fileHandle_Relcat,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
-    
-    while(rc!=RM_EOF){
-        //get records until the end
-        rc=filescan.GetNextRec(rec);
-        if(rc!=0 && rc!=RM_EOF)return (rc);
-        if(rc!=RM_EOF){
-            //get record data
-            if((rc=rec.GetData(data))) return (rc);
-            char p_relation[MAXNAME+3*sizeof(int)];
-            memcpy(p_relation+attributes[0].offset,((Relation*)data)->relName,attributes[0].attrLength);
-            *((int*)(p_relation+attributes[1].offset))=((Relation*)data)->tupleLength;
-            *((int*)(p_relation+attributes[2].offset))=((Relation*)data)->attrCount;
-            *((int*)(p_relation+attributes[3].offset))=((Relation*)data)->indexCount;
-            //print the relation name
-            p.Print(cout, p_relation);
-        }
-    }
+   // Instantiate a Printer object
+   SetDataAttrInfo(attributes[0],
+                   RELCAT, "relName", OFFSET(SM_RelcatRec, relName),
+                   STRING, MAXNAME, -1);
+   SetDataAttrInfo(attributes[1],
+                   RELCAT, "tupleLength", OFFSET(SM_RelcatRec, tupleLength),
+                   INT, sizeof(int), -1);
+   SetDataAttrInfo(attributes[2],
+                   RELCAT, "attrCount", OFFSET(SM_RelcatRec, attrCount),
+                   INT, sizeof(int), -1);
+   SetDataAttrInfo(attributes[3],
+                   RELCAT, "cardinality", OFFSET(SM_RelcatRec, cardinality),
+                   INT, sizeof(int), -1);
+   SetDataAttrInfo(attributes[4],
+                   RELCAT, "numPages", OFFSET(SM_RelcatRec, numPages),
+                   INT, sizeof(int), -1);
+   Printer p(attributes, 5);
 
-    //print footer
-    p.PrintFooter(cout);
-    
-    //close the scan
-    if((rc=filescan.CloseScan())) return (rc);
-    
-    return (0);
+   // Open a file scan for RELCAT
+   if ((rc = fs.OpenScan(fhRelcat, INT, sizeof(int), 0, NO_OP, NULL)))
+      goto err_return;
+
+   // Print the header information
+   p.PrintHeader(cout);
+
+   // Print each tuple
+   while ((rc = fs.GetNextRec(rec)) != RM_EOF) {
+      char *data;
+
+      if (rc != 0)
+         goto err_closescan;
+
+      if ((rc = rec.GetData(data)))
+         goto err_closescan;
+
+      p.Print(cout, data);
+   }
+
+   // Print the footer information
+   p.PrintFooter(cout);
+
+   // Close a file scan for RELCAT
+   if ((rc = fs.CloseScan()))
+      goto err_return;
+
+   // Return ok
+   return (0);
+
+   // Return error
+err_closescan:
+   fs.CloseScan();
+err_return:
+   return (rc);
 }
 
+//
+// Help
+//
+// Desc:
+// In:   relName -
+// Ret:  SM_RELNOTFOUND, RM return code
+//
 RC SM_Manager::Help(const char *relName)
 {
-    cout << "Help\n"
-    << "   relName=" << relName << "\n";
-    
-    DataAttrInfo attributes[6];
-    //DataArrrInfo of relName
-    strcpy(attributes[0].relName,"Help");
-    strcpy(attributes[0].attrName,"RelName");
-    attributes[0].attrType=STRING;
-    attributes[0].attrLength=MAXNAME;
-    attributes[0].offset=0;
-    attributes[0].indexNo=-1;
-    
-    //DataArrrInfo of attrName
-    strcpy(attributes[1].relName,"Help");
-    strcpy(attributes[1].attrName,"AttrName");
-    attributes[1].attrType=STRING;
-    attributes[1].attrLength=MAXNAME;
-    attributes[1].offset=MAXNAME;
-    attributes[1].indexNo=-1;
-    
-    //DataArrrInfo of offset
-    strcpy(attributes[2].relName,"Help");
-    strcpy(attributes[2].attrName,"offset");
-    attributes[2].attrType=INT;
-    attributes[2].attrLength=4;
-    attributes[2].offset=2*(MAXNAME);
-    attributes[2].indexNo=-1;
-    
-    //DataArrrInfo of attribute type
-    strcpy(attributes[3].relName,"Help");
-    strcpy(attributes[3].attrName,"AttrType");
-    attributes[3].attrType=STRING;
-    attributes[3].attrLength=sizeof(AttrType);
-    attributes[3].offset=2*(MAXNAME)+4;
-    attributes[3].indexNo=-1;
-  
-    //DataArrrInfo of attribute length
-    strcpy(attributes[4].relName,"Help");
-    strcpy(attributes[4].attrName,"AttrLength");
-    attributes[4].attrType=INT;
-    attributes[4].attrLength=4;
-    attributes[4].offset=2*(MAXNAME)+4+sizeof(AttrType);
-    attributes[4].indexNo=-1;
-    
-    //DataArrrInfo of attribute indexNo
-    strcpy(attributes[5].relName,"Help");
-    strcpy(attributes[5].attrName,"IndexNo");
-    attributes[5].attrType=INT;
-    attributes[5].attrLength=4;
-    attributes[5].offset=2*(MAXNAME)+8+sizeof(AttrType);
-    attributes[5].indexNo=-1;
-    
-    Printer p(attributes,6);
-    
-    //print the header
-    p.PrintHeader(cout);
-    
-    RC rc;
-    RM_FileScan filescan;
-    RM_Record rec;
-    char * data;
-    
-    //open scan of relcat
-    if((rc=filescan.OpenScan(fileHandle_Attrcat,INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
-    
-    while(rc!=RM_EOF){
-        //get records until the end
-        rc=filescan.GetNextRec(rec);
-        if(rc!=0 && rc!=RM_EOF)return (rc);
-        if(rc!=RM_EOF){
-            //get record data
-            if((rc=rec.GetData(data))) return (rc);
-            if(!strcmp(((DataAttrInfo*)data)->relName,relName)){
-                char attr_r[2*(MAXNAME)+3*sizeof(int)+sizeof(AttrType)];
-                memcpy(attr_r+attributes[0].offset,((DataAttrInfo*)data)->relName,attributes[0].attrLength);
-                memcpy(attr_r+attributes[1].offset,((DataAttrInfo*)data)->attrName,attributes[1].attrLength);
-                *((int*)(attr_r+attributes[2].offset)) =((DataAttrInfo*)data)->offset;
-                *((AttrType*)(attr_r+attributes[3].offset)) =((DataAttrInfo*)data)->attrType;
-                *((int*)(attr_r+attributes[4].offset)) =((DataAttrInfo*)data)->attrLength;
-                *((int*)(attr_r+attributes[5].offset)) =((DataAttrInfo*)data)->indexNo;
-                //print the relation name
-                p.Print(cout, attr_r);
-            }
-        }
-    }
-    
-    //print footer
-    p.PrintFooter(cout);
-    
-    //close the scan
-    if((rc=filescan.CloseScan())) return (rc);
-    
-    
-    return (0);
+   RC rc;
+   RM_Record tmpRec;
+   char *relcatData;
+   DataAttrInfo attributes[10];
+   char _relName[MAXNAME];
+   RM_FileScan fs;
+   RM_Record rec;
+   int i = 0;
+
+   // Get the attribute count
+   if ((rc = GetRelationInfo(relName, tmpRec, relcatData)))
+      return (rc);
+
+   // Instantiate a Printer object
+   SetDataAttrInfo(attributes[0],
+                   ATTRCAT, "relName", OFFSET(SM_AttrcatRec, relName),
+                   STRING, MAXNAME, -1);
+   SetDataAttrInfo(attributes[1],
+                   ATTRCAT, "attrName", OFFSET(SM_AttrcatRec, attrName),
+                   STRING, MAXNAME, -1);
+   SetDataAttrInfo(attributes[2],
+                   ATTRCAT, "offset", OFFSET(SM_AttrcatRec, offset),
+                   INT, sizeof(int), -1);
+   SetDataAttrInfo(attributes[3],
+                   ATTRCAT, "attrType", OFFSET(SM_AttrcatRec, attrType),
+                   INT, sizeof(int), -1);
+   SetDataAttrInfo(attributes[4],
+                   ATTRCAT, "attrLength", OFFSET(SM_AttrcatRec, attrLength),
+                   INT, sizeof(int), -1);
+   SetDataAttrInfo(attributes[5],
+                   ATTRCAT, "indexNo", OFFSET(SM_AttrcatRec, indexNo),
+                   INT, sizeof(int), -1);
+   SetDataAttrInfo(attributes[6],
+                   ATTRCAT, "distinctVals", OFFSET(SM_AttrcatRec, distinctVals),
+                   INT, sizeof(int), -1);
+   SetDataAttrInfo(attributes[7],
+                   ATTRCAT, "ixDepth", OFFSET(SM_AttrcatRec, ixDepth),
+                   INT, sizeof(int), -1);
+   SetDataAttrInfo(attributes[8],
+                   ATTRCAT, "minValue   ", OFFSET(SM_AttrcatRec, minValue),
+                   INT, sizeof(int), -1);
+   SetDataAttrInfo(attributes[9],
+                   ATTRCAT, "maxValue   ", OFFSET(SM_AttrcatRec, maxValue),
+                   INT, sizeof(int), -1);
+   Printer p(attributes, 10);
+
+   // Open a file scan for ATTRCAT
+   memset(_relName, '\0', sizeof(_relName));
+   strncpy(_relName, relName, MAXNAME);
+   if ((rc = fs.OpenScan(fhAttrcat, STRING, MAXNAME,
+                         OFFSET(SM_AttrcatRec, relName), EQ_OP, _relName)))
+      goto err_return;
+
+   // Print the header information
+   p.PrintHeader(cout);
+
+   // Print each tuple
+   while ((rc = fs.GetNextRec(rec)) != RM_EOF) {
+      char *data;
+
+      if (rc != 0)
+         goto err_closescan;
+
+      if ((rc = rec.GetData(data)))
+         goto err_closescan;
+
+      attributes[8].attrType = ((SM_AttrcatRec *)data)->attrType;
+      attributes[9].attrType = ((SM_AttrcatRec *)data)->attrType;
+
+      Printer pp(attributes, 10);
+      pp.Print(cout, data);
+      if (++i == ((SM_RelcatRec *)relcatData)->attrCount)
+         break;
+   }
+
+   // Print the footer information
+// p.PrintFooter(cout);
+
+   // Close a file scan for ATTRCAT
+   if ((rc = fs.CloseScan()))
+      goto err_return;
+
+   // Return ok
+   return (0);
+
+   // Return error
+err_closescan:
+   fs.CloseScan();
+err_return:
+   return (rc);
 }
 
 //
-// SM_PrintError
+// GetRelationInfo
 //
-// Desc: Send a message corresponding to a SM return code to cerr
-// In:   rc - return code for which a message is desired
+// Desc: Get relation informtion by accessing catalog RELCAT
+// In:   relName -
+// Out:  rec -
+//       data -
+// Ret:  SM_RELNOTFOUND, RM return code
 //
-void SM_PrintError(RC rc)
+RC SM_Manager::GetRelationInfo(const char *relName,
+                               RM_Record &rec, char *&data)
 {
-    
-    // Check the return code is within proper limits
-    if (rc >= START_SM_WARN && rc <= SM_LASTWARN)
-        // Print warning
-        cerr << "SM warning: " << SM_WarnMsg[rc - START_SM_WARN] << "\n";
-    else if (rc == 0)
-        cerr << "SM_PrintError called with return code of 0\n";
-    else
-        cerr << "SM error: " << rc << " is out of bounds\n";
+   RC rc;
+   char _relName[MAXNAME];
+   RM_FileScan fs;
 
-    //cout << "SM_PrintError\n   rc=" << rc << "\n";
+   // Open a file scan for RELCAT
+   memset(_relName, '\0', sizeof(_relName));
+   strncpy(_relName, relName, MAXNAME);
+   if ((rc = fs.OpenScan(fhRelcat, STRING, MAXNAME,
+                         OFFSET(SM_RelcatRec, relName), EQ_OP, _relName)))
+      goto err_return;
+
+   // Find the matching record
+   if ((rc = fs.GetNextRec(rec))) {
+      rc = (rc == RM_EOF) ? SM_RELNOTFOUND : rc;
+      goto err_closescan;
+   } else {
+      if ((rc = rec.GetData(data)))
+         goto err_closescan;
+   }
+
+   // Close a file scan for RELCAT
+   if ((rc = fs.CloseScan()))
+      goto err_return;
+
+   // Return ok
+   return (0);
+
+   // Return error
+err_closescan:
+   fs.CloseScan();
+err_return:
+   return (rc);
+}
+
+//
+// SetRelationInfo
+//
+// Desc: modify relation info by accessing catalog RELCAT
+// In:   relName - should exist
+// Out:  cardInc - value to be added to cardinality
+//       numPages - value to be set to numPages
+// Ret:  SM_RELNOTFOUND, RM return code
+//
+RC SM_Manager::SetRelationInfo(const char *relName, int cardInc, int numPages)
+{
+   RC rc;
+   RM_Record rec;
+   char *relcatData;
+
+   if ((rc = GetRelationInfo(relName, rec, relcatData)))
+      goto err_return;
+
+   ((SM_RelcatRec *)relcatData)->cardinality += cardInc;
+   ((SM_RelcatRec *)relcatData)->numPages = numPages;
+
+   if ((rc = fhRelcat.UpdateRec(rec)))
+      goto err_return;
+   if ((rc = fhRelcat.ForcePages()))
+      goto err_return;
+
+   // Return ok
+   return (0);
+
+   // Return error
+err_return:
+   return (rc);
+}
+
+//
+// GetAttributeInfo
+//
+// Desc: Get attribute informtion by accessing catalog ATTRCAT
+// In:   relName -
+//       attrName -
+// Out:  rec -
+//       data -
+// Ret:  SM_ATTRNOTFOUND, RM return code
+//
+RC SM_Manager::GetAttributeInfo(const char *relName, const char *attrName,
+                                RM_Record &rec, char *&data)
+{
+   RC rc;
+   char _relattrName[MAXNAME*2];
+   RM_FileScan fs;
+
+   // Open a file scan for ATTRCAT
+   memset(_relattrName, '\0', sizeof(_relattrName));
+   strncpy(_relattrName, relName, MAXNAME);
+   strncpy(_relattrName + MAXNAME, attrName, MAXNAME);
+   if ((rc = fs.OpenScan(fhAttrcat, STRING, MAXNAME*2,
+                         OFFSET(SM_AttrcatRec, relName), EQ_OP, _relattrName)))
+      goto err_return;
+
+   // Find the matching record
+   if ((rc = fs.GetNextRec(rec))) {
+      rc = (rc == RM_EOF) ? SM_ATTRNOTFOUND : rc;
+      goto err_closescan;
+   } else {
+      if ((rc = rec.GetData(data)))
+         goto err_closescan;
+   }
+
+   // Close a file scan for ATTRCAT
+   if ((rc = fs.CloseScan()))
+      goto err_return;
+
+   // Return ok
+   return (0);
+
+   // Return error
+err_closescan:
+   fs.CloseScan();
+err_return:
+   return (rc);
 }
 
