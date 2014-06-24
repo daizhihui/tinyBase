@@ -12,6 +12,10 @@ QL_IxScanOp::QL_IxScanOp(const char *tName, RM_FileHandle & fileHandle, const Co
     alwaysEOF=false;
     //valueData=condition.rhsValue.data;
     //leftData;
+    RM_Record relcatRec;
+    char * pdata;
+    pSmm->GetRelationInfo(tableName,relcatRec,pdata);
+    this->tupleLength = *(int*)(pdata+MAXNAME);
 }
 
 QL_IxScanOp::~QL_IxScanOp()
@@ -26,6 +30,7 @@ QL_IxScanOp::~QL_IxScanOp()
 RC QL_IxScanOp::Initialize (AttrType aType, int indexNum, char *)
 {
     RC rc;
+    //TODO to change
     if((rc =pIxm->OpenIndex(tableName, indexNum, ixih))!=0)
         return rc;
     return ixis.OpenScan(ixih, pCondition->op, pCondition->rhsValue.data);
@@ -75,9 +80,8 @@ RC QL_IxScanOp::EstimateIO  (double &)
 {
     return 0;
 }
-void QL_IxScanOp::Print  (ostream &, int)
-{
-    
+void QL_IxScanOp::Print  (ostream &c, int t){
+    c << "index scan: " << tableName << "number of index" << t <<"\n";
 }
 
 QL_IxScanOp::QL_IxScanOp  (const QL_IxScanOp &)
