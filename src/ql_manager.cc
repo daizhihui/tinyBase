@@ -360,17 +360,22 @@ RC QL_Manager::SelectPlan0(int   nSelAttrs,
         leftSide=fOp;
     }
     //left side is now filtered
-    
+    int* nResultCond = new int[nConditions];
+    int** resultIndexConditions= new int*[nConditions];
+    for(int i =0;i<nConditions;i++)
+    {
+        resultIndexConditions[i]=new int[nConditions];
+    }
+    int* rightRelationIndexes = new int[nRelations-1];
+    getJoinConditions(relations,nRelations,nConditions,conditions,pRmfhs,nResultCond,resultIndexConditions,rightRelationIndexes);
     int i =0;
     //do joins as left sided tree
     while(i<nRelations)
     {
         //get join conditions, and right relation
-        int * joinCondArr;
-        int numberOfJoinResultConditions;
-        int rightRelationIndex;
-        getJoinConditions(nRelations, relations, nConditions, conditions, i, pRmfhs
-                          , &numberOfResultConditions,joinCondArr,&rightRelationIndex));
+        int * joinCondArr = resultindexCondtions[i];
+        int numberOfJoinResultConditions=nResultCond[i];
+        int rightRelationIndex=rightRelationIndexes[i];
         
         //get condition filters on right table
         int * conditionArrR2;
@@ -399,6 +404,13 @@ RC QL_Manager::SelectPlan0(int   nSelAttrs,
         i++;
     }
     root = leftSide;
+    delete [] nResultCond;
+    delete []rightRelationIndexes;
+    for(int i=0;i<nConditions;i++)
+    {
+        delete[] resultIndexConditions[i];
+    }
+    delete [] resultIndexConditions;
     
 }
 RC QL_Manager::SelectPlan1(int   nSelAttrs,
