@@ -589,8 +589,8 @@ RC QL_Manager::getJoinConditionsByRelation(const char * const relations[],
 RC QL_Manager::getJoinConditions(const char * const relations[],
                                  int   nRelations,int   nConditions,
                                  const Condition conditions[],
-                                 RM_FileHandle **pRmfhs,int   &nResultConditions[],
-                                 int* resultIndexConditions[],int &numRightRelation[]){
+                                 RM_FileHandle **pRmfhs,int   nResultConditions[],
+                                 int* resultIndexConditions[],int numRightRelation[]){
 
     bool relationsUsed[nRelations];
     bool conditionsUsed[nConditions];
