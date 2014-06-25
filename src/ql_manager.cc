@@ -414,7 +414,138 @@ RC QL_Manager::SelectPlan2(int   nSelAttrs,
     
 }
 
+RC QL_Manager::SelectPrinter(DataAttrInfo *&attributes,
+                 int nSelAttrs, const RelAttr selAttrs[],
+                 int nRelations, const char * const relations[],
+                 QL_Operator *root, int nTotalAttrs){
 
+}
+
+RC QL_Manager::DeleteUpdatePlan(const char *relName,
+                    const char *pdAttrName,
+                    int   nConditions,
+                    const Condition conditions[],
+                    Condition &alwaysMatch,
+                    RM_FileHandle &rmfh,
+                    QL_Operator *&root){}
+
+
+RC QL_Manager::getSelectConditionsByRelation(const char* relationName,int   nConditions,
+                                 const Condition conditions[],RM_FileHandle **pRmfhs,int   &nResultConditions,
+                                 int* resultIndexConditions){
+    for(int i=0; i< nConditions; i++){
+        if(conditions[i].bRhsIsAttr!=1){
+            if(!strcmp(conditions[i].lhsAttr.relName,relationName)){
+                nResultConditions++;
+                resultIndexConditions[nResultConditions] = i;
+            }
+        }
+    }
+}
+
+RC QL_Manager::getJoinConditionsByRelation(const char * const relations[],
+                                           int   nRelations,
+                                           const char* relationName,int   nConditions,
+                                 const Condition conditions[],RM_FileHandle **pRmfhs,int   &nResultConditions,
+                                 int* resultIndexConditions, int   &nResultRelations, int * resultIndexRelations){
+    nResultRelations = 0;
+    for(int i=0; i< nConditions; i++){
+        if(conditions[i].bRhsIsAttr==1){
+            const char * rightRelationName = conditions[i].rhsAttr.relName;
+            const char * leftRelationName = conditions[i].lhsAttr.relName;
+
+            if(!strcmp(leftRelationName,relationName)){
+                nResultConditions++;
+                resultIndexConditions[nResultConditions] = i;
+                for(int j=0; j< nRelations; j++){
+                    if(!strcmp(rightRelationName,relations[j])) {
+                        resultIndexRelations[nResultRelations] = j;
+                        nResultRelations++;
+                    }
+                }
+            }
+            else if(!strcmp(rightRelationName,relationName)){
+                nResultConditions++;
+                resultIndexConditions[nResultConditions] = i;
+                for(int j=0; j< nRelations; j++){
+                    if(!strcmp(leftRelationName,relations[j])) {
+                        resultIndexRelations[nResultRelations] = j;
+                        nResultRelations++;
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+RC QL_Manager::getJoinConditions(const char * const relations[],
+                                 int   nRelations,int   nConditions,
+                                 const Condition conditions[],
+                                 RM_FileHandle **pRmfhs,int   &nResultConditions[],
+                                 int* resultIndexConditions[],int &numRightRelation[]){
+
+    bool relationsUsed[nRelations];
+    bool conditionsUsed[nConditions];
+    for(int i=0; i<nRelations; i++){
+        relationsUsed[i] = false;
+    }
+    for(int i=0; i<nConditions; i++){
+        conditionsUsed[i] = false;
+    }
+
+    for(int i = 1; i<nRelations; i++){
+        //search in the rested relations
+        for(int j = i ; j< nRelations; j++)
+        {
+            int numResult;
+            getRelation(relationsUsed,nRelation,j,numResult);
+            //compare to find if this relation has conditions with existing relations
+            for(int m=0; m< nConditions; m++){
+                if(!conditionsUsed[m]) {
+                    //get all the JoinRelations with this relation  and all the conditions about this relation
+                    int result[nConditions];
+                    int nResult = 0;
+                    int nRelations = 0 ;
+                    int joinRelations[nRelations];
+                    //get all the conditions of this relation
+                    getJoinConditionsByRelation(relations,nRelations,relations[numResult],
+                                                nConditions,conditions,pRmfhs,nResult,result,nRelations,joinRelations);
+                    int n=0;
+                    while(!relationsUsed(joinRelations[n])) n++; //if the join relation is not used
+                    if(n<=nRelations){
+                        relationsUsed[numResult] = true;
+                        numRightRelation[i] = numResult;
+
+                        for(int h = 0; h < nResult; h++){
+                            //find all the conditions between this relation and all existing relations
+                            if(!strcmp(conditions[result[h]].lhsAttr,relations[numResult])
+                                    ||!strcmp(conditions[result[h]].rhsAttr,relations[numResult])){
+                                resultIndexConditions[i-1][nResultConditions] = result[h];
+                                nResultConditions++;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+
+//get the i ere relation in the unused relations
+RC QL_Manager::getRelationByBoolMap(bool *used, int nRelation, int i, int &numResult){
+    int nbr = 0;
+    for(int i=0; i<nRelation; i++){
+        if(!used[i]) nbr++;
+        if(nbr == i) {
+            numResult = i;
+            break;
+        }
+    }
+    return 0;
+}
 
 RC QL_Manager::printResultSelection(){
 

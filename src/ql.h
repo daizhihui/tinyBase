@@ -129,11 +129,19 @@ private:
                                      const Condition conditions[],RM_FileHandle **pRmfhs,int   &nResultConditions,
                                      int* resultIndexConditions);
     
-    RC getJoinConditions(const RelAttr selAttrs[],
-                         int   nRelations,int   nConditions,
-                                     const Condition conditions[],int joinNumber,RM_FileHandle **pRmfhs,int   &nResultConditions,
+    RC getJoinConditions(const char * const relations[],
+                         int   nRelations, int   nConditions,
+                                     const Condition conditions[], int joinNumber, RM_FileHandle **pRmfhs, int   &nResultConditions,
                                      int* resultIndexConditions);
-    
+
+    RC getJoinConditionsByRelation(const char * const relations[],
+                                               int   nRelations,
+                                               const char* relationName,int   nConditions,
+                                     const Condition conditions[],RM_FileHandle **pRmfhs,int   &nResultConditions,
+                                     int* resultIndexConditions, int   &nResultRelations, int * resultIndexRelations);
+    RC getRelationByBoolMap(bool *used, int nRelation, int i, int &numResult);
+
+
     SM_Manager *pSmm;
     IX_Manager *pIxm;
     RM_Manager *pRmm;
