@@ -128,11 +128,22 @@ private:
     RC getSelectConditionsByRelation(const char* relationName,int   nConditions,
                                      const Condition conditions[],RM_FileHandle **pRmfhs,int   &nResultConditions,
                                      int* resultIndexConditions);
+
+    RC getJoinConditions(const char * const relations[],
+                         int   nRelations, int   nConditions,
+                                     const Condition conditions[], int joinNumber, RM_FileHandle **pRmfhs, int   &nResultConditions,
+                                     int* resultIndexConditions);
+
+    RC getJoinConditionsByRelation(const char * const relations[],
+                                               int   nRelations,
+                                               const char* relationName,int   nConditions,
+                                     const Condition conditions[],RM_FileHandle **pRmfhs,int   &nResultConditions,
+                                     int* resultIndexConditions, int   &nResultRelations, int * resultIndexRelations);
+    RC getRelationByBoolMap(bool *used, int nRelation, int i, int &numResult);
     
-    RC getJoinConditions(int   nRelations,const char * const relations[],int   nConditions,
-                                     const Condition conditions[],int joinNumber,RM_FileHandle **pRmfhs,int   &nResultConditions,
-                                     int* resultIndexConditions,int& rightRelationIndex);
     int attributeHasIndex(RelAttr attribute);//returns indexNo
+
+
     SM_Manager *pSmm;
     IX_Manager *pIxm;
     RM_Manager *pRmm;
