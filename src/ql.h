@@ -129,11 +129,10 @@ private:
                                      const Condition conditions[],RM_FileHandle **pRmfhs,int   &nResultConditions,
                                      int* resultIndexConditions);
     
-    RC getJoinConditions(const RelAttr selAttrs[],
-                         int   nRelations,int   nConditions,
+    RC getJoinConditions(int   nRelations,const char * const relations[],int   nConditions,
                                      const Condition conditions[],int joinNumber,RM_FileHandle **pRmfhs,int   &nResultConditions,
-                                     int* resultIndexConditions);
-    
+                                     int* resultIndexConditions,int& rightRelationIndex);
+    int attributeHasIndex(RelAttr attribute);//returns indexNo
     SM_Manager *pSmm;
     IX_Manager *pIxm;
     RM_Manager *pRmm;

@@ -411,14 +411,81 @@ RC QL_Manager::SelectPlan1(int   nSelAttrs,
                            RM_FileHandle **pRmfhs,
                            QL_Operator *&root)
 {
-    /*
-     
-     RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
-     int nRelations, const char * const relations[],
-     int nConditions, const Condition conditions[])
-     */
+   //indexed, filter then join
+    //If index on restriction attribute AND on join attribute, we will chose restriction attribute index.
+    //SelectPlan2 will do the other way around.
+    //
+    //filter then joins always.
+    //all tables have at least one join attribute between them
     
-    //filters first then join
+    //get all filters to apply on first relation
+    int * conditionArr;
+    int numberOfResultConditions;
+    getSelectConditionsByRelation(relations[0],nConditions,conditions,pRmfhs,&numberOfResultConditions,conditionArr);
+    QL_Operator* leftSide;
+
+    //find if it has an index.
+    int indexNo;
+//for all conditions not join
+    if((indexNo=attributeHasIndex())==-1)
+    {
+        //no index;
+        leftSide = new QL_TblScanOp(relations[0],pRmfhs[0],conditionArr[0],pSmm);//always is left side
+    }
+    else
+    {
+        leftSide = new QL_IxScanOp(cond.attr.tableName,cond,pIxm,pSmm);
+    }
+//end for
+    
+    //do filters on first relation
+    for(int sC = 1;sC<numberOfResultConditions;sC++)
+    {
+        QL_FilterOp * fOP = new QL_FilterOp(leftSide,conditionArr[sC],pSmm);
+        leftSide=fOp;
+    }
+    //left side is now filtered
+    
+    int i =0;
+    //do joins as left sided tree
+    while(i<nRelations)
+    {
+        //get join conditions, and right relation
+        int * joinCondArr;
+        int numberOfJoinResultConditions;
+        int rightRelationIndex;
+        getJoinConditions(nRelations, relations, nConditions, conditions, i, pRmfhs
+                          , &numberOfResultConditions,joinCondArr,&rightRelationIndex));
+        
+        //get condition filters on right table
+        int * conditionArrR2;
+        int numberOfResultConditionsR2;
+        getSelectConditionsByRelation(relations[rightRelationIndex],nConditions,conditions,pRmfhs,&numberOfResultConditionsR2,conditionArrR2);
+        
+        QL_TblScanOp* R2 = new QL_TblScanOp(relations[rightRelationIndex],pRmfhs[rightRelationIndex],conditionArrR2[0],pSmm);//with 1 condition
+        
+        //do remaining filters on right table R2
+        for(int sC = 1;sC<numberOfResultConditionsR2;sC++)
+        {
+            QL_FilterOp * fOP = new QL_FilterOp(R2,conditionArrR2[sC],pSmm);
+            R2=fOp;
+        }
+        
+        //do nested loop join left side with filtered R2
+        QL_NLJOp* NLJOP = new QL_NLJOp(leftSide, R2, joinCondArr[0], pSmm);//do join on 1 attribute
+        //do filter for all remaining join attributes
+        for(int jA = 1; jA<numberOfJoinResultConditions;jA++)
+        {
+            QL_FilterOp * fOP = new QL_FilterOp(NJLOP,joinCondArr[jA],pSmm);
+            NJLOP=fOP;
+        }
+        leftSide=NLJOP;
+        //join done
+        i++;
+    }
+    root = leftSide;
+    
+
     
     
 }
