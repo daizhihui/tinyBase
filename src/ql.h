@@ -117,13 +117,23 @@ private:
                      QL_Operator *root, int nTotalAttrs);
 
     RC DeleteUpdatePlan(const char *relName,
-                        const char *updAttrName,
+                        const char *pdAttrName,
                         int   nConditions,
                         const Condition conditions[],
                         Condition &alwaysMatch,
                         RM_FileHandle &rmfh,
                         QL_Operator *&root);
 
+    
+    RC getSelectConditionsByRelation(const char* relationName,int   nConditions,
+                                     const Condition conditions[],RM_FileHandle **pRmfhs,int   &nResultConditions,
+                                     int* resultIndexConditions);
+    
+    RC getJoinConditions(const RelAttr selAttrs[],
+                         int   nRelations,int   nConditions,
+                                     const Condition conditions[],int joinNumber,RM_FileHandle **pRmfhs,int   &nResultConditions,
+                                     int* resultIndexConditions);
+    
     SM_Manager *pSmm;
     IX_Manager *pIxm;
     RM_Manager *pRmm;

@@ -14,6 +14,7 @@
 #include <unistd.h>
 #include "redbase.h"
 #include "ql.h"
+#include "ql_internal.h"
 #include "sm.h"
 #include "ix.h"
 #include "rm.h"
@@ -333,6 +334,85 @@ RC QL_Manager::Update(const char *relName,
 
 
 
+RC QL_Manager::SelectPlan0(int   nSelAttrs,
+               const RelAttr selAttrs[],
+               int   nRelations,
+               const char * const relations[],
+               int   nConditions,
+               const Condition conditions[],
+               Condition &alwaysMatch,
+               RM_FileHandle **pRmfhs,
+               QL_Operator *&root)
+{
+    //Joins then filters
+    //all tables have at least one join attribute between them
+    int i =0;
+    QL_Operator* leftSide = new QL_TblScanOp();;//always is left side
+    while(i<nRelations)
+    {//do joins left sided tree
+        QL_TblScanOp* R2 = new QL_TblScanOp();//with 1 condition
+        QL_NLJOp* NLJOP = new QL_NLJOp(QL_NLJOp(leftSide, R2, const Condition &, SM_Manager *);//do join on 1 attribute
+        QL_Operator* tmp = NLJOP;
+        //do filter for all remaining join attributes
+        for(int jA = 0; jA<nbrOfJoinAttributes;jA++)
+        {
+            QL_FilterOp * fOP = new QL_FilterOp(tmp,..,);
+            tmp=fOP;
+        }
+        leftSide=NLJOP;
+        //join done
+      
+    }
+    //all joins are done.
+    //add filters:
+   for(int filter=0;filter<numberOfRemainingFilters;fitler++)
+   {
+       QL_FilterOp * fOP = new QL_FilterOp(leftSide,..,);
+       leftSide = fOP;
+   }
+   root = leftSide;
+    
+}
+RC QL_Manager::SelectPlan1(int   nSelAttrs,
+                           const RelAttr selAttrs[],
+                           int   nRelations,
+                           const char * const relations[],
+                           int   nConditions,
+                           const Condition conditions[],
+                           Condition &alwaysMatch,
+                           RM_FileHandle **pRmfhs,
+                           QL_Operator *&root)
+{
+    /*
+     
+     RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
+     int nRelations, const char * const relations[],
+     int nConditions, const Condition conditions[])
+     */
+    
+    //filters first then join
+    
+    
+}
+RC QL_Manager::SelectPlan2(int   nSelAttrs,
+                           const RelAttr selAttrs[],
+                           int   nRelations,
+                           const char * const relations[],
+                           int   nConditions,
+                           const Condition conditions[],
+                           Condition &alwaysMatch,
+                           RM_FileHandle **pRmfhs,
+                           QL_Operator *&root)
+{
+    /*
+     
+     RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
+     int nRelations, const char * const relations[],
+     int nConditions, const Condition conditions[])
+     */
+        
+    
+}
 
 
 
