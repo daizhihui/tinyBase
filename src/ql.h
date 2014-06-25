@@ -117,12 +117,32 @@ private:
                      QL_Operator *root, int nTotalAttrs);
 
     RC DeleteUpdatePlan(const char *relName,
-                        const char *updAttrName,
+                        const char *pdAttrName,
                         int   nConditions,
                         const Condition conditions[],
                         Condition &alwaysMatch,
                         RM_FileHandle &rmfh,
                         QL_Operator *&root);
+
+    
+    RC getSelectConditionsByRelation(const char* relationName,int   nConditions,
+                                     const Condition conditions[],RM_FileHandle **pRmfhs,int   &nResultConditions,
+                                     int* resultIndexConditions);
+
+    RC getJoinConditions(const char * const relations[],
+                         int   nRelations, int   nConditions,
+                                     const Condition conditions[], int joinNumber, RM_FileHandle **pRmfhs, int   &nResultConditions,
+                                     int* resultIndexConditions);
+
+    RC getJoinConditionsByRelation(const char * const relations[],
+                                               int   nRelations,
+                                               const char* relationName,int   nConditions,
+                                     const Condition conditions[],RM_FileHandle **pRmfhs,int   &nResultConditions,
+                                     int* resultIndexConditions, int   &nResultRelations, int * resultIndexRelations);
+    RC getRelationByBoolMap(bool *used, int nRelation, int i, int &numResult);
+    
+    int attributeHasIndex(RelAttr attribute);//returns indexNo
+
 
     SM_Manager *pSmm;
     IX_Manager *pIxm;

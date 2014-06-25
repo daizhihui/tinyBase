@@ -1,0 +1,216 @@
+running test # 1 ****************
+
+REDBASE >> create table soaps (soapid = i, sname = c28, network = c4, rating = f);
+CreateTable
+   relName     =soaps
+   attrCount   =4
+   attributes[0].attrName=soapid   attrType=INT   attrLength=4
+   attributes[1].attrName=sname   attrType=STRING   attrLength=28
+   attributes[2].attrName=network   attrType=STRING   attrLength=4
+   attributes[3].attrName=rating   attrType=FLOAT   attrLength=4
+
+REDBASE >> create table stars (starid = i, stname = c20, plays = c12, soapid = i);
+CreateTable
+   relName     =stars
+   attrCount   =4
+   attributes[0].attrName=starid   attrType=INT   attrLength=4
+   attributes[1].attrName=stname   attrType=STRING   attrLength=20
+   attributes[2].attrName=plays   attrType=STRING   attrLength=12
+   attributes[3].attrName=soapid   attrType=INT   attrLength=4
+
+REDBASE >> load soaps("../soaps.data");
+Load
+   relName =soaps
+   fileName=../soaps.data
+
+REDBASE >> print soaps;
+Print
+   relName=soaps
+soapid      sname                       network rating      
+------------------------------------------------------------
+0           Days of Our Lives           NBC     7.020000    
+1           General Hospital            ABC     9.810000    
+2           Guiding Light               CBS     4.020000    
+3           One Life to Live            ABC     2.310000    
+4           Santa Barbara               NBC     6.440000    
+5           The Young and the Restless  CBS     5.500000    
+6           As the World Turns          CBS     7.000000    
+7           Another World               NBC     1.970000    
+8           All My Children             ABC     8.820000    
+
+9 tuple(s).
+
+REDBASE >> create index stars(starid);
+CreateIndex
+   relName =stars
+   attrName=starid
+
+REDBASE >> create index stars(stname);
+CreateIndex
+   relName =stars
+   attrName=stname
+
+REDBASE >> load stars("../stars.data");
+Load
+   relName =stars
+   fileName=../stars.data
+
+REDBASE >> print stars;
+Print
+   relName=stars
+starid      stname              plays       soapid      
+--------------------------------------------------------
+0           Hayes Kathryn       Kim         6           
+1           DeFreitas Scott     Andy        6           
+2           Grahn Nancy         Julia       4           
+3           Linder Kate         Esther      5           
+4           Cooper Jeanne       Katherine   5           
+5           Ehlers Beth         Harley      2           
+6           Novak John          Keith       4           
+7           Elliot Patricia     Renee       3           
+8           Hutchinson Fiona    Gabrielle   5           
+9           Carey Phil          Asa         5           
+10          Walker Nicholas     Max         3           
+11          Ross Charlotte      Eve         0           
+12          Anthony Eugene      Stan        8           
+13          Douglas Jerry       John        5           
+14          Holbrook Anna       Sharlene    7           
+15          Hammer Jay          Fletcher    2           
+16          Sloan Tina          Lillian     2           
+17          DuClos Danielle     Lisa        3           
+18          Tuck Jessica        Megan       3           
+19          Ashford Matthew     Jack        0           
+20          Novak John          Keith       4           
+21          Larson Jill         Opal        8           
+22          McKinnon Mary       Denise      7           
+23          Barr Julia          Brooke      8           
+24          Borlenghi Matt      Brian       8           
+25          Hughes Finola       Anna        1           
+26          Rogers Tristan      Robert      1           
+27          Richardson Cheryl   Jenny       1           
+28          Evans Mary Beth     Kayla       0           
+
+29 tuple(s).
+
+REDBASE >> ls;
+attrcat
+relcat
+soaps
+stars
+stars.0
+stars.1
+
+REDBASE >> Bye.
+running test # 2 ****************
+
+REDBASE >> create table test1 (a01 = i, a02 = i, a03 = i, a04 = i, a05 = i, a06 = i, a07 = i, a08 = i, a09 = i, a10 = i, a11 = i, a12 = i, a13 = i, a14 = i, a15 = i, a16 = i, a17 = i, a18 = i, a19 = i, a20 = i, a21 = i, a22 = i, a23 = i, a24 = i, a25 = i, a26 = i, a27 = i, a28 = i, a29 = i, a30 = i, a31 = i, a32 = i, a33 = i, a34 = i, a35 = i, a36 = i, a37 = i, a38 = i, a39 = i, a40 = i, a41 = i);
+create: too many elements
+
+REDBASE >> create table test123456789012345678901 (a01 = i, a02 = i, a03 = i, a04 = i, a05 = i, a01 = f);
+create: relation name or attribute name too long
+
+REDBASE >> create table test4 (a01 = i, a02 = i, a03 = i, a04 = i, a05 = i, test123456789012345678901 = i);
+create: relation name or attribute name too long
+
+REDBASE >> create table test5 (a01 = i5);
+create: invalid size for INTEGER attribute (should be 4)
+
+REDBASE >> create table test6 (a01 = c0);
+create: invalid length for string attribute
+
+REDBASE >> create table test7 (a01 = c256);
+create: invalid length for string attribute
+
+REDBASE >> create table test2 (a01 = c250, a02 = c250, a03 = c250, a04 = c250, a05 = c250, a06 = c250, a07 = c250, a08 = c250, a09 = c250, a10 = c250, a11 = c250, a12 = c250, a13 = c250, a14 = c250, a15 = c250, a16 = c250, a17 = c250);
+RM warning: invalid record size
+
+REDBASE >> create table test3 (a01 = i, a02 = i, a03 = i, a04 = i, a05 = i, a01 = f);
+SM warning: invalid attribute name
+
+REDBASE >> create table test8 (name = c16);
+CreateTable
+   relName     =test8
+   attrCount   =1
+   attributes[0].attrName=name   attrType=STRING   attrLength=16
+
+REDBASE >> create table test8 (name = c16);
+SM warning: invalid relation name
+
+REDBASE >> drop table test8;
+DropTable
+   relName=test8
+
+REDBASE >> drop table test8;
+SM warning: invalid relation name
+
+REDBASE >> help test8;
+Help
+   relName=test8
+RelName                 AttrName                offset      AttrType AttrLength  IndexNo     
+---------------------------------------------------------------------------------------------
+
+0 tuple(s).
+
+REDBASE >> print test8;
+Print
+   relName=test8
+SM warning: invalid relation name
+
+REDBASE >> load test8("/usr/class/cs346/redbase/data/soaps.data");
+SM warning: invalid relation name
+
+REDBASE >> drop table attrcat;
+SM warning: invalid relation name
+
+REDBASE >> drop table relcat;
+SM warning: invalid relation name
+
+REDBASE >> load relcat("/usr/class/cs346/redbase/data/soaps.data");
+SM warning: invalid relation name
+
+REDBASE >> load attrcat("/usr/class/cs346/redbase/data/soaps.data");
+SM warning: invalid relation name
+
+REDBASE >> create table stars (starid = i, stname = c20, plays = c12, soapid = i);
+CreateTable
+   relName     =stars
+   attrCount   =4
+   attributes[0].attrName=starid   attrType=INT   attrLength=4
+   attributes[1].attrName=stname   attrType=STRING   attrLength=20
+   attributes[2].attrName=plays   attrType=STRING   attrLength=12
+   attributes[3].attrName=soapid   attrType=INT   attrLength=4
+
+REDBASE >> load stars("/usr/class/cs346/redbase/data/stars.data");
+Load
+   relName =stars
+   fileName=/usr/class/cs346/redbase/data/stars.data
+
+REDBASE >> create index star(starid);
+SM warning: invalid relation name
+
+REDBASE >> create index stars(id);
+SM warning: invalid attribute name
+
+REDBASE >> drop index star(starid);
+SM warning: attribute index not exists
+
+REDBASE >> drop index stars(id);
+SM warning: attribute index not exists
+
+REDBASE >> create index stars(starid);
+CreateIndex
+   relName =stars
+   attrName=starid
+
+REDBASE >> create index stars(starid);
+SM warning: index already exists
+
+REDBASE >> drop index stars(starid);
+DropIndex
+   relName =stars
+   attrName=starid
+
+REDBASE >> drop index stars(starid);
+SM warning: attribute index not exists
+
+REDBASE >> Bye.
