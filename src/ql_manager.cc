@@ -88,8 +88,10 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
                 );
     rc = root->Initialize(); //initialise
 #ifdef QL_DEBUG
-    if(!rc)
+    if(rc){
+        cout << "rc=" << rc << endl;
         assert(0);
+    }
 #endif
 
     DataAttrInfo *attrInfo;
@@ -100,6 +102,7 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
 
     //delete
     delete []pRmfhs;
+    root->Finalize();
     return 0;
 }
 
@@ -109,7 +112,7 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
 RC QL_Manager::Insert(const char *relName,
                       int nValues, const Value values[])
 {
-    #ifndef QL_SELECT_DEBUG
+ #ifndef QL_SELECT_DEBUG
       RC rc;
     RM_Record tmpRec;
     char *relcatData;
@@ -287,6 +290,7 @@ err_deleteihs:
 err_return:
     return (rc);
 
+#endif
 }
 
 //
@@ -353,6 +357,7 @@ RC QL_Manager::SelectPlan0(int   nSelAttrs,
 #endif
     //non indexed
     //filter then joins always.
+    //in the end, do projection  --add by dzh
     //all tables have at least one join attribute between them
     
     //get all filters to apply on first relation
@@ -418,7 +423,8 @@ RC QL_Manager::SelectPlan0(int   nSelAttrs,
         i++;
         delete []conditionArrR2;
     }
-    root = leftSide;
+    QL_Operator *projOp = new QL_ProjectOp(leftSide,nSelAttrs,selAttrs);
+    root = projOp;
     delete []conditionArr;
     delete []nResultCond;
     delete []rightRelationIndexes;
@@ -775,15 +781,13 @@ RC QL_Manager::SelectPrinter(DataAttrInfo *&attributes, int nSelAttrs, const Rel
     p->PrintHeader(cout);
 
     //print data
-    //while(1){
+    while(1){
         RM_Record recOutput;
-        //if(QL_EOF==root->GetNext(recOutput)) break;
-        root->GetNext(recOutput);
+        if(QL_LASTWARN ==root->GetNext(recOutput)) break;
         char * output;
         recOutput.GetData(output);
-        cout << *(int*)output << "  NUMBER " << endl;
-        //p->Print(cout,output);
-    //}
+        p->Print(cout,output);
+    }
 
     p->PrintFooter(cout);
     return 0;
