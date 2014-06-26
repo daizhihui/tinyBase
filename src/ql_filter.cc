@@ -10,9 +10,13 @@ private:
     QL_RelAttrInfo   lhsAttrInfo;
     QL_RelAttrInfo   rhsAttrInfo;
 */
+#define QL_DEBUG_OPERATOR
 
 QL_FilterOp::QL_FilterOp(QL_Operator *pChd, const Condition &c,
                       SM_Manager *sm){
+#ifdef QL_DEBUG_OPERATOR
+    cout << "begin constructor of QL_FilterOp" << endl;
+#endif
         pCondition = &c;
         pSmm = sm;
         pChild = pChd;
@@ -30,11 +34,17 @@ QL_FilterOp::~QL_FilterOp     (){
 }
 
 RC QL_FilterOp::Initialize(AttrType type, int index, char * tname){
+#ifdef QL_DEBUG_OPERATOR
+    cout << "begin initailise of QL_FilterOp" << endl;
+#endif
     RC rc;
     if(rc=pChild->Initialize(type,index,tname)) return rc;
     return 0;
 }
 RC QL_FilterOp::GetNext(RM_Record &rec){
+#ifdef QL_DEBUG_OPERATOR
+    cout << "begin getNExt of QL_FilterOp" << endl;
+#endif
     RC rc;
     bool found = false;
     char *pData;
@@ -63,10 +73,13 @@ RC QL_FilterOp::Finalize      (){
     return 0;
 }
 RC QL_FilterOp::SchemaLookup  (const RelAttr &relattr, QL_RelAttrInfo &info){
+#ifdef QL_DEBUG_OPERATOR
+    cout << "begin schemalookup of QL_FilterOp" << endl;
+#endif
     RC rc;
     //search in left, if not found, search right
     if(rc=pChild->SchemaLookup(relattr,info)) {
-#ifdef DEBUG_QL
+#ifdef QL_DEBUG_OPERATOR
         if(!rc)
                 assert(0);
 #endif
@@ -87,6 +100,9 @@ void QL_FilterOp::Print       (ostream &c, int indexDepth){
 
 
 QL_ProjectOp::QL_ProjectOp     (QL_Operator *pCld, int nPAttrs , const RelAttr relattrs[]){
+#ifdef QL_DEBUG_OPERATOR
+    cout << "begin constru of QL_ProjectOp" << endl;
+#endif
     pChild = pCld;
     nProjAttrs = nPAttrs;
     projAttrs = const_cast<RelAttr*>(relattrs);
@@ -110,12 +126,18 @@ QL_ProjectOp::~QL_ProjectOp    (){
 }
 
 RC QL_ProjectOp::Initialize(AttrType type, int index, char * tname){
+#ifdef QL_DEBUG_OPERATOR
+    cout << "begin initalise of QL_ProjectOp" << endl;
+#endif
     RC rc;
     if(rc=pChild->Initialize(type,index,tname)) return rc;
     return 0;
 }
 
 RC QL_ProjectOp::GetNext(RM_Record &rec){
+#ifdef QL_DEBUG_OPERATOR
+    cout << "begin getNExt of QL_ProjectOp" << endl;
+#endif
     RC rc;
     RM_Record lastRec;
     if(rc=pChild->GetNext(lastRec)) return rc;
@@ -137,6 +159,9 @@ RC QL_ProjectOp::Finalize      (){
 }
 
 RC QL_ProjectOp::SchemaLookup(const RelAttr &relAttr, QL_RelAttrInfo &info){
+#ifdef QL_DEBUG_OPERATOR
+    cout << "begin schemalookup of QL_ProjectOp" << endl;
+#endif
     for(int i = 0; i< nProjAttrs; i++){
         //compare relAttr ?= projAttrs[i]
         if(!strcmp(relAttr.relName,projAttrs[i].relName)&&
@@ -165,6 +190,9 @@ void QL_ProjectOp::Print(ostream & c, int indexDepth){
 // nested loop join
 
 QL_NLJOp::QL_NLJOp(QL_Operator *pLchild, QL_Operator *pRchild, const Condition &c, SM_Manager *smm){
+#ifdef QL_DEBUG_OPERATOR
+    cout << "begin constru of QL_NLJOp" << endl;
+#endif
     pLeftChild = pLchild;
     pRightChild = pRchild;
     pCondition = &c;
@@ -183,6 +211,9 @@ QL_NLJOp::~QL_NLJOp(){
 
 }
 RC QL_NLJOp::Initialize    (AttrType at, int i, char * name){
+#ifdef QL_DEBUG_OPERATOR
+    cout << "begin initialise of QL_NLJOp" << endl;
+#endif
     RC rc;
     if(rc=pLeftChild->Initialize(at,i,name)) return rc;
     if(rc=pRightChild->Initialize(at,i,name)) return rc;
@@ -193,6 +224,9 @@ RC QL_NLJOp::Initialize    (AttrType at, int i, char * name){
 }
 
 RC QL_NLJOp::GetNext(RM_Record &rec){
+#ifdef QL_DEBUG_OPERATOR
+    cout << "begin getNext of QL_NLJOp" << endl;
+#endif
     RC rc;
     bool found = false;
     char *pData;
@@ -202,7 +236,7 @@ RC QL_NLJOp::GetNext(RM_Record &rec){
             //to re-initialize
             pRightChild->Initialize(rightAttrInfo.attrType);
             if(rc = pRightChild->GetNext(rightRec)) {
-#ifdef DEBUG_QL
+#ifdef QL_DEBUG_OPERATOR
                 assert(0);
 #endif
                 return rc; //should not happen
@@ -236,12 +270,15 @@ RC QL_NLJOp::Finalize(){
 }
 
 RC QL_NLJOp::SchemaLookup  (const RelAttr &relattr, QL_RelAttrInfo &info){
+#ifdef QL_DEBUG_OPERATOR
+    cout << "begin schemalookup of QL_NLJOp" << endl;
+#endif
     RC rc;
     //search in left, if not found, search right
     QL_RelAttrInfo tInfo;
     if(rc=pLeftChild->SchemaLookup(relattr,tInfo)) {
         rc = pRightChild->SchemaLookup(relattr,tInfo);
-#ifdef DEBUG_QL
+#ifdef QL_DEBUG_OPERATOR
         if(!rc)
                 assert(0);
 #endif

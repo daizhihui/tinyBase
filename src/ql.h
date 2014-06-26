@@ -136,7 +136,7 @@ private:
                          const Condition conditions[],
                          RM_FileHandle **pRmfhs,
                          int nResultConditions[],
-                         int* resultIndexConditions[],
+                         int **resultIndexConditions,
                          int numRightRelation[]);
 
     RC getJoinConditionsByRelation(const char * const relations[],

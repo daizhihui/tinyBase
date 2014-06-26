@@ -20,7 +20,7 @@
 #include "rm.h"
 #include "sm_internal.h"
 #define QL_SELECT_DEBUG 1
-
+#define QL_DEBUG
 using namespace std;
 
 //prototype
@@ -55,7 +55,7 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
                       int nRelations, const char * const relations[],
                       int nConditions, const Condition conditions[])
 {
-
+    RC rc;
     int i;
 
     cout << "Select\n";
@@ -74,16 +74,32 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
 
     //define a printer
     Condition alwaysMatch;
-    RM_FileHandle **pRmfhs;
+    //create fileHandles and open all the relations
+    RM_FileHandle *pRmfhs = new RM_FileHandle[nRelations];
+    for (i = 0; i < nRelations; i++){
+        if(rc=pRmm->OpenFile(relations[i],pRmfhs[i])){
+#ifdef QL_DEBUG
+            assert(0);
+#endif
+        }
+    }
     QL_Operator *root;
-    this->SelectPlan0(nSelAttrs,selAttrs,nRelations,relations, nConditions, conditions, alwaysMatch, pRmfhs, root
+    this->SelectPlan0(nSelAttrs,selAttrs,nRelations,relations, nConditions, conditions, alwaysMatch, &pRmfhs, root
                 );
+    rc = root->Initialize(); //initialise
+#ifdef QL_DEBUG
+    if(!rc)
+        assert(0);
+#endif
+
     DataAttrInfo *attrInfo;
     int nTotalAttrs = 0;
     SelectPrinter(attrInfo,nSelAttrs,selAttrs,nRelations,relations, root, nTotalAttrs);
     //print the operator plan
     root->Print(cout);
 
+    //delete
+    delete []pRmfhs;
     return 0;
 }
 
@@ -378,12 +394,15 @@ RC QL_Manager::SelectPlan0(int   nSelAttrs,
                RM_FileHandle **pRmfhs,
                QL_Operator *&root)
 {
+#ifdef QL_DEBUG
+    cout << "begin of plan0" << endl;
+#endif
     //non indexed
     //filter then joins always.
     //all tables have at least one join attribute between them
     
     //get all filters to apply on first relation
-    int * conditionArr;
+    int * conditionArr = new int[nConditions]; //index of select conditions
     int numberOfResultConditions;
     getSelectConditionsByRelation(relations[0],nConditions,conditions,pRmfhs,
             numberOfResultConditions,conditionArr);
@@ -404,7 +423,8 @@ RC QL_Manager::SelectPlan0(int   nSelAttrs,
     int* rightRelationIndexes = new int[nRelations-1];
     getJoinConditions(relations,nRelations,nConditions,conditions,pRmfhs,nResultCond,
                       resultIndexConditions,rightRelationIndexes);
-    int i =0;
+    //begin with i=1
+    int i =1;
     //do joins as left sided tree
     while(i<nRelations)
     {
@@ -414,7 +434,7 @@ RC QL_Manager::SelectPlan0(int   nSelAttrs,
         int rightRelationIndex=rightRelationIndexes[i];
         
         //get condition filters on right table
-        int * conditionArrR2;
+        int * conditionArrR2 = new int[nConditions];
         int numberOfResultConditionsR2;
         getSelectConditionsByRelation(relations[rightRelationIndex],nConditions,
                                       conditions,pRmfhs,numberOfResultConditionsR2,
@@ -442,9 +462,11 @@ RC QL_Manager::SelectPlan0(int   nSelAttrs,
         leftSide=NLJOP;
         //join done
         i++;
+        delete []conditionArrR2;
     }
     root = leftSide;
-    delete [] nResultCond;
+    delete []conditionArr;
+    delete []nResultCond;
     delete []rightRelationIndexes;
     for(int i=0;i<nConditions;i++)
     {
@@ -452,6 +474,9 @@ RC QL_Manager::SelectPlan0(int   nSelAttrs,
     }
     delete [] resultIndexConditions;
 
+#ifdef QL_DEBUG
+    cout << "end of selectPlan0" << endl;
+#endif
     return 0;
     
 }
@@ -578,14 +603,21 @@ RC QL_Manager::DeleteUpdatePlan(const char *relName,
 }
 
 
-RC QL_Manager::getSelectConditionsByRelation(const char* relationName,int   nConditions,
-                                 const Condition conditions[],RM_FileHandle **pRmfhs,int   &nResultConditions,
-                                 int* resultIndexConditions){
+RC QL_Manager::getSelectConditionsByRelation(const char* relationName,
+                                             int   nConditions,
+                                             const Condition conditions[],
+                                             RM_FileHandle **pRmfhs,
+                                             int   &nResultConditions,
+                                             int* resultIndexConditions){
+#ifdef QL_DEBUG
+    cout << "begin of getSelectConditionsByRelation" << endl;
+#endif
+    nResultConditions = 0;
     for(int i=0; i< nConditions; i++){
         if(conditions[i].bRhsIsAttr!=1){
             if(!strcmp(conditions[i].lhsAttr.relName,relationName)){
-                nResultConditions++;
                 resultIndexConditions[nResultConditions] = i;
+                nResultConditions++;
             }
         }
     }
@@ -598,6 +630,9 @@ RC QL_Manager::getJoinConditionsByRelation(const char * const relations[],
                                            const char* relationName,int   nConditions,
                                  const Condition conditions[],RM_FileHandle **pRmfhs,int   &nResultConditions,
                                  int* resultIndexConditions, int   &nResultRelations, int * resultIndexRelations){
+#ifdef QL_DEBUG
+    cout << "begin of getJoinConditionsByRelation" << endl;
+#endif
     nResultRelations = 0;
     for(int i=0; i< nConditions; i++){
         if(conditions[i].bRhsIsAttr==1){
@@ -636,6 +671,10 @@ RC QL_Manager::getJoinConditions(const char * const relations[],
                                  RM_FileHandle **pRmfhs,int   nResultConditions[],
                                  int** resultIndexConditions,
                                  int numRightRelation[]){
+
+#ifdef QL_DEBUG
+    cout << "begin of getJoinConditions" << endl;
+#endif
 
     bool relationsUsed[nRelations];
     bool conditionsUsed[nConditions];
@@ -682,12 +721,18 @@ RC QL_Manager::getJoinConditions(const char * const relations[],
             }
         }
     }
+#ifdef QL_DEBUG
+    cout << "end of getJoinConditions" << endl;
+#endif
     return 0;
 }
 
 
 //get the i ere relation in the unused relations
 RC QL_Manager::getRelationByBoolMap(bool *used, int nRelation, int i, int &numResult){
+#ifdef QL_DEBUG
+    cout << "begin of getRelationByBoolMap" << endl;
+#endif
     int nbr = 0;
     for(int i=0; i<nRelation; i++){
         if(!used[i]) nbr++;
@@ -701,6 +746,9 @@ RC QL_Manager::getRelationByBoolMap(bool *used, int nRelation, int i, int &numRe
 
 RC QL_Manager::SelectPrinter(DataAttrInfo *&attributes, int nSelAttrs, const RelAttr selAttrs[],
                              int nRelations, const char * const relations[], QL_Operator *root, int &nTotalAttrs){
+#ifdef QL_DEBUG
+    cout << "begin of SelectPrinter" << endl;
+#endif
     RC rc;
     attributes = new DataAttrInfo[MAXATTRS];
     nTotalAttrs = 0;
@@ -773,13 +821,15 @@ RC QL_Manager::SelectPrinter(DataAttrInfo *&attributes, int nSelAttrs, const Rel
     p->PrintHeader(cout);
 
     //print data
-    while(1){
+    //while(1){
         RM_Record recOutput;
-        if(QL_EOF==root->GetNext(recOutput)) break;
+        //if(QL_EOF==root->GetNext(recOutput)) break;
+        root->GetNext(recOutput);
         char * output;
         recOutput.GetData(output);
-        p->Print(cout,output);
-    }
+        cout << *(int*)output << "  NUMBER " << endl;
+        //p->Print(cout,output);
+    //}
 
     p->PrintFooter(cout);
     return 0;
@@ -790,6 +840,9 @@ RC QL_Manager::SelectPrinter(DataAttrInfo *&attributes, int nSelAttrs, const Rel
 //to get relation name for relAttr even relAttr is not "rel.attr"
 RC QL_Manager::getRelName(const RelAttr &relAttr, int nRelations, const char * const relations[],
                           const char* relName, DataAttrInfo &dataAttr){
+#ifdef QL_DEBUG
+    cout << "begin of getRelName" << endl;
+#endif
     if(relAttr.relName != NULL) {
         relName = relAttr.relName;
         RM_Record recAttr;

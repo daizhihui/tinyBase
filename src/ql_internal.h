@@ -15,7 +15,6 @@
 #include "printer.h"
 
 using namespace std;
-
 extern int compareDataAttrInfo(const void *, const void *);
 extern double EstSelectivity(const Condition *, SM_Manager *);
 

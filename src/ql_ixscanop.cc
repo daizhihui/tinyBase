@@ -1,8 +1,11 @@
 //QL_IxScanOp implementation
 #include "ql_internal.h"
-
+#define QL_DEBUG_OPERATOR
 QL_IxScanOp::QL_IxScanOp(const char *tName, RM_FileHandle & fileHandle, const Condition & condition, IX_Manager * ix_manager, SM_Manager * sm_manager)
 {
+#ifdef QL_DEBUG_OPERATOR
+    cout << "begin constructor of QL_IxScanOp" << endl;
+#endif
     tableName=tName;//?
     pRmfh=&fileHandle;
     pCondition=&condition;
@@ -29,6 +32,9 @@ QL_IxScanOp::~QL_IxScanOp()
 
 RC QL_IxScanOp::Initialize (AttrType aType, int indexNum, char *)
 {
+#ifdef QL_DEBUG_OPERATOR
+    cout << "begin initalise of QL_IxScanOp" << endl;
+#endif
     RC rc;
     //TODO to change
     if((rc =pIxm->OpenIndex(tableName, indexNum, ixih))!=0)
@@ -40,6 +46,9 @@ RC QL_IxScanOp::Initialize (AttrType aType, int indexNum, char *)
 
 RC QL_IxScanOp::GetNext (RM_Record &rm)
 {
+#ifdef QL_DEBUG_OPERATOR
+    cout << "begin getNext of QL_IxScanOp" << endl;
+#endif
     RC rc;
     RID rid;
     if((rc =ixis.GetNextEntry(rid))==IX_EOF)
@@ -59,6 +68,9 @@ RC QL_IxScanOp::Finalize()
 }
 RC QL_IxScanOp::SchemaLookup  (const RelAttr & rA, QL_RelAttrInfo & rI)
 {
+#ifdef QL_DEBUG_OPERATOR
+    cout << "begin schemalookup of QL_IxScanOp" << endl;
+#endif
     
     RM_Record rec;
     char* data;
