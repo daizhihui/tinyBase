@@ -155,8 +155,8 @@ void QL_ProjectOp::PrintPrint(ostream & c, int indexDepth){
 }
 
 
-QL_ProjectOp::QL_ProjectOp  (const QL_ProjectOp &){}
-QL_ProjectOp::QL_ProjectOp& operator=(const QL_ProjectOp &){}
+//QL_ProjectOp::QL_ProjectOp  (const QL_ProjectOp &){}
+//QL_ProjectOp::QL_ProjectOp& operator=(const QL_ProjectOp &){}
 
 
 
@@ -251,12 +251,12 @@ RC QL_NLJOp::SchemaLookup  (const RelAttr &relattr, QL_RelAttrInfo &info){
     return 0;
 }
 
-RC QL_NLJOp::EstimateCard  (double &){
-    return 0;
-}
-RC QL_NLJOp::EstimateIO    (double &){
-    return 0;
-}
+//RC QL_NLJOp::EstimateCard  (double &){
+//    return 0;
+//}
+//RC QL_NLJOp::EstimateIO    (double &){
+//    return 0;
+//}
 void QL_NLJOp::Print(ostream & c, int indexDepth){
     c << "nested loop join" << "\n";
     pLeftChild->Print(c,0);

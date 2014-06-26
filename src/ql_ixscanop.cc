@@ -84,13 +84,13 @@ void QL_IxScanOp::Print  (ostream &c, int t){
     c << "index scan: " << tableName << "number of index" << t <<"\n";
 }
 
-QL_IxScanOp::QL_IxScanOp  (const QL_IxScanOp &)
-{
+//QL_IxScanOp::QL_IxScanOp  (const QL_IxScanOp &)
+//{
     
-}
-QL_IxScanOp::QL_IxScanOp& operator=(const QL_IxScanOp &)
-{
+//}
+//QL_IxScanOp::QL_IxScanOp& operator=(const QL_IxScanOp &)
+//{
     
-}
+//}
 
 

@@ -45,8 +45,8 @@ public:
     int tupleLength;
 
 private:
-    QL_Operator  (const QL_Operator &);
-    QL_Operator& operator=(const QL_Operator &);
+//    QL_Operator  (const QL_Operator &);
+//    QL_Operator& operator=(const QL_Operator &);
 };
 
 class QL_TblScanOp : public QL_Operator {
@@ -94,8 +94,8 @@ public:
     void Print       (ostream &, int);
 
 private:
-    QL_IxScanOp  (const QL_IxScanOp &);
-    QL_IxScanOp& operator=(const QL_IxScanOp &);
+//    QL_IxScanOp  (const QL_IxScanOp &);
+//    QL_IxScanOp& operator=(const QL_IxScanOp &);
 
     const char       *tableName;
     RM_FileHandle    *pRmfh;
@@ -126,8 +126,8 @@ public:
     void Print       (ostream &, int);
 
 private:
-    QL_FilterOp  (const QL_FilterOp &);
-    QL_FilterOp& operator=(const QL_FilterOp &);
+//    QL_FilterOp  (const QL_FilterOp &);
+//    QL_FilterOp& operator=(const QL_FilterOp &);
 
     QL_Operator      *pChild;
     const Condition  *pCondition;
@@ -149,8 +149,8 @@ public:
     void Print       (ostream &, int);
 
 private:
-    QL_ProjectOp  (const QL_ProjectOp &);
-    QL_ProjectOp& operator=(const QL_ProjectOp &);
+//    QL_ProjectOp  (const QL_ProjectOp &);
+//    QL_ProjectOp& operator=(const QL_ProjectOp &);
 
     QL_Operator      *pChild;
     int              nProjAttrs;
@@ -172,8 +172,8 @@ public:
     void Print       (ostream &, int);
 
 private:
-    QL_NLJOp  (const QL_NLJOp &);
-    QL_NLJOp& operator=(const QL_NLJOp &);
+//    QL_NLJOp  (const QL_NLJOp &);
+//    QL_NLJOp& operator=(const QL_NLJOp &);
 
     QL_Operator      *pLeftChild;
     QL_Operator      *pRightChild;
@@ -201,8 +201,8 @@ public:
     void Print       (ostream &, int);
 
 private:
-    QL_NBJOp  (const QL_NBJOp &);
-    QL_NBJOp& operator=(const QL_NBJOp &);
+//    QL_NBJOp  (const QL_NBJOp &);
+//    QL_NBJOp& operator=(const QL_NBJOp &);
 
     QL_Operator      *pLeftChild;
     QL_Operator      *pRightChild;

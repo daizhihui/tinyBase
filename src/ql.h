@@ -145,6 +145,9 @@ private:
     
     int attributeHasIndex(RelAttr attribute);//returns indexNo
 
+    //to get relation name for relAttr even relAttr is not "rel.attr"
+    RC getRelName(const RelAttr &relAttr, int nRelations, const char * const relations[],const char* relName);
+
 
     SM_Manager *pSmm;
     IX_Manager *pIxm;
