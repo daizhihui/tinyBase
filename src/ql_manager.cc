@@ -286,7 +286,7 @@ err_deleteihs:
     delete [] ihs;
 err_return:
     return (rc);
-
+#endif
 }
 
 
@@ -944,25 +944,71 @@ RC QL_Manager::SelectPlan1(int   nSelAttrs,
     //filter then joins always.
     //all tables have at least one join attribute between them
     
+    
+    //--------
     //get all filters to apply on first relation
-    int * conditionArr;
-    int numberOfResultConditions;
-    getSelectConditionsByRelation(relations[0],nConditions,conditions,pRmfhs,&numberOfResultConditions,conditionArr);
-    QL_Operator* leftSide;
-
-    //find if it has an index.
-    int indexNo;
-//for all conditions not join
-    if((indexNo=attributeHasIndex())==-1)
+    
+    //join conditions:
+    int* nResultCond = new int[nConditions];
+    int** resultIndexConditions= new int*[nConditions];
+    for(int i =0;i<nConditions;i++)
     {
-        //no index;
-        leftSide = new QL_TblScanOp(relations[0],pRmfhs[0],conditionArr[0],pSmm);//always is left side
+        resultIndexConditions[i]=new int[nConditions];
+    }
+    int* rightRelationIndexes = new int[nRelations-1];
+    getJoinConditions(relations,nRelations,nConditions,conditions,pRmfhs,nResultCond,
+                      resultIndexConditions,rightRelationIndexes);
+    //---
+    
+    //filters on first relation:
+    int * conditionArr = new int[nConditions]; //index of select conditions
+    int numberOfResultConditions;
+    getSelectConditionsByRelation(relations[0],nConditions,conditions,pRmfhs,
+                                  numberOfResultConditions,conditionArr);
+    
+    bool indexOnJoinA= false;
+    //---
+    int indexNo=-1;
+    for(int rC=0;rC<nResultCond,rC++)
+    {
+        if((indexNo=resultIndexConditions[rC].relAttr)>-1){
+            //use this index
+            //remember this attribute.
+            indexOnJoinA=true;
+            break;
+        }
+    }
+    if(indexNo==-1)
+    {//no index on join attribute, check on others
+        for(int srC=0;sRC<numberOfResultConditions;sRC++)
+            if((indexNo=resultIndexConditions[rC].relAttr)>-1){
+                //use this index
+                //remember this attribute.
+                break;
+            }
+    }
+    
+    if(indexOnJoinA)
+    {// do filters first then join
+        
     }
     else
-    {
-        leftSide = new QL_IxScanOp(cond.attr.tableName,cond,pIxm,pSmm);
+    {// filters on non-join attributes
+        
     }
-//end for
+    
+    QL_Operator* leftSide = new QL_TblScanOp(relations[0],pRmfhs[0][0],conditions[conditionArr[0]],pSmm);//always is left side
+    //do filters on first relation
+    for(int sC = 1;sC<numberOfResultConditions;sC++)
+    {
+        QL_FilterOp * fOp = new QL_FilterOp(leftSide,conditions[conditionArr[sC]],pSmm);
+        leftSide=fOp;
+    }
+    //left side is now filtered
+ 
+    
+    //----
+
     
     //do filters on first relation
     for(int sC = 1;sC<numberOfResultConditions;sC++)
