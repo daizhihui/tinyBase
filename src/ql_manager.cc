@@ -173,7 +173,8 @@ RC QL_Manager::Insert(const char *relName,
         
         if (rc != 0) {
             fs.CloseScan();
-            delete [] record_data;;
+            delete [] record_data;
+            return (rc);
         }
         if ((rc = rec.GetData(_data))) {
             fs.CloseScan();
