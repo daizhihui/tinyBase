@@ -420,23 +420,23 @@ RC QL_Manager::SelectPlan0(int   nSelAttrs,
                                       conditions,pRmfhs,numberOfResultConditionsR2,
                                       conditionArrR2);
         
-        QL_TblScanOp* R2 = new QL_TblScanOp(relations[rightRelationIndex],
+        QL_Operator* R2 = new QL_TblScanOp(relations[rightRelationIndex],
                                             *(pRmfhs[rightRelationIndex]),
                                             conditions[conditionArrR2[0]],pSmm);//with 1 condition
         
         //do remaining filters on right table R2
         for(int sC = 1;sC<numberOfResultConditionsR2;sC++)
         {
-            QL_FilterOp * fOp = new QL_FilterOp(R2,conditions[conditionArrR2[sC]],pSmm);
+            QL_Operator * fOp = new QL_FilterOp(R2,conditions[conditionArrR2[sC]],pSmm);
             R2=fOp;
         }
         
         //do nested loop join left side with filtered R2
-        QL_NLJOp* NLJOP = new QL_NLJOp(leftSide, R2, joinCondArr[0], pSmm);//do join on 1 attribute
+        QL_Operator* NLJOP = new QL_NLJOp(leftSide, R2, conditions[joinCondArr[0]], pSmm);//do join on 1 attribute
         //do filter for all remaining join attributes
         for(int jA = 1; jA<numberOfJoinResultConditions;jA++)
         {
-            QL_FilterOp * fOP = new QL_FilterOp(NLJOP,conditions[joinCondArr[jA]],pSmm);
+            QL_Operator * fOP = new QL_FilterOp(NLJOP,conditions[joinCondArr[jA]],pSmm);
             NLJOP=fOP;
         }
         leftSide=NLJOP;
@@ -451,6 +451,8 @@ RC QL_Manager::SelectPlan0(int   nSelAttrs,
         delete[] resultIndexConditions[i];
     }
     delete [] resultIndexConditions;
+
+    return 0;
     
 }
 RC QL_Manager::SelectPlan1(int   nSelAttrs,
@@ -632,7 +634,7 @@ RC QL_Manager::getJoinConditions(const char * const relations[],
                                  int   nRelations,int   nConditions,
                                  const Condition conditions[],
                                  RM_FileHandle **pRmfhs,int   nResultConditions[],
-                                 int* resultIndexConditions[],
+                                 int** resultIndexConditions,
                                  int numRightRelation[]){
 
     bool relationsUsed[nRelations];
@@ -649,7 +651,7 @@ RC QL_Manager::getJoinConditions(const char * const relations[],
         for(int j = i ; j< nRelations; j++)
         {
             int numResult;
-            getRelation(relationsUsed,nRelation,j,numResult);
+            getRelationByBoolMap(relationsUsed,nRelations,j,numResult);
             //compare to find if this relation has conditions with existing relations
             for(int m=0; m< nConditions; m++){
                 if(!conditionsUsed[m]) {
@@ -662,17 +664,17 @@ RC QL_Manager::getJoinConditions(const char * const relations[],
                     getJoinConditionsByRelation(relations,nRelations,relations[numResult],
                                                 nConditions,conditions,pRmfhs,nResult,result,nRelations,joinRelations);
                     int n=0;
-                    while(!relationsUsed(joinRelations[n])) n++; //if the join relation is not used
+                    while(!relationsUsed[joinRelations[n]]) n++; //if the join relation is not used
                     if(n<=nRelations){
                         relationsUsed[numResult] = true;
                         numRightRelation[i] = numResult;
 
                         for(int h = 0; h < nResult; h++){
                             //find all the conditions between this relation and all existing relations
-                            if(!strcmp(conditions[result[h]].lhsAttr,relations[numResult])
-                                    ||!strcmp(conditions[result[h]].rhsAttr,relations[numResult])){
-                                resultIndexConditions[i-1][nResultConditions] = result[h];
-                                nResultConditions++;
+                            if(!strcmp(conditions[result[h]].lhsAttr.relName,relations[numResult])
+                                    ||!strcmp(conditions[result[h]].rhsAttr.relName,relations[numResult])){
+                                resultIndexConditions[i-1][nResultConditions[i-1]] = result[h];
+                                nResultConditions[i-1]++;
                             }
                         }
                     }
@@ -699,8 +701,9 @@ RC QL_Manager::getRelationByBoolMap(bool *used, int nRelation, int i, int &numRe
 
 RC QL_Manager::SelectPrinter(DataAttrInfo *&attributes, int nSelAttrs, const RelAttr selAttrs[],
                              int nRelations, const char * const relations[], QL_Operator *root, int &nTotalAttrs){
+    RC rc;
     attributes = new DataAttrInfo[MAXATTRS];
-    int nTotalAttrs = 0;
+    nTotalAttrs = 0;
     //consider situdation : select * from where nSelAttrs = 1 selAttrs[0]:NULL.*
     if(nSelAttrs==1 && selAttrs[0].relName==NULL&&(!strcmp(selAttrs[0].attrName,"*"))){
         //show all the attributs of all the relations
@@ -710,7 +713,7 @@ RC QL_Manager::SelectPrinter(DataAttrInfo *&attributes, int nSelAttrs, const Rel
         for(int j=0;j<nRelations;j++){
             //get all the attributs for a relation
             RM_FileScan fsAttrcat;
-            if(rc = fsAttrcat.OpenScan(pSmm->fhAttrcat,STRING,MAXNAME,0,EQ_OP,relations[j],NO_HINT)) return rc;
+            if(rc = fsAttrcat.OpenScan(pSmm->fhAttrcat,STRING,MAXNAME,0,EQ_OP,const_cast<char *>(relations[j]),NO_HINT)) return rc;
             bool hasNext = true;
             while(hasNext){
                 RM_Record recAttrcat;
@@ -718,11 +721,11 @@ RC QL_Manager::SelectPrinter(DataAttrInfo *&attributes, int nSelAttrs, const Rel
                 char * dataAttrcat;
                 recAttrcat.GetData(dataAttrcat);
                 //change data to DataAttrInfo
-                memcpy(attributes[nTotalAttrs],dataAttrcat,MAXNAME);
-                memcpy(attributes[nTotalAttrs]+MAXNAME,"\0",1); //incompatable between DataAttrInfo and SM_AttrcatRec
-                memcpy(attributes[nTotalAttrs]+MAXNAME+1,dataAttrcat+MAXNAME,MAXNAME);
-                memcpy(attributes[nTotalAttrs]+2*MAXNAME+1,"\0",1); //incompatable between DataAttrInfo and SM_AttrcatRec
-                memcpy(attributes[nTotalAttrs]+2*MAXNAME+2,dataAttrcat+2*MAXNAME,3*sizeof(INT)+sizeof(AttrType)); //incompatable between DataAttrInfo and SM_AttrcatRec
+                memcpy(attributes+nTotalAttrs,dataAttrcat,MAXNAME);
+                memcpy((char*)(attributes+nTotalAttrs)+MAXNAME,"\0",1); //incompatable between DataAttrInfo and SM_AttrcatRec
+                memcpy((char*)(attributes+nTotalAttrs)+MAXNAME+1,dataAttrcat+MAXNAME,MAXNAME);
+                memcpy((char*)(attributes+nTotalAttrs)+2*MAXNAME+1,"\0",1); //incompatable between DataAttrInfo and SM_AttrcatRec
+                memcpy((char*)(attributes+nTotalAttrs)+2*MAXNAME+2,dataAttrcat+2*MAXNAME,3*sizeof(int)+sizeof(AttrType)); //incompatable between DataAttrInfo and SM_AttrcatRec
                 nTotalAttrs++;
             }
         }
@@ -766,13 +769,15 @@ RC QL_Manager::SelectPrinter(DataAttrInfo *&attributes, int nSelAttrs, const Rel
             }
         }
     }
-    p = new Printer(attributes,nSelAttrs);
+    Printer *p = new Printer(attributes,nSelAttrs);
     p->PrintHeader(cout);
 
     //print data
-    RM_Record recOutput;
-    while(!root->GetNext(recOutput))
-    {
+    while(1){
+        RM_Record recOutput;
+        if(QL_EOF==root->GetNext(recOutput)) break;
+        char * output;
+        recOutput.GetData(output);
         p->Print(cout,output);
     }
 
@@ -791,13 +796,12 @@ RC QL_Manager::getRelName(const RelAttr &relAttr, int nRelations, const char * c
         char * pdata;
         pSmm->GetAttributeInfo(relName,relAttr.attrName,recAttr,pdata);
 
-        memcpy(dataAttr,pdata,MAXNAME);
-        memcpy(dataAttr+MAXNAME,"\0",1); //incompatable between DataAttrInfo and SM_AttrcatRec
-        memcpy(dataAttr+MAXNAME+1,pdata+MAXNAME,MAXNAME);
-        memcpy(dataAttr+2*MAXNAME+1,"\0",1); //incompatable between DataAttrInfo and SM_AttrcatRec
-        memcpy(dataAttr+2*MAXNAME+2,pdata+2*MAXNAME,3*sizeof(INT)+sizeof(AttrType));
-
         //convert to DataAttrInfo
+        memcpy(&dataAttr,pdata,MAXNAME);
+        memcpy(&dataAttr+MAXNAME,"\0",1); //incompatable between DataAttrInfo and SM_AttrcatRec
+        memcpy(&dataAttr+MAXNAME+1,pdata+MAXNAME,MAXNAME);
+        memcpy(&dataAttr+2*MAXNAME+1,"\0",1); //incompatable between DataAttrInfo and SM_AttrcatRec
+        memcpy(&dataAttr+2*MAXNAME+2,pdata+2*MAXNAME,3*sizeof(int)+sizeof(AttrType));
 
         return 0;
     }
@@ -806,12 +810,13 @@ RC QL_Manager::getRelName(const RelAttr &relAttr, int nRelations, const char * c
         char * pdata;
         if(!pSmm->GetAttributeInfo(relations[j],relAttr.attrName,recAttr,pdata)){
             relName = relations[j];
-            memcpy(dataAttr,pdata,MAXNAME);
-            memcpy(dataAttr+MAXNAME,"\0",1); //incompatable between DataAttrInfo and SM_AttrcatRec
-            memcpy(dataAttr+MAXNAME+1,pdata+MAXNAME,MAXNAME);
-            memcpy(dataAttr+2*MAXNAME+1,"\0",1); //incompatable between DataAttrInfo and SM_AttrcatRec
-            memcpy(dataAttr+2*MAXNAME+2,pdata+2*MAXNAME,3*sizeof(INT)+sizeof(AttrType));
+            memcpy(&dataAttr,pdata,MAXNAME);
+            memcpy(&dataAttr+MAXNAME,"\0",1); //incompatable between DataAttrInfo and SM_AttrcatRec
+            memcpy(&dataAttr+MAXNAME+1,pdata+MAXNAME,MAXNAME);
+            memcpy(&dataAttr+2*MAXNAME+1,"\0",1); //incompatable between DataAttrInfo and SM_AttrcatRec
+            memcpy(&dataAttr+2*MAXNAME+2,pdata+2*MAXNAME,3*sizeof(int)+sizeof(AttrType));
             return 0;
+
         }
     }
     return SM_ATTRNOTFOUND;

@@ -55,7 +55,7 @@ RC QL_TblScanOp::SchemaLookup(const RelAttr &relattr, QL_RelAttrInfo &info){
 #endif
         return rc;
     }
-    info.attrLength = *(int*)pdata(2*MAXNAME+sizeof(INT)+sizeof(AttrType));
+    info.attrLength = *(int*)(pdata+2*MAXNAME+sizeof(int)+sizeof(AttrType));
     info.offset = *(int*)(pdata+2*MAXNAME);
     return 0;
 
@@ -69,7 +69,7 @@ void QL_TblScanOp::Print(ostream &c, int t){
     c << "table scan: " << tableName <<"\n";
 }
 
-QL_TblScanOp::QL_TblScanOp  (const QL_TblScanOp &tlScan){
-}
-QL_TblScanOp::QL_TblScanOp& operator=(const QL_TblScanOp &tlScan){
-}
+//QL_TblScanOp::QL_TblScanOp  (const QL_TblScanOp &tlScan){
+//}
+//QL_TblScanOp::QL_TblScanOp& operator=(const QL_TblScanOp &tlScan){
+//}

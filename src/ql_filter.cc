@@ -22,9 +22,8 @@ QL_FilterOp::QL_FilterOp(QL_Operator *pChd, const Condition &c,
             pChd->SchemaLookup(pCondition->rhsAttr,rhsAttrInfo);
         }
         this->tupleLength = pChd->tupleLength;
-);
-
 }
+
 QL_FilterOp::~QL_FilterOp     (){
     delete pSmm;
     delete pChild;
@@ -90,8 +89,8 @@ void QL_FilterOp::Print       (ostream &c, int indexDepth){
 QL_ProjectOp::QL_ProjectOp     (QL_Operator *pCld, int nPAttrs , const RelAttr relattrs[]){
     pChild = pCld;
     nProjAttrs = nPAttrs;
-    projAttrs = relattrs;
-    projAttrInfos = QL_RelAttrInfo[nProjAttrs]; //contains the output tuple's info
+    projAttrs = const_cast<RelAttr*>(relattrs);
+    projAttrInfos = new QL_RelAttrInfo[nProjAttrs]; //contains the output tuple's info
     QL_RelAttrInfo tInfo;
     //calculate projAttrInfos
     for(int i = 0; i< nProjAttrs; i++){
@@ -139,17 +138,19 @@ RC QL_ProjectOp::Finalize      (){
 
 RC QL_ProjectOp::SchemaLookup(const RelAttr &relAttr, QL_RelAttrInfo &info){
     for(int i = 0; i< nProjAttrs; i++){
-        if(relAttr == this->projAttrs[i]){
+        //compare relAttr ?= projAttrs[i]
+        if(!strcmp(relAttr.relName,projAttrs[i].relName)&&
+                !strcmp(relAttr.attrName,projAttrs[i].attrName)){
             info = this->projAttrInfos[i];
             return 0;
         }
     }
-    else return QL_UNCOMPATTYPE;
+    return QL_UNCOMPATTYPE;
 }
 
 RC QL_ProjectOp::EstimateCard  (double &){}
 RC QL_ProjectOp::EstimateIO    (double &){}
-void QL_ProjectOp::PrintPrint(ostream & c, int indexDepth){
+void QL_ProjectOp::Print(ostream & c, int indexDepth){
     c << "projection" << "\n";
     pChild->Print(c,indexDepth);
 }
@@ -186,7 +187,7 @@ RC QL_NLJOp::Initialize    (AttrType at, int i, char * name){
     if(rc=pLeftChild->Initialize(at,i,name)) return rc;
     if(rc=pRightChild->Initialize(at,i,name)) return rc;
     //initialize leftRec
-    if(rc=pLchild->GetNext(leftRec)) return rc;
+    if(rc=pLeftChild->GetNext(leftRec)) return rc;
     if(rc=leftRec.GetData(leftData)) return rc;
     return 0;
 }
@@ -251,24 +252,24 @@ RC QL_NLJOp::SchemaLookup  (const RelAttr &relattr, QL_RelAttrInfo &info){
     return 0;
 }
 
-//RC QL_NLJOp::EstimateCard  (double &){
-//    return 0;
-//}
-//RC QL_NLJOp::EstimateIO    (double &){
-//    return 0;
-//}
+RC QL_NLJOp::EstimateCard  (double &){
+    return 0;
+}
+RC QL_NLJOp::EstimateIO    (double &){
+    return 0;
+}
 void QL_NLJOp::Print(ostream & c, int indexDepth){
     c << "nested loop join" << "\n";
     pLeftChild->Print(c,0);
-    pRightChild->Print(c,t);
+    pRightChild->Print(c,indexDepth);
 }
 
 
 //TODO
 //shallow copy --> deep copy
-QL_NLJOp::QL_NLJOp  (const QL_NLJOp & nljOp){
-    this = &nljOp;
-}
-QL_NLJOp::QL_NLJOp& operator=(const QL_NLJOp & nljOp){
-    return &nljOp;
-}
+//QL_NLJOp::QL_NLJOp  (const QL_NLJOp & nljOp){
+//    this = &nljOp;
+//}
+//QL_NLJOp::QL_NLJOp& operator=(const QL_NLJOp & nljOp){
+//    return &nljOp;
+//}
