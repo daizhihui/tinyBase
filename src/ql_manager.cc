@@ -110,7 +110,7 @@ RC QL_Manager::Insert(const char *relName,
                       int nValues, const Value values[])
 {
     #ifndef QL_SELECT_DEBUG
-    RC rc;
+      RC rc;
     RM_Record tmpRec;
     char *relcatData;
     char _relName[MAXNAME];
@@ -119,11 +119,8 @@ RC QL_Manager::Insert(const char *relName,
     RM_FileHandle fh;
     RM_FileScan fs;
     RM_Record rec;
-    char *data;
-    FILE *fp;
-    char *buf;
+    char * record_data;
     int i = 0;
-    int tupleCount = 0;
     
     // Sanity Check: relName should not be RELCAT or ATTRCAT
     if (strcmp(relName, RELCAT) == 0 || strcmp(relName, ATTRCAT) == 0) {
@@ -132,8 +129,8 @@ RC QL_Manager::Insert(const char *relName,
     }
     
     // Get the attribute count
-    if ((rc = GetRelationInfo(relName, tmpRec, relcatData)))
-    goto err_return;
+    if ((rc = pSmm->GetRelationInfo(relName, tmpRec, relcatData)))
+        goto err_return;
     
     // Allocate indexhandle array
     ihs = new IX_IndexHandle[((SM_RelcatRec *)relcatData)->attrCount];
@@ -146,29 +143,23 @@ RC QL_Manager::Insert(const char *relName,
     attributes = new SM_AttrcatRec[((SM_RelcatRec *)relcatData)->attrCount];
     if (attributes == NULL) {
         rc = SM_NOMEM;
-        goto err_deleteihs;
+        goto err_deletedata;
     }
     
-    // Allocate buffer
-    buf = new char[MAXLINE];
-    if (buf == NULL) {
-        rc = SM_NOMEM;
-        goto err_deleteattributes;
-    }
     
     // Allocate data
-    data = new char[((SM_RelcatRec *)relcatData)->tupleLength];
-    if (data == NULL) {
+    record_data = new char[((SM_RelcatRec *)relcatData)->tupleLength];
+    if (record_data == NULL) {
         rc = SM_NOMEM;
-        goto err_deletebuf;
+        return (rc);
     }
     
     // Open a file scan for ATTRCAT
     memset(_relName, '\0', sizeof(_relName));
     strncpy(_relName, relName, MAXNAME);
-    if ((rc = fs.OpenScan(fhAttrcat, STRING, MAXNAME,
+    if ((rc = fs.OpenScan(pSmm->fhAttrcat, STRING, MAXNAME,
                           OFFSET(SM_AttrcatRec, relName), EQ_OP, _relName)))
-    goto err_deletedata;
+        goto err_deletedata;
     
     // Fill out attributes array
     while ((rc = fs.GetNextRec(rec)) != RM_EOF) {
@@ -185,117 +176,87 @@ RC QL_Manager::Insert(const char *relName,
         
         memcpy(&attributes[i], _data, sizeof(SM_AttrcatRec));
         if (++i == ((SM_RelcatRec *)relcatData)->attrCount)
-        break;
+            break;
     }
     
     // Close a file scan for ATTRCAT
     if ((rc = fs.CloseScan()))
-    goto err_deletedata;
-    
-    qsort(attributes, ((SM_RelcatRec *)relcatData)->attrCount,
-          sizeof(SM_AttrcatRec), compareSMAttrcatRec);
+        goto err_deletedata;
     
     
     // Open relation file
-    if ((rc = pRmm->OpenFile(relName, fh)))
-    goto err_fclose;
+    if ((rc = pRmm->OpenFile(relName, fh))) return(rc);
     
     // Open indexes
     for (i = 0; i < ((SM_RelcatRec *)relcatData)->attrCount; i++) {
         if (attributes[i].indexNo == -1)
-        continue;
+            continue;
         if ((rc = pIxm->OpenIndex(relName, attributes[i].indexNo, ihs[i])))
-        goto err_closeindexes;
+            goto err_closeindexes;
     }
     
-        // Make record data
-        for (i = 0; i < ((SM_RelcatRec *)relcatData)->attrCount; i++) {
-            int _i;
-            float _f;
-            char *delim = strpbrk(attr, ",\n");
-            *delim = '\0';
-            
-            switch (attributes[i].attrType) {
-                case INT:
-                if(values[i].type!=attributes[i].attrType) return (QL_INVALID_ATTR_TYPE);
-                _i = i*((int*)(values[i].data));
-                memcpy(data + attributes[i].offset, &values[i], sizeof(int));
-                break;
-                case FLOAT:
-                _f = atof(attr);
-                memcpy(data + attributes[i].offset, &_f, sizeof(float));
-                break;
-                case STRING:
-                memset(data + attributes[i].offset, '\0',
-                       attributes[i].attrLength);
-                strncpy(data + attributes[i].offset, attr,
-                        attributes[i].attrLength);
+    
+    //create record to be inserted
+    for (int s=0; s<nValues; s++) {
+        
+        switch (attributes[s].attrType) {
+                
+            case INT:{
+                if(values[s].type!=attributes[s].attrType) return (QL_UNCOMPATTYPE);
+                int data_int=*((int*)(values[s].data));
+                *((int*)(record_data+attributes[s].offset)) = data_int;
                 break;
             }
-            attr = delim + 1;
+            case FLOAT:{
+                if(values[s].type!=attributes[s].attrType) return (QL_UNCOMPATTYPE);
+                int data_float=*((float*)(values[s].data));
+                *((float*)(record_data+attributes[s].offset)) = data_float;
+                break;
+            }
+                
+            case STRING:{
+                if(values[s].type!=attributes[s].attrType) return (QL_UNCOMPATTYPE);
+                char data_string[attributes[s].attrLength];
+                memcpy(data_string,values[s].data,attributes[s].attrLength);
+                memcpy(record_data+attributes[s].offset,data_string,attributes[s].attrLength);
+                break;
+            }
+            default:
+                // Test: wrong _attrType
+                return (QL_UNCOMPATTYPE);
         }
         
-        // Insert the record
-        if ((rc = fh.InsertRec(data, rid)))
-        goto err_closeindexes;
-        
-        tupleCount++;
-        
-        // Update indexes
-        for (i = 0; i < ((SM_RelcatRec *)relcatData)->attrCount; i++) {
-            if (attributes[i].indexNo == -1)
-            continue;
-            if ((rc = ihs[i].InsertEntry(data + attributes[i].offset, rid)))
-            goto err_closeindexes;
-        }
     }
     
-    // Update index statistics
+    // open relation file to store records read from file
+    if((rc=pRmm->OpenFile(relName, fh))) return (rc);
+    RID rid;
+    
+    //Insert the record
+    if((rc=fh.InsertRec(record_data, rid))) return (rc);
+    
+    //close the relation file
+    if((rc=pRmm->CloseFile(fh))) return (rc);
+    
+    // Update indexes
     for (i = 0; i < ((SM_RelcatRec *)relcatData)->attrCount; i++) {
-        char *attrcatData;
-        
         if (attributes[i].indexNo == -1)
-        continue;
-        
-        if ((rc = GetAttributeInfo(relName, attributes[i].attrName,
-                                   rec, attrcatData)))
-        goto err_closeindexes;
-        
-        ((SM_AttrcatRec *)attrcatData)->distinctVals += ihs[i].deltaDistinctVals();
-        ((SM_AttrcatRec *)attrcatData)->ixDepth      += ihs[i].deltaDepth();
-        if ((rc = ihs[i].GetMinKey(((SM_AttrcatRec *)attrcatData)->minValue)))
-        goto err_closeindexes;
-        if ((rc = ihs[i].GetMaxKey(((SM_AttrcatRec *)attrcatData)->maxValue)))
-        goto err_closeindexes;
-        if ((rc = fhAttrcat.UpdateRec(rec)))
-        goto err_closeindexes;
+            continue;
+        if ((rc = ihs[i].InsertEntry(record_data + attributes[i].offset, rid))) return (rc);
     }
-    if ((rc = fhAttrcat.ForcePages()))
-    goto err_closeindexes;
+    
     
     // Close indexes
     for (i = 0; i < ((SM_RelcatRec *)relcatData)->attrCount; i++) {
         if (attributes[i].indexNo == -1)
-        continue;
+            continue;
         if ((rc = pIxm->CloseIndex(ihs[i])))
-        goto err_closeindexes;
+            goto err_closeindexes;
     }
     
-    // Update the cardinality
-    if (tupleCount)
-    if ((rc = SetRelationInfo(relName, tupleCount, fh.numPages())))
-    goto err_fclose;
-    
-    // Close relation file
-    if ((rc = pRmm->CloseFile(fh)))
-    goto err_fclose;
-    
-    // Close data file
-    fclose(fp);
     
     // Deallocate
-    delete [] data;
-    delete [] buf;
+    delete [] record_data;
     delete [] attributes;
     delete [] ihs;
     
@@ -304,7 +265,7 @@ RC QL_Manager::Insert(const char *relName,
     cout << "   relName = " << relName << "\n";
     cout << "   nValues = " << nValues << "\n";
     for (i = 0; i < nValues; i++)
-    cout << "   values[" << i << "]:" << values[i] << "\n";
+        cout << "   values[" << i << "]:" << values[i] << "\n";
     
     // Return ok
     return (0);
@@ -312,26 +273,19 @@ RC QL_Manager::Insert(const char *relName,
     // Return error
 err_closeindexes:
     for (i = 0; i < ((SM_RelcatRec *)relcatData)->attrCount; i++)
-    if (attributes[i].indexNo != -1)
-    pIxm->CloseIndex(ihs[i]);
-    if (tupleCount)
-    SetRelationInfo(relName, tupleCount, fh.numPages());
+        if (attributes[i].indexNo != -1)
+            pIxm->CloseIndex(ihs[i]);
     //err_closefile:
     pRmm->CloseFile(fh);
-err_fclose:
-    fclose(fp);
+    
 err_deletedata:
-    delete [] data;
-err_deletebuf:
-    delete [] buf;
+    delete [] record_data;
 err_deleteattributes:
     delete [] attributes;
 err_deleteihs:
     delete [] ihs;
 err_return:
     return (rc);
-#endif
-    return 0;
 
 }
 
