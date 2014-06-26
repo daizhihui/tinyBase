@@ -289,6 +289,7 @@ err_return:
 
 }
 
+
 //
 // Delete from the relName all tuples that satisfy conditions
 //
@@ -296,7 +297,7 @@ RC QL_Manager::Delete(const char *relName,
                       int nConditions, const Condition conditions[])
 {
     int i;
-
+    
     cout << "Delete\n";
 
     cout << "   relName = " << relName << "\n";
@@ -304,9 +305,500 @@ RC QL_Manager::Delete(const char *relName,
     for (i = 0; i < nConditions; i++)
         cout << "   conditions[" << i << "]:" << conditions[i] << "\n";
 
+       RC rc;
+       RM_Record tmpRec;
+       char *relcatData;
+
+       SM_RelcatRec* relCat;
+       IX_IndexHandle ixh1,ixh2;
+       IX_IndexScan ixis;
+       RM_FileHandle fh;
+       RM_FileScan fs;
+       RM_Record rec;
+       char *data;
+       char *data1;
+       RID rid;
+       RID rid1;
+       PageNum p;
+       SlotNum s;
+       int count;
+       bool attCorrect;
+       bool valCorrecte;
+
+ 
+
+       // Sanity Check: relName should not be RELCAT or ATTRCAT
+           if (strcmp(relName, RELCAT) == 0 || strcmp(relName, ATTRCAT) == 0) {
+                  return QL_INVALIDRELNAME;
+               }
+           // Sanity Check: relation should exist
+
+                   if(rc!=GetRelationInfo(relName,tmpRec,relcatData))
+                       return QL_RELATIONDONOTEXIST;
+
+                  relCat=(SM_RelcatRec*)relcatData;
+DataAttrInfo attributes[relCat->attrCount];
+
+if(nConditions==0)
+   {
+
+    int k=0;
+    
+    if((rc=fs.OpenScan(pSmm->fhAttrcat, INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
+    
+    //scan all the records in Attrcat
+    while(rc!=RM_EOF){
+        //get records until the end
+        rc=fs.GetNextRec(rec);
+        if(rc!=0 && rc!=RM_EOF) return (rc);
+        if(rc!=RM_EOF){
+            //copy record to relation
+            if((rc=rec.GetData(data))) return (rc);
+            
+            //compare two strings: strcmp (equal return 0)
+            if(!strcmp(((DataAttrInfo*)data)->relName,relName)) {
+                memcpy(&attributes[k],data,sizeof(DataAttrInfo));
+                k++;
+            }
+        }
+    }
+    
+    if((rc=fs.CloseScan())) return (rc);
+
+
+    
+            for (int k=0;k<(relCat->attrCount);k++) {
+        if(attributes[k].indexNo!=-1){
+
+            // suppression du fichier index
+            if(rc=pIxm->DestroyIndex(relName, attributes[k].indexNo)) return (rc);
+            
+             // Create a new Index
+    if(rc=pIxm->CreateIndex(relName, attributes[k].indexNo,attributes[k].attrType, attributes[k].attrLength)) return (rc);
+           
+            
+        }
+    } 
+      
+
+    
+    
+    
+    
+    // Opening of Relation file
+    if(rc=pRmm->OpenFile(relName,fh)) return (rc);
+    
+    //Opening of the scan
+    if((rc=fs.OpenScan(fh, INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
+    
+   rc=fs.GetNextRec(rec);
+   if (rc!=0 && rc!=RM_EOF)
+                  return (rc);
+    while(rc!=RM_EOF){
+        //get records until the end
+        rc=rec.GetRid(rid);
+        if(rc!=0)
+          goto err_return;
+
+       if( rc= fh.DeleteRec(rid)) return (rc);
+            
+            
+        }
+
+
+    if((rc=fs.CloseScan())) return (rc);
+
+    if( rc= fh.ForcePages(ALL_PAGES)) return (rc);
+
+    if(rc=pRmm->CloseFile(fh)) return (rc);
+    
+    
+    }else{ // s'il existe des conditions
+
+        for(int i=0;i<nConditions;i++){
+
+                  attCorrect=false;
+                  valCorrecte=false;
+                  for(int count=0;count<relcat->attrCount;count++)
+                  {
+                      if(strcmp(conditions[i].lhsAttr.attrName,attributes[count].attrName)==0)
+                      {
+                          attCorrect=true;
+                          if((attributes[count].indexNo!=-1)&&(numIndexAttr==-1)&&(conditions[i].op!=NE_OP))
+                          {
+                              numIndexAttr=count;
+                              numIndexCond=i;
+                          }
+                          switch (attributes[count].attrType)
+                          {
+                              case INT:
+                              {
+                                  if(conditions[i].rhsValue.type==INT)
+                                      valCorrecte=true;
+                              }
+                                  break;
+                              case FLOAT:
+                              {
+                                  if(conditions[i].rhsValue.type!=STRING)
+                                      valCorrecte=true;
+                              }
+                                  break;
+                              case STRING:
+                              {
+                                  if(conditions[i].rhsValue.type==STRING)
+                                      valCorrecte=true;
+                              }
+                                  break;
+                          }
+
+                      }
+
+                  }
+                  if(!attCorrect)
+                      return QL_INCOHERENCECONDITIONATTRIBUT;
+                  if(!valCorrecte)
+                      return QL_INCOHERENCECONDITIONVALEUR;
+              }
+
+              // Aucun attribut ne possede un index
+              if(numIndexAttr==-1)
+              {
+                  count=0;
+                 p=-1; 
+                  rc=pRmm->OpenFile(relName,fh);
+                  if(rc!=0)
+                      goto err_return;
+
+                  rc=fs.OpenScan(fh,INT,4,0,NO_OP,NULL,NO_HINT);
+                  if(rc!=0)
+                      goto err_return;
+
+                  rc=fs.GetNextRec(rec);
+
+                  if (rc!=0 && rc!=RM_EOF)
+                      return (rc);
+
+                  while(rc!= RM_EOF)
+                  {
+
+                      rc=rec.GetData(data);
+                      if(rc!=0)
+                          goto err_return;
+
+
+
+                      if(CheckConditionsForAttr(nConditions,conditions,data,relCat->attrCount,attributes,numIndexCond))
+                      {
+                          count++;
+                          if(count!=1)
+                          {
+                              rc=fh.DeleteRec(rid1);
+                              if(rc!=0)
+                                  goto err_return;
+                          }
+
+                          rc=rec.GetRid(rid);
+                          if(rc!=0)
+                              goto err_return;
+
+                          rid.GetPageNum(p);
+                          rid.GetSlotNum(s);
+
+                          rid1 = RID(p,s);
+
+
+                          for(int i=0;i<relcat->attrCount;i++)
+                          {
+                              if(attributes[i].indexNo!=-1)
+                              {
+                                 rc=pIxm->OpenIndex(relName,attributes[i].indexNo,ixh1);
+                                  if(rc!=0)
+                                      goto err_return;
+
+                                  data1=data+attributes[i].offset;
+
+
+                                  rc=ixh1.DeleteEntry(data1,rid);
+                                  if(rc!=0)
+                                      goto err_return;
+
+                                  rc=ixh1.ForcePages();
+                                  if(rc!=0)
+                                      goto err_return;
+
+                                  rc=pIxm->CloseIndex(ixh1);
+                                  if(rc!=0)
+                                      goto err_return;
+
+                              }
+                          }
+                      }
+
+                      rc=fs.GetNextRec(rec);
+                  }
+
+                  rc=fs.CloseScan();
+                  if(rc!=0)
+                      goto err_return;
+
+                  if(p!=-1)
+                  {
+                      rc=fh.DeleteRec(rid1);
+                      if(rc!=0)
+                          goto err_return;
+                  }
+
+                  rc=fh.ForcePages(ALL_PAGES);
+                  if(rc!=0)
+                      goto err_return;
+
+                  rc=pRmm->CloseFile(fh);
+                  if(rc!=0)
+                      goto err_return;
+
+              }
+
+
+              // Au moin un attribut possede un index
+              else
+              {
+                  count=0;
+                  p=-1;
+                
+                  rc=pRmm->OpenFile(relName,fh);
+                  if(rc!=0)
+                      goto err_return;
+
+                  rc=pIxm->OpenIndex(relName,attributes[numIndexAttr].indexNo,ixh1);
+                  if(rc!=0)
+                      goto err_return;
+
+                  rc=ixis.OpenScan (ixh1,conditions[numIndexCond].op, conditions[numIndexCond].rhsValue.data, NO_HINT);// ouverture d'un scan sur l'index
+                  if(rc!=0)
+                      goto err_return;
+
+                  rc=ixis.GetNextEntry(rid);
+                  if (rc!=0 && rc!=IX_EOF)
+                      return (rc);
+
+                  while(rc!=IX_EOF)
+                  {
+                      rc=fh.GetRec(rid,rec);
+                      if(rc!=0)
+                          goto err_return;
+
+                      rc=rec.GetData(data);
+                      if(rc!=0)
+                          goto err_return;
+
+                      if(CheckConditionsForAttr(nConditions,conditions,data,relcat->attrCount,attributes,numIndexCond)) // verification du reste des conditions
+                      {
+                          for(int i=0;i<relcat->attrCount;i++)
+                          {
+                              if((attributes[i].indexNo!=-1))
+                              {
+                                  rc=pIxm->OpenIndex(relName,attributes[i].indexNo,ixh2);
+                                  if(rc!=0)
+                                      goto err_return;
+
+                                  data1=data+attributes[i].offset;
+
+
+                                  rc=ixh2.DeleteEntry(data1,rid); // suppression du tuple des differents indexs
+                                  if(rc!=0)
+                                      goto err_return;
+
+                                  rc=ixh2.ForcePages();
+                                  if(rc!=0)
+                                      goto err_return;
+
+                                  rc=pIxm->CloseIndex(ixh2);
+                                  if(rc!=0)
+                                      goto err_return;
+                              }
+                          }
+                          rc=fh.DeleteRec(rid);// .. et de la relation
+                          if(rc!=0)
+                              goto err_return;
+                      }
+                      rc=ixis.GetNextEntry(rid);
+                  }
+
+                  rc=ixis.CloseScan();
+                  if(rc!=0)
+                      goto err_return;
+
+                  rc=pRmm->CloseFile(fh);
+                  if(rc!=0)
+                      goto err_return;
+
+                  rc=pIxm->CloseIndex(ixh1);
+                  if(rc!=0)
+                      goto err_return;
+
+              }
+
+
+
+}
+    
+    
+ 
     return 0;
 }
 
+
+
+
+
+
+
+
+
+
+int compareValues(AttrType attrType,int attrLength,void* value1, void* value2) {
+
+    //cout << "debug : compareValues " << endl;
+
+
+    if(attrType == INT) {
+        int valueINT1;
+        int valueINT2;
+
+        memcpy(&valueINT1,(int*)value1,sizeof(int));
+        memcpy(&valueINT2,(int*)value2,sizeof(int));
+
+        if(valueINT1>valueINT2)
+            return 1;
+
+        if(valueINT1<valueINT2)
+            return -1;
+
+        if(valueINT1==valueINT2)
+            return 0;
+    }
+
+    else if (attrType == FLOAT) {
+
+        float valueFLOAT1;
+        float valueFLOAT2;
+
+        memcpy(&valueFLOAT1,(float*)value1,sizeof(float));
+        memcpy(&valueFLOAT2,(float*)value2,sizeof(float));
+
+        if(valueFLOAT1>valueFLOAT2)
+            return 1;
+
+        if(valueFLOAT1<valueFLOAT2)
+            return -1;
+
+        if(valueFLOAT1==valueFLOAT2)
+            return 0;
+
+    }
+
+    else if (attrType == STRING) {
+
+        char valueCHAR1[MAXSTRINGLEN];
+        char valueCHAR2[MAXSTRINGLEN];
+
+        strncpy(valueCHAR1,(char*)value1,attrLength);
+        strncpy(valueCHAR2,(char*)value2,attrLength);
+
+        return strncmp(valueCHAR1,valueCHAR2,attrLength);
+    }
+
+}
+
+bool QL_Manager::CheckConditionsForAttr(int nConditions,const Condition conditions[],char * Data, int nAttr, DataAttrInfo attrInfo[],int numConditionCheckedWithIndex)
+{
+        int i,j;
+
+        char *pData;
+        int resultatComparaison;
+        int valeurEntiere=0;
+        float valeurFloat=0;
+
+
+        for(i=0;i<nConditions;i++)
+        {
+                if(i!=numConditionCheckedWithIndex)
+                {
+                        for(j=0;j<nAttr;j++)
+                        {
+                                //vérification qu'il s'agit du meme attribut
+                                if(strcmp(conditions[i].lhsAttr.attrName,attrInfo[j].attrName)==0)
+                                {
+                                        //positionnement
+                                        pData=Data+attrInfo[j].offset;
+
+                                        //conversion
+                                        if((conditions[i].rhsValue.type==INT)&&(attrInfo[j].attrType==FLOAT))
+                                        {
+                                                memcpy(&valeurEntiere,(int*)conditions[i].rhsValue.data,sizeof(int));
+
+                                                valeurFloat=valeurEntiere;
+
+                                                //comparaison
+                                                resultatComparaison=compareValues(attrInfo[j].attrType,attrInfo[j].attrLength,(char*)&valeurFloat,pData);
+                                        }
+                                        else
+                                        {
+                                                //comparaison
+                                                resultatComparaison=compareValues(attrInfo[j].attrType,attrInfo[j].attrLength,conditions[i].rhsValue.data,pData);
+                                        }
+
+                                        // verification de la condition selon l'operateur de comparaison
+                                        switch (conditions[i].op)
+                                        {
+                                                case EQ_OP:
+                                                {
+                                                        if(resultatComparaison!=0)
+                                                                return false;
+                                                }
+                                                break;
+                                                case NE_OP:
+                                                {
+                                                        if(resultatComparaison==0)
+                                                                return false;
+                                                }
+                                                break;
+                                                case GT_OP:
+                                                {
+                                                        if(resultatComparaison!=-1)
+                                                                return false;
+                                                }
+                                                break;
+                                                case GE_OP:
+                                                {
+                                                        if(resultatComparaison==1)
+                                                                return false;
+                                                }
+                                                break;
+                                                case LT_OP:
+                                                {
+                                                        if(resultatComparaison!=1)
+                                                                return false;
+                                                }
+                                                break;
+                                                case LE_OP:
+                                                {
+                                                        if(resultatComparaison==-1)
+                                                                return false;
+                                                }
+                                                break;
+                                                case NO_OP:
+                                                {
+
+                                                }
+                                                break;
+                                        }
+                                }
+                        }
+                }
+        }
+        return true;
+}
 
 //
 // Update from the relName all tuples that satisfy conditions
