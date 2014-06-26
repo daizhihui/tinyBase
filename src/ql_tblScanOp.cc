@@ -21,6 +21,11 @@ QL_TblScanOp::QL_TblScanOp(const char *tblName, RM_FileHandle &fh, const Conditi
     char * pdata;
     pSmm->GetRelationInfo(tableName,relcatRec,pdata);
     this->tupleLength = *(int*)(pdata+MAXNAME);
+
+#ifdef QL_DEBUG_OPERATOR
+    cout << "tupleLength" << this->tupleLength<<endl;
+#endif
+
 #ifdef QL_DEBUG_OPERATOR
     cout << "END construct tblScan" << endl;
 #endif
@@ -34,11 +39,17 @@ QL_TblScanOp::~QL_TblScanOp(){
 }
 
 RC QL_TblScanOp::Initialize(AttrType aT, int i, char * name){
+    RC rc;
 #ifdef QL_DEBUG_OPERATOR
     cout << "begin Initialize TblScan" << endl;
 #endif
-    return rmfs.OpenScan((*pRmfh),fsAttrInfo.attrType,fsAttrInfo.attrLength,
-                         fsAttrInfo.offset,op,valueData,pinHint);
+    rc = rmfs.OpenScan((*pRmfh),fsAttrInfo.attrType,fsAttrInfo.attrLength,
+                         fsAttrInfo.offset,op,pCondition->rhsValue.data,pinHint);
+#ifdef QL_DEBUG_OPERATOR
+    cout << "fsAttrInfo.attrType" << fsAttrInfo.attrType << "=" << (char*)pCondition->rhsValue.data <<endl;
+#endif
+
+    return rc;
 
 }
 
@@ -57,9 +68,7 @@ RC QL_TblScanOp::GetNext(RM_Record & rec){
 #ifdef QL_DEBUG_OPERATOR
             char * data;
             rec.GetData(data);
-            cout << "in TAble scan " << endl;
-
-//            cout << "in TAble scan " << *(int*)data << endl;
+            cout << "in TAble scan " << *(int*)data << endl;
 #endif
 
             return rc;

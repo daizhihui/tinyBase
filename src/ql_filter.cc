@@ -135,6 +135,8 @@ RC QL_ProjectOp::Initialize(AttrType type, int index, char * tname){
 }
 
 RC QL_ProjectOp::GetNext(RM_Record &rec){
+    char * pData;
+    rec.GetData(pData);
 #ifdef QL_DEBUG_OPERATOR
     cout << "begin getNExt of QL_ProjectOp" << endl;
 #endif
@@ -143,13 +145,26 @@ RC QL_ProjectOp::GetNext(RM_Record &rec){
     if(rc=pChild->GetNext(lastRec)) return rc;
     char * pDataRec;
     lastRec.GetData(pDataRec);
+
     char * pData = new char[this->tupleLength];
     for(int i = 0; i< nProjAttrs; i++){
         QL_RelAttrInfo tInfo;
         pChild->SchemaLookup(projAttrs[i],tInfo);
         memcpy(pData+projAttrInfos[i].offset,pDataRec+tInfo.offset,tInfo.attrLength);
     }
-    memcpy(&rec+sizeof(RID),pData,sizeof(INT)); //to check
+#ifdef QL_DEBUG_OPERATOR
+    cout << "tupleLength" << this->tupleLength<<endl;
+    cout << "projAttr OFFSET" << projAttrInfos[0].offset <<endl;
+    cout << "data content" << pData <<endl;
+#endif
+    //memcpy(&rec,pData,sizeof(int));
+#ifdef QL_DEBUG_OPERATOR
+    char * testData;
+    rec.GetData(testData);
+    cout << "data content" << testData <<endl;
+    assert(pData==testData);
+#endif
+
     return 0;
 }
 RC QL_ProjectOp::Finalize      (){
