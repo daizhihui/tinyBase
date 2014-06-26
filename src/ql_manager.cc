@@ -679,16 +679,7 @@ RC QL_Manager::getRelationByBoolMap(bool *used, int nRelation, int i, int &numRe
 RC QL_Manager::SelectPrinter(DataAttrInfo *&attributes, int nSelAttrs, const RelAttr selAttrs[],
                              int nRelations, const char * const relations[], QL_Operator *root, int nTotalAttrs){
 
-
-
-
-
-
-
-
-    //define a convertion of conditions
-    //ql_conditionConvertion pcc(this->_smm);
-
+    //attributes = new DataAttrInfo[MAXATTRS];
     int nTotalAttrs = 0;
     //consider situdation : select * from where nSelAttrs = 1 selAttrs[0]:NULL.*
     if(nSelAttrs==1 && selAttrs[0].relName==NULL&&(!strcmp(selAttrs[0].attrName,"*"))){
@@ -697,37 +688,33 @@ RC QL_Manager::SelectPrinter(DataAttrInfo *&attributes, int nSelAttrs, const Rel
         DataAttrInfo attributes[MAXATTRS];
         //loop for all relations
         for(int j=0;j<nRelations;j++){
-            DataAttrInfo l_attributes[MAXATTRS];
-            int l_nR=0;
             //get all the attributs for a relation
             RM_FileScan fsAttrcat;
             if(rc = fsAttrcat.OpenScan(pSmm->fhAttrcat,STRING,MAXNAME,0,EQ_OP,relations[j],NO_HINT)) return rc;
-            RM_Record recAttrcat;
-            char * dataAttrcat;
-            fsAttrcat.GetNextRec(recAttrcat);
-
-
-
-
-            pcc.getDataAttributsByRelation(relations[j],l_attributes,l_nR);
-            memcpy(attributes+nTotalAttrs,l_attributes,l_nR*sizeof(DataAttrInfo));
-            nTotalAttrs+=l_nR;
+            bool hasNext = true;
+            while(hasNext){
+                RM_Record recAttrcat;
+                if(RM_EOF == fsAttrcat.GetNextRec(recAttrcat)) {hasNext = false; break;}
+                char * dataAttrcat;
+                recAttrcat.GetData(dataAttrcat);
+                //change data to DataAttrInfo
+                memcpy(attributes[nTotalAttrs],dataAttrcat,MAXNAME);
+                memcpy(attributes[nTotalAttrs]+MAXNAME,"\0",1); //incompatable between DataAttrInfo and SM_AttrcatRec
+                memcpy(attributes[nTotalAttrs]+MAXNAME+1,dataAttrcat+MAXNAME,MAXNAME);
+                memcpy(attributes[nTotalAttrs]+2*MAXNAME+1,"\0",1); //incompatable between DataAttrInfo and SM_AttrcatRec
+                memcpy(attributes[nTotalAttrs]+2*MAXNAME+2,dataAttrcat+2*MAXNAME,3*sizeof(INT)+sizeof(AttrType)); //incompatable between DataAttrInfo and SM_AttrcatRec
+                nTotalAttrs++;
+            }
         }
 
         for (int i=0;i<nTotalAttrs;i++){
-            //get attribut length
-            DataAttrInfo dataAttr;
-            dataAttr = attributes[i];
             strcpy(attributes[i].relName,"table_OUT");
-            strcpy(attributes[i].attrName,dataAttr.attrName);
             //calculate offset
             int offset=0;
             for (int j=0;j<i;j++){
                 offset+= attributes[j].attrLength;
             }
             attributes[i].offset = offset;
-            attributes[i].attrType= dataAttr.attrType;
-            attributes[i].attrLength= dataAttr.attrLength;
             attributes[i].indexNo=-1;
         }
 
@@ -771,6 +758,26 @@ RC QL_Manager::SelectPrinter(DataAttrInfo *&attributes, int nSelAttrs, const Rel
        p->Print(cout,output);
     }
     p->PrintFooter(cout);
+}
+
+
+//to get relation name for relAttr even relAttr is not "rel.attr"
+const char* QL_Manager::getRelName(const RelAttr &relAttr, int nRelations, const char * const relations[]){
+    if(relAttr.relName != NULL) return relAttr.relName;
+    for(int j=0;j<nRelations;j++){
+        DataAttrInfo l_attribut;
+        char emptyName[MAXNAME+1]; //initial
+        memset(emptyName, 0, MAXNAME + 1);
+        char r[MAXNAME+1], a[MAXNAME+1]; //r is relation name; a is attrbut name
+        strcpy(r,relations[j]);
+        strcpy(a,relAttr.attrName);
+        RelAttr l_RA = {r,a};
+        getDataAttributByRelAttr(l_RA,l_attribut);
+        if(memcmp(l_attribut.relName,emptyName,MAXNAME+1)){
+            return l_attribut.relName;
+        }
+
+    }
 }
 
 //
