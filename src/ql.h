@@ -173,7 +173,10 @@ void QL_PrintError(RC rc);
 #define QL_NUMVALUE        (START_QL_WARN + 4) // uncompatible type
 #define QL_EOF             (START_QL_WARN + 5) // end of file
 #define QL_LASTWARN        QL_EOF
-
+#define QL_INVALIDRELNAME  (START_QL_WARN + 6)
+#define QL_RELATIONDONOTEXIST  (START_QL_WARN + 7)
+#define QL_BADCONDITIONVALUE   (START_QL_WARN + 8)
+#define QL_BADCONDITIONATTRIBUT   (START_QL_WARN + 9)
 #define QL_NOMEM           (START_QL_ERR - 0)  // no memory
 #define QL_LASTERROR       QL_NOMEM
 #endif
