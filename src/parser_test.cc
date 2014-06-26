@@ -22,7 +22,7 @@ PF_Manager pfm;
 RM_Manager rmm(pfm);
 IX_Manager ixm(pfm);
 SM_Manager smm(ixm, rmm);
-QL_Manager qlm(smm, ixm, rmm);
+QL_Manager qlm(smm, ixm, rmm, pfm);
 
 int main(void)
 {
