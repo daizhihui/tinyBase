@@ -37,7 +37,7 @@ public:
     virtual RC GetNext     (RM_Record &) { return (0); }
     virtual RC Finalize    ()            { return (0); }
     virtual RC SchemaLookup(const RelAttr &, QL_RelAttrInfo &) 
-    {}
+    {return 0;}
     virtual RC EstimateCard(double &)    { return (0); }
     virtual RC EstimateIO  (double &)    { return (0); }
     virtual void Print     (ostream &, int = 0) {}

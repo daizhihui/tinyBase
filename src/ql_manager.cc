@@ -23,18 +23,19 @@
 
 using namespace std;
 
-//
+//prototype
 // QL_Manager::QL_Manager(SM_Manager &smm, IX_Manager &ixm, RM_Manager &rmm)
 //
 // Constructor for the QL Manager
 //
-QL_Manager::QL_Manager(SM_Manager &smm, IX_Manager &ixm, RM_Manager &rmm)
+QL_Manager::QL_Manager(SM_Manager &smm, IX_Manager &ixm, RM_Manager &rmm,PF_Manager &pfm)
 {
     // Can't stand unused variable warnings!
     //assert (&smm && &ixm && &rmm);
-    _smm = &smm;
-    _ixm = &ixm;
-    _rmm = &rmm;
+    pSmm = &smm;
+    pIxm = &ixm;
+    pRmm = &rmm;
+    pPfm = &pfm;
 
 }
 
@@ -384,12 +385,13 @@ RC QL_Manager::SelectPlan0(int   nSelAttrs,
     //get all filters to apply on first relation
     int * conditionArr;
     int numberOfResultConditions;
-    getSelectConditionsByRelation(relations[0],nConditions,conditions,pRmfhs,&numberOfResultConditions,conditionArr);
-    QL_Operator* leftSide = new QL_TblScanOp(relations[0],pRmfhs[0],conditionArr[0],pSmm);//always is left side
+    getSelectConditionsByRelation(relations[0],nConditions,conditions,pRmfhs,
+            numberOfResultConditions,conditionArr);
+    QL_Operator* leftSide = new QL_TblScanOp(relations[0],pRmfhs[0][0],conditions[conditionArr[0]],pSmm);//always is left side
     //do filters on first relation
     for(int sC = 1;sC<numberOfResultConditions;sC++)
     {
-        QL_FilterOp * fOP = new QL_FilterOp(leftSide,conditionArr[sC],pSmm);
+        QL_FilterOp * fOp = new QL_FilterOp(leftSide,conditions[conditionArr[sC]],pSmm);
         leftSide=fOp;
     }
     //left side is now filtered
@@ -400,27 +402,32 @@ RC QL_Manager::SelectPlan0(int   nSelAttrs,
         resultIndexConditions[i]=new int[nConditions];
     }
     int* rightRelationIndexes = new int[nRelations-1];
-    getJoinConditions(relations,nRelations,nConditions,conditions,pRmfhs,nResultCond,resultIndexConditions,rightRelationIndexes);
+    getJoinConditions(relations,nRelations,nConditions,conditions,pRmfhs,nResultCond,
+                      resultIndexConditions,rightRelationIndexes);
     int i =0;
     //do joins as left sided tree
     while(i<nRelations)
     {
         //get join conditions, and right relation
-        int * joinCondArr = resultindexCondtions[i];
+        int * joinCondArr = resultIndexConditions[i];
         int numberOfJoinResultConditions=nResultCond[i];
         int rightRelationIndex=rightRelationIndexes[i];
         
         //get condition filters on right table
         int * conditionArrR2;
         int numberOfResultConditionsR2;
-        getSelectConditionsByRelation(relations[rightRelationIndex],nConditions,conditions,pRmfhs,&numberOfResultConditionsR2,conditionArrR2);
+        getSelectConditionsByRelation(relations[rightRelationIndex],nConditions,
+                                      conditions,pRmfhs,numberOfResultConditionsR2,
+                                      conditionArrR2);
         
-        QL_TblScanOp* R2 = new QL_TblScanOp(relations[rightRelationIndex],pRmfhs[rightRelationIndex],conditionArrR2[0],pSmm);//with 1 condition
+        QL_TblScanOp* R2 = new QL_TblScanOp(relations[rightRelationIndex],
+                                            *(pRmfhs[rightRelationIndex]),
+                                            conditions[conditionArrR2[0]],pSmm);//with 1 condition
         
         //do remaining filters on right table R2
         for(int sC = 1;sC<numberOfResultConditionsR2;sC++)
         {
-            QL_FilterOp * fOP = new QL_FilterOp(R2,conditionArrR2[sC],pSmm);
+            QL_FilterOp * fOp = new QL_FilterOp(R2,conditions[conditionArrR2[sC]],pSmm);
             R2=fOp;
         }
         
@@ -429,8 +436,8 @@ RC QL_Manager::SelectPlan0(int   nSelAttrs,
         //do filter for all remaining join attributes
         for(int jA = 1; jA<numberOfJoinResultConditions;jA++)
         {
-            QL_FilterOp * fOP = new QL_FilterOp(NJLOP,joinCondArr[jA],pSmm);
-            NJLOP=fOP;
+            QL_FilterOp * fOP = new QL_FilterOp(NLJOP,conditions[joinCondArr[jA]],pSmm);
+            NLJOP=fOP;
         }
         leftSide=NLJOP;
         //join done
@@ -625,7 +632,8 @@ RC QL_Manager::getJoinConditions(const char * const relations[],
                                  int   nRelations,int   nConditions,
                                  const Condition conditions[],
                                  RM_FileHandle **pRmfhs,int   nResultConditions[],
-                                 int* resultIndexConditions[],int numRightRelation[]){
+                                 int* resultIndexConditions[],
+                                 int numRightRelation[]){
 
     bool relationsUsed[nRelations];
     bool conditionsUsed[nConditions];

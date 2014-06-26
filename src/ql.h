@@ -114,7 +114,7 @@ private:
     RC SelectPrinter(DataAttrInfo *&attributes,
                      int nSelAttrs, const RelAttr selAttrs[],
                      int nRelations, const char * const relations[],
-                     QL_Operator *root, int nTotalAttrs);
+                     QL_Operator *root, int &nTotalAttrs);
 
     RC DeleteUpdatePlan(const char *relName,
                         const char *pdAttrName,
@@ -131,10 +131,13 @@ private:
                                      int* resultIndexConditions);
 
     RC getJoinConditions(const char * const relations[],
-                         int   nRelations, int   nConditions,
-                                     const Condition conditions[], int joinNumber, RM_FileHandle **pRmfhs,
-                                    int   &nResultConditions,
-                                     int* resultIndexConditions);
+                         int   nRelations,
+                         int   nConditions,
+                         const Condition conditions[],
+                         RM_FileHandle **pRmfhs,
+                         int nResultConditions[],
+                         int* resultIndexConditions[],
+                         int numRightRelation[]);
 
     RC getJoinConditionsByRelation(const char * const relations[],
                                                int   nRelations,
@@ -146,7 +149,7 @@ private:
     int attributeHasIndex(RelAttr attribute);//returns indexNo
 
     //to get relation name for relAttr even relAttr is not "rel.attr"
-    RC getRelName(const RelAttr &relAttr, int nRelations, const char * const relations[],const char* relName);
+    RC getRelName(const RelAttr &relAttr, int nRelations, const char * const relations[], const char* relName, DataAttrInfo &dataAttr);
 
 
     SM_Manager *pSmm;
