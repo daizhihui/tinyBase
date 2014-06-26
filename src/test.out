@@ -1,31 +1,13 @@
+SM layer test sequence
 running test # 1 ****************
 
 REDBASE >> create table soaps (soapid = i, sname = c28, network = c4, rating = f);
-CreateTable
-   relName     =soaps
-   attrCount   =4
-   attributes[0].attrName=soapid   attrType=INT   attrLength=4
-   attributes[1].attrName=sname   attrType=STRING   attrLength=28
-   attributes[2].attrName=network   attrType=STRING   attrLength=4
-   attributes[3].attrName=rating   attrType=FLOAT   attrLength=4
 
 REDBASE >> create table stars (starid = i, stname = c20, plays = c12, soapid = i);
-CreateTable
-   relName     =stars
-   attrCount   =4
-   attributes[0].attrName=starid   attrType=INT   attrLength=4
-   attributes[1].attrName=stname   attrType=STRING   attrLength=20
-   attributes[2].attrName=plays   attrType=STRING   attrLength=12
-   attributes[3].attrName=soapid   attrType=INT   attrLength=4
 
 REDBASE >> load soaps("../soaps.data");
-Load
-   relName =soaps
-   fileName=../soaps.data
 
 REDBASE >> print soaps;
-Print
-   relName=soaps
 soapid      sname                       network rating      
 ------------------------------------------------------------
 0           Days of Our Lives           NBC     7.020000    
@@ -41,23 +23,12 @@ soapid      sname                       network rating
 9 tuple(s).
 
 REDBASE >> create index stars(starid);
-CreateIndex
-   relName =stars
-   attrName=starid
 
 REDBASE >> create index stars(stname);
-CreateIndex
-   relName =stars
-   attrName=stname
 
 REDBASE >> load stars("../stars.data");
-Load
-   relName =stars
-   fileName=../stars.data
 
 REDBASE >> print stars;
-Print
-   relName=stars
 starid      stname              plays       soapid      
 --------------------------------------------------------
 0           Hayes Kathryn       Kim         6           
@@ -98,7 +69,7 @@ relcat
 soaps
 stars
 stars.0
-stars.1
+stars.4
 
 REDBASE >> Bye.
 running test # 2 ****************
@@ -125,39 +96,26 @@ REDBASE >> create table test2 (a01 = c250, a02 = c250, a03 = c250, a04 = c250, a
 RM warning: invalid record size
 
 REDBASE >> create table test3 (a01 = i, a02 = i, a03 = i, a04 = i, a05 = i, a01 = f);
-SM warning: invalid attribute name
+SM warning: duplicated attribute names
 
 REDBASE >> create table test8 (name = c16);
-CreateTable
-   relName     =test8
-   attrCount   =1
-   attributes[0].attrName=name   attrType=STRING   attrLength=16
 
 REDBASE >> create table test8 (name = c16);
-SM warning: invalid relation name
+SM warning: relation already exists
 
 REDBASE >> drop table test8;
-DropTable
-   relName=test8
 
 REDBASE >> drop table test8;
-SM warning: invalid relation name
+SM warning: relation not found
 
 REDBASE >> help test8;
-Help
-   relName=test8
-RelName                 AttrName                offset      AttrType AttrLength  IndexNo     
----------------------------------------------------------------------------------------------
-
-0 tuple(s).
+SM warning: relation not found
 
 REDBASE >> print test8;
-Print
-   relName=test8
-SM warning: invalid relation name
+SM warning: relation not found
 
-REDBASE >> load test8("/usr/class/cs346/redbase/data/soaps.data");
-SM warning: invalid relation name
+REDBASE >> load test8("../soaps.data");
+SM warning: relation not found
 
 REDBASE >> drop table attrcat;
 SM warning: invalid relation name
@@ -165,52 +123,54 @@ SM warning: invalid relation name
 REDBASE >> drop table relcat;
 SM warning: invalid relation name
 
-REDBASE >> load relcat("/usr/class/cs346/redbase/data/soaps.data");
+REDBASE >> load relcat("../soaps.data");
 SM warning: invalid relation name
 
-REDBASE >> load attrcat("/usr/class/cs346/redbase/data/soaps.data");
+REDBASE >> load attrcat("../soaps.data");
 SM warning: invalid relation name
 
 REDBASE >> create table stars (starid = i, stname = c20, plays = c12, soapid = i);
-CreateTable
-   relName     =stars
-   attrCount   =4
-   attributes[0].attrName=starid   attrType=INT   attrLength=4
-   attributes[1].attrName=stname   attrType=STRING   attrLength=20
-   attributes[2].attrName=plays   attrType=STRING   attrLength=12
-   attributes[3].attrName=soapid   attrType=INT   attrLength=4
 
-REDBASE >> load stars("/usr/class/cs346/redbase/data/stars.data");
-Load
-   relName =stars
-   fileName=/usr/class/cs346/redbase/data/stars.data
+REDBASE >> load stars("../stars.data");
 
 REDBASE >> create index star(starid);
-SM warning: invalid relation name
+SM warning: relation/attribute not found
 
 REDBASE >> create index stars(id);
-SM warning: invalid attribute name
+SM warning: relation/attribute not found
 
 REDBASE >> drop index star(starid);
-SM warning: attribute index not exists
+SM warning: relation/attribute not found
 
 REDBASE >> drop index stars(id);
-SM warning: attribute index not exists
+SM warning: relation/attribute not found
 
 REDBASE >> create index stars(starid);
-CreateIndex
-   relName =stars
-   attrName=starid
 
 REDBASE >> create index stars(starid);
 SM warning: index already exists
 
 REDBASE >> drop index stars(starid);
-DropIndex
-   relName =stars
-   attrName=starid
 
 REDBASE >> drop index stars(starid);
-SM warning: attribute index not exists
+SM warning: index not found
+
+REDBASE >> Bye.
+running test # tester ****************
+
+REDBASE >> illegal character [#]
+ /bin/csh -f
+
+REDBASE >> illegal character [#]
+syntax error
+
+REDBASE >> Bye.
+running test # tester_old ****************
+
+REDBASE >> illegal character [#]
+ /bin/csh -f
+
+REDBASE >> illegal character [#]
+syntax error
 
 REDBASE >> Bye.

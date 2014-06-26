@@ -18,8 +18,9 @@
 #include "sm.h"
 #include "ix.h"
 #include "rm.h"
+#include "sm_internal.h"
 //#include "ql_queryTree.h"
-#include "ql_conditionconvertion.h"
+//#include "ql_conditionconvertion.h"
 
 using namespace std;
 
@@ -73,80 +74,7 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
     //define a printer
     Printer *p;
 
-    //define a convertion of conditions
-    ql_conditionConvertion pcc(this->_smm);
 
-    int nRelAttrs = 0;
-    //consider situdation : select * from where nSelAttrs = 1 selAttrs[0]:NULL.*
-    if(nSelAttrs==1 && selAttrs[0].relName==NULL&&(!strcmp(selAttrs[0].attrName,"*"))){
-        //show all the attributs of all the relations
-        nRelAttrs = 0;
-        DataAttrInfo attributes[MAXATTRS];
-        for(int j=0;j<nRelations;j++){
-            DataAttrInfo l_attributes[MAXATTRS];
-            int l_nR=0;
-            pcc.getDataAttributsByRelation(relations[j],l_attributes,l_nR);
-            memcpy(attributes+nRelAttrs,l_attributes,l_nR*sizeof(DataAttrInfo));
-            nRelAttrs+=l_nR;
-        }
-
-        for (int i=0;i<nRelAttrs;i++){
-            //get attribut length
-            DataAttrInfo dataAttr;
-            dataAttr = attributes[i];
-            strcpy(attributes[i].relName,"table_OUT");
-            strcpy(attributes[i].attrName,dataAttr.attrName);
-            //calculate offset
-            int offset=0;
-            for (int j=0;j<i;j++){
-                offset+= attributes[j].attrLength;
-            }
-            attributes[i].offset = offset;
-            attributes[i].attrType= dataAttr.attrType;
-            attributes[i].attrLength= dataAttr.attrLength;
-            attributes[i].indexNo=-1;
-        }
-
-        p = new Printer(attributes,nRelAttrs);
-    }
-    else{
-        DataAttrInfo attributes[nSelAttrs];
-        //DataAttrInfo records
-        for (int i=0;i<nSelAttrs;i++){
-            //get complete relation-attribut
-            const char * relName = pcc.getRelName(selAttrs[i],nRelations,relations);
-            char rN[MAXNAME];
-            strcpy(rN,relName);
-            RelAttr realRA = {rN,selAttrs[i].attrName};
-            DataAttrInfo dataAttr;
-            pcc.getDataAttributByRelAttr(realRA,dataAttr);
-            strcpy(attributes[i].relName,"table_OUT");
-            strcpy(attributes[i].attrName,selAttrs[i].attrName);
-            //calculate offset
-            int offset=0;
-            for (int j=0;j<i;j++){
-                offset+= attributes[j].attrLength;
-            }
-            attributes[i].offset = offset;
-            attributes[i].attrType= dataAttr.attrType;
-            attributes[i].attrLength= dataAttr.attrLength;
-            attributes[i].indexNo=-1;
-        }
-        p = new Printer(attributes,nSelAttrs);
-    }
-
-    p->PrintHeader(cout);
-    QueryTree *queryTree = new QueryTree(NULL,&pcc);
-    queryTree->createQueryTree(nSelAttrs, selAttrs,nRelations, relations,nConditions, conditions);
-
-    char* output;
-    cout << "tree created" << endl;
-    if(queryTree->root!=NULL) cout << "tree not empty" << endl;
-    while(queryTree->root->nodeValue.iterator->get_next(output)!=endOfIteration){
-        //TODO restructure the output to char* a[]
-       p->Print(cout,output);
-    }
-    p->PrintFooter(cout);
 
     return 0;
 }
@@ -748,8 +676,101 @@ RC QL_Manager::getRelationByBoolMap(bool *used, int nRelation, int i, int &numRe
     return 0;
 }
 
-RC QL_Manager::printResultSelection(){
+RC QL_Manager::SelectPrinter(DataAttrInfo *&attributes, int nSelAttrs, const RelAttr selAttrs[],
+                             int nRelations, const char * const relations[], QL_Operator *root, int nTotalAttrs){
 
+
+
+
+
+
+
+
+    //define a convertion of conditions
+    //ql_conditionConvertion pcc(this->_smm);
+
+    int nTotalAttrs = 0;
+    //consider situdation : select * from where nSelAttrs = 1 selAttrs[0]:NULL.*
+    if(nSelAttrs==1 && selAttrs[0].relName==NULL&&(!strcmp(selAttrs[0].attrName,"*"))){
+        //show all the attributs of all the relations
+        nTotalAttrs = 0;
+        DataAttrInfo attributes[MAXATTRS];
+        //loop for all relations
+        for(int j=0;j<nRelations;j++){
+            DataAttrInfo l_attributes[MAXATTRS];
+            int l_nR=0;
+            //get all the attributs for a relation
+            RM_FileScan fsAttrcat;
+            if(rc = fsAttrcat.OpenScan(pSmm->fhAttrcat,STRING,MAXNAME,0,EQ_OP,relations[j],NO_HINT)) return rc;
+            RM_Record recAttrcat;
+            char * dataAttrcat;
+            fsAttrcat.GetNextRec(recAttrcat);
+
+
+
+
+            pcc.getDataAttributsByRelation(relations[j],l_attributes,l_nR);
+            memcpy(attributes+nTotalAttrs,l_attributes,l_nR*sizeof(DataAttrInfo));
+            nTotalAttrs+=l_nR;
+        }
+
+        for (int i=0;i<nTotalAttrs;i++){
+            //get attribut length
+            DataAttrInfo dataAttr;
+            dataAttr = attributes[i];
+            strcpy(attributes[i].relName,"table_OUT");
+            strcpy(attributes[i].attrName,dataAttr.attrName);
+            //calculate offset
+            int offset=0;
+            for (int j=0;j<i;j++){
+                offset+= attributes[j].attrLength;
+            }
+            attributes[i].offset = offset;
+            attributes[i].attrType= dataAttr.attrType;
+            attributes[i].attrLength= dataAttr.attrLength;
+            attributes[i].indexNo=-1;
+        }
+
+        p = new Printer(attributes,nTotalAttrs);
+    }
+    else{
+        DataAttrInfo attributes[nSelAttrs];
+        //DataAttrInfo records
+        for (int i=0;i<nSelAttrs;i++){
+            //get complete relation-attribut
+            const char * relName = pcc.getRelName(selAttrs[i],nRelations,relations);
+            char rN[MAXNAME];
+            strcpy(rN,relName);
+            RelAttr realRA = {rN,selAttrs[i].attrName};
+            DataAttrInfo dataAttr;
+            pcc.getDataAttributByRelAttr(realRA,dataAttr);
+            strcpy(attributes[i].relName,"table_OUT");
+            strcpy(attributes[i].attrName,selAttrs[i].attrName);
+            //calculate offset
+            int offset=0;
+            for (int j=0;j<i;j++){
+                offset+= attributes[j].attrLength;
+            }
+            attributes[i].offset = offset;
+            attributes[i].attrType= dataAttr.attrType;
+            attributes[i].attrLength= dataAttr.attrLength;
+            attributes[i].indexNo=-1;
+        }
+        p = new Printer(attributes,nSelAttrs);
+    }
+
+    p->PrintHeader(cout);
+    QueryTree *queryTree = new QueryTree(NULL,&pcc);
+    queryTree->createQueryTree(nSelAttrs, selAttrs,nRelations, relations,nConditions, conditions);
+
+    char* output;
+    cout << "tree created" << endl;
+    if(queryTree->root!=NULL) cout << "tree not empty" << endl;
+    while(queryTree->root->nodeValue.iterator->get_next(output)!=endOfIteration){
+        //TODO restructure the output to char* a[]
+       p->Print(cout,output);
+    }
+    p->PrintFooter(cout);
 }
 
 //

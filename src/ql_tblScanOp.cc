@@ -6,7 +6,7 @@ QL_TblScanOp::QL_TblScanOp(const char *tblName, RM_FileHandle &fh, const Conditi
     pCondition = &c;
     pSmm = sm;
     op = pCondition->op;
-    rmfs = new RM_FileScan();
+    //rmfs = new RM_FileScan();
     SchemaLookup(pCondition->lhsAttr,fsAttrInfo);
     //valueData = c.rhsValue.data;
     alwaysEOF = false;
@@ -19,7 +19,7 @@ QL_TblScanOp::QL_TblScanOp(const char *tblName, RM_FileHandle &fh, const Conditi
 
 QL_TblScanOp::~QL_TblScanOp(){
     delete pRmfh;
-    delete pSmm;
+    //delete pSmm;
     delete valueData;
     delete leftData;
 }

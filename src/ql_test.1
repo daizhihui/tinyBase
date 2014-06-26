@@ -5,9 +5,10 @@
 
 !ls
 create table student(no i, name c20, dept c4, GPA f, comment c3);
-load student("~/workspace/tinybaseV2/data/student.data");
+load student("/home/dzh/workspace/tinybaseV2/data/student.data");
 !ls
-
+select student.name from student where student.no = 1;
+select student.name from student where student.comment = "foo";
 print student;
 select * from student;
 

@@ -46,7 +46,7 @@ void SM_PrintError(RC rc)
     // Print warning
     cerr << "SM warning: " << SM_WarnMsg[rc - START_SM_WARN] << "\n";
   // Error codes are negative, so invert everything
-  else if (-rc >= -START_SM_ERR && -rc <= -SM_LASTERROR)
+  else if (-rc >= -START_SM_ERR && -rc < -SM_LASTERROR)
     // Print error
     cerr << "SM error: " << SM_ErrorMsg[-rc + START_SM_ERR] << "\n";
   else if (rc == 0)

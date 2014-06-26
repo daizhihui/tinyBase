@@ -8,7 +8,7 @@
 #include <stdio.h>
 using namespace std;
 
-//
+// 
 // SM_Manager
 //
 // Desc: Constructor
@@ -18,14 +18,14 @@ SM_Manager::SM_Manager(IX_Manager &ixm, RM_Manager &rmm)
    // Set the associated {IX|RM}_Manager object
    pIxm = &ixm;
    pRmm = &rmm;
-
+   
    //
    useIndexNo = -1;
 }
 
 //
 // ~SM_Manager
-//
+// 
 // Desc: Destructor
 //
 SM_Manager::~SM_Manager()
@@ -47,13 +47,13 @@ RC SM_Manager::OpenDb(const char *dbName)
    RC rc;
 
    // Sanity Check: Length of the argument should be less than MAXDBNAME
-   //               DBname cannot contain ' ' or '/'
+   //               DBname cannot contain ' ' or '/' 
    if (strlen(dbName) > MAXDBNAME
        || strchr(dbName, ' ') || strchr(dbName, '/')) {
       rc = SM_INVALIDDBNAME;
       goto err_return;
    }
-
+   
    // Change the working directory
    if (chdir(dbName) < 0) {
       rc = SM_CHDIRFAILED;
@@ -61,11 +61,11 @@ RC SM_Manager::OpenDb(const char *dbName)
    }
 
    // Open a file scan for RELCAT
-   if ((rc = pRmm->OpenFile(RELCAT, fhRelcat)))
+   if (rc = pRmm->OpenFile(RELCAT, fhRelcat))
       goto err_return;
 
    // Open a file scan for ATTRCAT
-   if ((rc = pRmm->OpenFile(ATTRCAT, fhAttrcat)))
+   if (rc = pRmm->OpenFile(ATTRCAT, fhAttrcat))
       goto err_close;
 
    // Return ok
@@ -81,7 +81,7 @@ err_return:
 //
 // CloseDb
 //
-// Desc: Close a DB
+// Desc: Close a DB 
 // Ret:  RM return code
 //
 RC SM_Manager::CloseDb()
@@ -89,11 +89,11 @@ RC SM_Manager::CloseDb()
    RC rc;
 
    // Close a file scan for ATTRCAT
-   if ((rc = pRmm->CloseFile(fhAttrcat)))
+   if (rc = pRmm->CloseFile(fhAttrcat))
       goto err_close;
 
    // Close a file scan for RELCAT
-   if ((rc = pRmm->CloseFile(fhRelcat)))
+   if (rc = pRmm->CloseFile(fhRelcat))
       goto err_return;
 
    // Return ok
@@ -110,8 +110,8 @@ err_return:
 // CreateTable
 //
 // Desc: Create a table
-// In:   relName -
-//       attrCount -
+// In:   relName - 
+//       attrCount - 
 //       attributes -
 // Ret:  SM_INVALIDRELNAME, SM_DUPLICATEDATTR, SM_RELEXISTS, RM return code
 //
@@ -152,31 +152,26 @@ RC SM_Manager::CreateTable(const char *relName,
    }
 
    // Update RELCAT
-   SM_SetRelcatRec(relcatRec, relName, tupleLength, attrCount, 0, 0);
-   if ((rc = fhRelcat.InsertRec((char *)&relcatRec, rid)))
+   SM_SetRelcatRec(relcatRec, relName, tupleLength, attrCount, 0);
+   if (rc = fhRelcat.InsertRec((char *)&relcatRec, rid))
       goto err_return;
-   if ((rc = SetRelationInfo(RELCAT, 1, fhRelcat.numPages())))
+   if (rc = fhRelcat.ForcePages())
       goto err_return;
-// if ((rc = fhRelcat.ForcePages()))
-//    goto err_return;
 
    // Update ATTRCAT
    for (int i = 0; i < attrCount; i++) {
-      SM_SetAttrcatRec(attrcatRec,
-                       relName, attributes[i].attrName,
-                       offset, attributes[i].attrType, attributes[i].attrLength,
-                       -1, 0, 0);
+      SM_SetAttrcatRec(attrcatRec, 
+                       relName, attributes[i].attrName, offset,
+                       attributes[i].attrType, attributes[i].attrLength, -1);
       offset += attributes[i].attrLength;
-      if ((rc = fhAttrcat.InsertRec((char *)&attrcatRec, rid)))
+      if (rc = fhAttrcat.InsertRec((char *)&attrcatRec, rid))
          goto err_return;
    }
-   if ((rc = SetRelationInfo(ATTRCAT, attrCount, fhAttrcat.numPages())))
-      goto err_return;
-   if ((rc = fhAttrcat.ForcePages()))
+   if (rc = fhAttrcat.ForcePages())
       goto err_return;
 
    // Create file
-   if ((rc = pRmm->CreateFile(relName, tupleLength)))
+   if (rc = pRmm->CreateFile(relName, tupleLength))
       goto err_return;
 
    // Return ok
@@ -191,7 +186,7 @@ err_return:
 // DropTable
 //
 // Desc: Drop a table
-// In:   relName -
+// In:   relName - 
 // Ret:  SM_INVALIDRELNAME, SM_RELNOTFOUND, RM return code
 //
 RC SM_Manager::DropTable(const char *relName)
@@ -211,22 +206,20 @@ RC SM_Manager::DropTable(const char *relName)
    }
 
    // Update RELCAT
-   if ((rc = GetRelationInfo(relName, rec, relcatData)))
+   if (rc = GetRelationInfo(relName, rec, relcatData))
       goto err_return;
-   if ((rc = rec.GetRid(rid)))
+   if (rc = rec.GetRid(rid))
       goto err_return;
-   if ((rc = fhRelcat.DeleteRec(rid)))
+   if (rc = fhRelcat.DeleteRec(rid))
       goto err_return;
-   if ((rc = SetRelationInfo(RELCAT, -1, fhRelcat.numPages())))
+   if (rc = fhRelcat.ForcePages())
       goto err_return;
-// if ((rc = fhRelcat.ForcePages()))
-//    goto err_return;
 
    // Update ATTRCAT
    memset(_relName, '\0', sizeof(_relName));
    strncpy(_relName, relName, MAXNAME);
-   if ((rc = fs.OpenScan(fhAttrcat, STRING, MAXNAME,
-                         OFFSET(SM_AttrcatRec, relName), EQ_OP, _relName)))
+   if (rc = fs.OpenScan(fhAttrcat, STRING, MAXNAME,
+                        OFFSET(SM_AttrcatRec, relName), EQ_OP, _relName))
       goto err_return;
 
    while ((rc = fs.GetNextRec(_rec)) != RM_EOF) {
@@ -236,31 +229,28 @@ RC SM_Manager::DropTable(const char *relName)
          goto err_closescan;
 
       // Delete the index on this attribute, if any
-      if ((rc = _rec.GetData(attrcatData)))
+      if (rc = _rec.GetData(attrcatData))
          goto err_closescan;
       if (((SM_AttrcatRec *)attrcatData)->indexNo != -1)
          pIxm->DestroyIndex(relName,((SM_AttrcatRec *)attrcatData)->indexNo);
 
       // Delete the record from ATTRCAT
-      if ((rc = _rec.GetRid(rid)))
+      if (rc = _rec.GetRid(rid))
          goto err_closescan;
-      if ((rc = fhAttrcat.DeleteRec(rid)))
+      if (rc = fhAttrcat.DeleteRec(rid))
          goto err_closescan;
 
       if (++i == ((SM_RelcatRec *)relcatData)->attrCount)
          break;
    }
 
-   if ((rc = fs.CloseScan()))
+   if (rc = fs.CloseScan())
       goto err_return;
-   if ((rc = SetRelationInfo(ATTRCAT, -((SM_RelcatRec *)relcatData)->attrCount,
-                             fhAttrcat.numPages())))
-      goto err_return;
-   if ((rc = fhAttrcat.ForcePages()))
+   if (rc = fhAttrcat.ForcePages())
       goto err_return;
 
    // Destroy file
-   if ((rc = pRmm->DestroyFile(relName)))
+   if (rc = pRmm->DestroyFile(relName))
       goto err_return;
 
    // Return ok
@@ -276,9 +266,9 @@ err_return:
 //
 // CreateIndex
 //
-// Desc:
-// In:   relName -
-//       attrName -
+// Desc: 
+// In:   relName - 
+//       attrName - 
 // Ret:  SM_ATTRNOTFOUND, SM_INDEXEXISTS, IX return code
 //
 RC SM_Manager::CreateIndex(const char *relName, const char *attrName)
@@ -291,9 +281,9 @@ RC SM_Manager::CreateIndex(const char *relName, const char *attrName)
    RM_FileHandle fh;
    RM_Record dataRec;
    IX_IndexHandle ih;
-
+   
    // Sanity Check: relName/attrName should exist, but its index should not
-   if ((rc = GetAttributeInfo(relName, attrName, rec, attrcatData)))
+   if (rc = GetAttributeInfo(relName, attrName, rec, attrcatData))
       goto err_return;
    if (((SM_AttrcatRec *)attrcatData)->indexNo != -1) {
       rc = SM_INDEXEXISTS;
@@ -303,16 +293,16 @@ RC SM_Manager::CreateIndex(const char *relName, const char *attrName)
    indexNo = ((SM_AttrcatRec *)attrcatData)->offset;
 
    // Build index
-   if ((rc = pIxm->CreateIndex(relName, indexNo,
-                               ((SM_AttrcatRec *)attrcatData)->attrType,
-                               ((SM_AttrcatRec *)attrcatData)->attrLength)))
+   if (rc = pIxm->CreateIndex(relName, indexNo, 
+                              ((SM_AttrcatRec *)attrcatData)->attrType,
+                              ((SM_AttrcatRec *)attrcatData)->attrLength))
       goto err_return;
-   if ((rc = pIxm->OpenIndex(relName, indexNo, ih)))
+   if (rc = pIxm->OpenIndex(relName, indexNo, ih))
       goto err_destroyindex;
 
-   if ((rc = pRmm->OpenFile(relName, fh)))
+   if (rc = pRmm->OpenFile(relName, fh))
       goto err_closeindex;
-   if ((rc = fs.OpenScan(fh, INT, sizeof(int), 0, NO_OP, NULL)))
+   if (rc = fs.OpenScan(fh, INT, sizeof(int), 0, NO_OP, NULL))
       goto err_closefile;
 
    while ((rc = fs.GetNextRec(dataRec)) != RM_EOF) {
@@ -322,35 +312,32 @@ RC SM_Manager::CreateIndex(const char *relName, const char *attrName)
       if (rc != 0)
          goto err_closescan;
 
-      if ((rc = dataRec.GetData(data)))
+      if (rc = dataRec.GetData(data))
          goto err_closescan;
-      if ((rc = dataRec.GetRid(rid)))
+      if (rc = dataRec.GetRid(rid))
          goto err_closescan;
 
-      if ((rc = ih.InsertEntry(data + ((SM_AttrcatRec *)attrcatData)->offset, rid)))
+      if (rc = ih.InsertEntry(data + ((SM_AttrcatRec *)attrcatData)->offset, rid))
          goto err_closescan;
    }
 
-   if ((rc = fs.CloseScan()))
+   if (rc = fs.CloseScan())
       goto err_closefile;
-   if ((rc = pRmm->CloseFile(fh)))
+   if (rc = pRmm->CloseFile(fh))
       goto err_closeindex;
 
-   ((SM_AttrcatRec *)attrcatData)->distinctVals += ih.deltaDistinctVals();
-   ((SM_AttrcatRec *)attrcatData)->ixDepth      += ih.deltaDepth();
-   if ((rc = ih.GetMinKey(((SM_AttrcatRec *)attrcatData)->minValue)))
-      goto err_destroyindex;
-   if ((rc = ih.GetMaxKey(((SM_AttrcatRec *)attrcatData)->maxValue)))
-      goto err_destroyindex;
-
-   if ((rc = pIxm->CloseIndex(ih)))
+   if (rc = pIxm->CloseIndex(ih))
       goto err_destroyindex;
 
    // Update indexNo
    ((SM_AttrcatRec *)attrcatData)->indexNo = indexNo;
-   if ((rc = fhAttrcat.UpdateRec(rec)))
+   if (rc = fhAttrcat.UpdateRec(rec))
       goto err_return;
-   if ((rc = fhAttrcat.ForcePages()))
+   if (rc = fhAttrcat.ForcePages())
+      goto err_return;
+
+   // Update RELCAT
+   if (rc = SetRelationIndexCount(relName, +1))
       goto err_return;
 
    // Return ok
@@ -372,9 +359,9 @@ err_return:
 //
 // DropIndex
 //
-// Desc:
-// In:   relName -
-//       attrName -
+// Desc: 
+// In:   relName - 
+//       attrName - 
 // Ret:  SM_ATTRNOTFOUND, SM_INDEXNOTFOUND, IX return code
 //
 RC SM_Manager::DropIndex(const char *relName, const char *attrName)
@@ -385,7 +372,7 @@ RC SM_Manager::DropIndex(const char *relName, const char *attrName)
    RM_FileScan fs;
 
    // Sanity Check: relName/attrName and its index should exist
-   if ((rc = GetAttributeInfo(relName, attrName, rec, attrcatData)))
+   if (rc = GetAttributeInfo(relName, attrName, rec, attrcatData))
       goto err_return;
    if (((SM_AttrcatRec *)attrcatData)->indexNo == -1) {
       rc = SM_INDEXNOTFOUND;
@@ -393,18 +380,18 @@ RC SM_Manager::DropIndex(const char *relName, const char *attrName)
    }
 
    // Destroy the index file
-   if ((rc = pIxm->DestroyIndex(relName, ((SM_AttrcatRec *)attrcatData)->indexNo)))
+   if (rc = pIxm->DestroyIndex(relName, ((SM_AttrcatRec *)attrcatData)->indexNo))
       goto err_return;
 
    // Update indexNo
    ((SM_AttrcatRec *)attrcatData)->indexNo = -1;
-   ((SM_AttrcatRec *)attrcatData)->distinctVals = 0;
-   ((SM_AttrcatRec *)attrcatData)->ixDepth      = 0;
-   ((SM_AttrcatRec *)attrcatData)->minValue = 0;
-   ((SM_AttrcatRec *)attrcatData)->maxValue = 0;
-   if ((rc = fhAttrcat.UpdateRec(rec)))
+   if (rc = fhAttrcat.UpdateRec(rec))
       goto err_return;
-   if ((rc = fhAttrcat.ForcePages()))
+   if (rc = fhAttrcat.ForcePages())
+      goto err_return;
+
+   // Update RELCAT
+   if (rc = SetRelationIndexCount(relName, -1))
       goto err_return;
 
    // Return ok
@@ -416,24 +403,11 @@ err_return:
 }
 
 //
-// compareSMAttrcatRec
-//
-// Desc: for qsort
-//
-int compareSMAttrcatRec(const void *p1, const void *p2)
-{
-   int offset1 = ((SM_AttrcatRec *)p1)->offset;
-   int offset2 = ((SM_AttrcatRec *)p2)->offset;
-
-   return offset1 - offset2;
-}
-
-//
 // Load
 //
-// Desc:
-// In:   relName -
-//       fileName -
+// Desc: 
+// In:   relName - 
+//       fileName - 
 // Ret:  SM_RELNOTFOUND, RM return code
 //
 RC SM_Manager::Load(const char *relName, const char *fileName)
@@ -451,7 +425,6 @@ RC SM_Manager::Load(const char *relName, const char *fileName)
    FILE *fp;
    char *buf;
    int i = 0;
-   int tupleCount = 0;
 
    // Sanity Check: relName should not be RELCAT or ATTRCAT
    if (strcmp(relName, RELCAT) == 0 || strcmp(relName, ATTRCAT) == 0) {
@@ -460,7 +433,7 @@ RC SM_Manager::Load(const char *relName, const char *fileName)
    }
 
    // Get the attribute count
-   if ((rc = GetRelationInfo(relName, tmpRec, relcatData)))
+   if (rc = GetRelationInfo(relName, tmpRec, relcatData))
       goto err_return;
 
    // Allocate indexhandle array
@@ -494,8 +467,8 @@ RC SM_Manager::Load(const char *relName, const char *fileName)
    // Open a file scan for ATTRCAT
    memset(_relName, '\0', sizeof(_relName));
    strncpy(_relName, relName, MAXNAME);
-   if ((rc = fs.OpenScan(fhAttrcat, STRING, MAXNAME,
-                         OFFSET(SM_AttrcatRec, relName), EQ_OP, _relName)))
+   if (rc = fs.OpenScan(fhAttrcat, STRING, MAXNAME,
+                        OFFSET(SM_AttrcatRec, relName), EQ_OP, _relName))
       goto err_deletedata;
 
    // Fill out attributes array
@@ -506,7 +479,7 @@ RC SM_Manager::Load(const char *relName, const char *fileName)
          fs.CloseScan();
          goto err_deletedata;
       }
-      if ((rc = rec.GetData(_data))) {
+      if (rc = rec.GetData(_data)) {
          fs.CloseScan();
          goto err_deletedata;
       }
@@ -517,11 +490,8 @@ RC SM_Manager::Load(const char *relName, const char *fileName)
    }
 
    // Close a file scan for ATTRCAT
-   if ((rc = fs.CloseScan()))
+   if (rc = fs.CloseScan())
       goto err_deletedata;
-
-   qsort(attributes, ((SM_RelcatRec *)relcatData)->attrCount,
-         sizeof(SM_AttrcatRec), compareSMAttrcatRec);
 
    // Open data file
    fp = fopen(fileName, "r");
@@ -529,19 +499,19 @@ RC SM_Manager::Load(const char *relName, const char *fileName)
       rc = SM_FILEIOFAILED;
       goto err_deletedata;
    }
-
+  
    // Open relation file
-   if ((rc = pRmm->OpenFile(relName, fh)))
+   if (rc = pRmm->OpenFile(relName, fh))
       goto err_fclose;
 
    // Open indexes
    for (i = 0; i < ((SM_RelcatRec *)relcatData)->attrCount; i++) {
       if (attributes[i].indexNo == -1)
          continue;
-      if ((rc = pIxm->OpenIndex(relName, attributes[i].indexNo, ihs[i])))
+      if (rc = pIxm->OpenIndex(relName, attributes[i].indexNo, ihs[i]))
          goto err_closeindexes;
    }
-
+   
    // Process every line
    while (fgets(buf, MAXLINE, fp)) {
       int numDelim = 0;
@@ -583,9 +553,9 @@ RC SM_Manager::Load(const char *relName, const char *fileName)
             memcpy(data + attributes[i].offset, &_f, sizeof(float));
             break;
          case STRING:
-            memset(data + attributes[i].offset, '\0',
+            memset(data + attributes[i].offset, '\0', 
                    attributes[i].attrLength);
-            strncpy(data + attributes[i].offset, attr,
+            strncpy(data + attributes[i].offset, attr, 
                     attributes[i].attrLength);
             break;
          }
@@ -593,64 +563,34 @@ RC SM_Manager::Load(const char *relName, const char *fileName)
       }
 
       // Insert the record
-      if ((rc = fh.InsertRec(data, rid)))
+      if (rc = fh.InsertRec(data, rid))
          goto err_closeindexes;
-
-      tupleCount++;
 
       // Update indexes
       for (i = 0; i < ((SM_RelcatRec *)relcatData)->attrCount; i++) {
          if (attributes[i].indexNo == -1)
             continue;
-         if ((rc = ihs[i].InsertEntry(data + attributes[i].offset, rid)))
+         if (rc = ihs[i].InsertEntry(data + attributes[i].offset, rid))
             goto err_closeindexes;
       }
    }
-
-   // Update index statistics
-   for (i = 0; i < ((SM_RelcatRec *)relcatData)->attrCount; i++) {
-      char *attrcatData;
-
-      if (attributes[i].indexNo == -1)
-         continue;
-
-      if ((rc = GetAttributeInfo(relName, attributes[i].attrName,
-                                 rec, attrcatData)))
-         goto err_closeindexes;
-
-      ((SM_AttrcatRec *)attrcatData)->distinctVals += ihs[i].deltaDistinctVals();
-      ((SM_AttrcatRec *)attrcatData)->ixDepth      += ihs[i].deltaDepth();
-      if ((rc = ihs[i].GetMinKey(((SM_AttrcatRec *)attrcatData)->minValue)))
-         goto err_closeindexes;
-      if ((rc = ihs[i].GetMaxKey(((SM_AttrcatRec *)attrcatData)->maxValue)))
-         goto err_closeindexes;
-      if ((rc = fhAttrcat.UpdateRec(rec)))
-         goto err_closeindexes;
-   }
-   if ((rc = fhAttrcat.ForcePages()))
-      goto err_closeindexes;
 
    // Close indexes
    for (i = 0; i < ((SM_RelcatRec *)relcatData)->attrCount; i++) {
       if (attributes[i].indexNo == -1)
          continue;
-      if ((rc = pIxm->CloseIndex(ihs[i])))
+      if (rc = pIxm->CloseIndex(ihs[i]))
          goto err_closeindexes;
    }
-
-   // Update the cardinality
-   if (tupleCount)
-      if ((rc = SetRelationInfo(relName, tupleCount, fh.numPages())))
-         goto err_fclose;
-
+   
    // Close relation file
-   if ((rc = pRmm->CloseFile(fh)))
+   if (rc = pRmm->CloseFile(fh))
       goto err_fclose;
 
    // Close data file
    fclose(fp);
 
-   // Deallocate
+   // Deallocate 
    delete [] data;
    delete [] buf;
    delete [] attributes;
@@ -664,8 +604,6 @@ err_closeindexes:
    for (i = 0; i < ((SM_RelcatRec *)relcatData)->attrCount; i++)
       if (attributes[i].indexNo != -1)
          pIxm->CloseIndex(ihs[i]);
-   if (tupleCount)
-      SetRelationInfo(relName, tupleCount, fh.numPages());
 //err_closefile:
    pRmm->CloseFile(fh);
 err_fclose:
@@ -687,7 +625,7 @@ err_return:
 //
 // Desc: for qsort
 //
-int compareDataAttrInfo(const void *p1, const void *p2)
+static int compareDataAttrInfo(const void *p1, const void *p2)
 {
    int offset1 = ((DataAttrInfo *)p1)->offset;
    int offset2 = ((DataAttrInfo *)p2)->offset;
@@ -698,8 +636,8 @@ int compareDataAttrInfo(const void *p1, const void *p2)
 //
 // Print
 //
-// Desc:
-// In:   relName -
+// Desc: 
+// In:   relName - 
 // Ret:  SM_RELNOTFOUND, RM return code
 //
 RC SM_Manager::Print(const char *relName)
@@ -715,7 +653,7 @@ RC SM_Manager::Print(const char *relName)
    int i = 0;
 
    // Get the attribute count
-   if ((rc = GetRelationInfo(relName, tmpRec, relcatData)))
+   if (rc = GetRelationInfo(relName, tmpRec, relcatData))
       return (rc);
 
    // Allocate attributes array
@@ -726,8 +664,8 @@ RC SM_Manager::Print(const char *relName)
    // Open a file scan for ATTRCAT
    memset(_relName, '\0', sizeof(_relName));
    strncpy(_relName, relName, MAXNAME);
-   if ((rc = fs.OpenScan(fhAttrcat, STRING, MAXNAME,
-                         OFFSET(SM_AttrcatRec, relName), EQ_OP, _relName))) {
+   if (rc = fs.OpenScan(fhAttrcat, STRING, MAXNAME,
+                        OFFSET(SM_AttrcatRec, relName), EQ_OP, _relName)) {
       delete [] attributes;
       return (rc);
    }
@@ -742,25 +680,25 @@ RC SM_Manager::Print(const char *relName)
          return (rc);
       }
 
-      if ((rc = rec.GetData(data))) {
+      if (rc = rec.GetData(data)) {
          fs.CloseScan();
          delete [] attributes;
          return (rc);
       }
 
-      SetDataAttrInfo(attributes[i],
-                      ((SM_AttrcatRec *)data)->relName,
-                      ((SM_AttrcatRec *)data)->attrName,
-                      ((SM_AttrcatRec *)data)->offset,
-                      ((SM_AttrcatRec *)data)->attrType,
-                      ((SM_AttrcatRec *)data)->attrLength,
-                      ((SM_AttrcatRec *)data)->indexNo);
+      SM_SetAttrcatRec(attributes[i],
+                       ((SM_AttrcatRec *)data)->relName,
+                       ((SM_AttrcatRec *)data)->attrName,
+                       ((SM_AttrcatRec *)data)->offset,
+                       ((SM_AttrcatRec *)data)->attrType,
+                       ((SM_AttrcatRec *)data)->attrLength,
+                       ((SM_AttrcatRec *)data)->indexNo);
       if (++i == ((SM_RelcatRec *)relcatData)->attrCount)
          break;
    }
 
    // Close a file scan for ATTRCAT
-   if ((rc = fs.CloseScan())) {
+   if (rc = fs.CloseScan()) {
       delete [] attributes;
       return (rc);
    }
@@ -771,14 +709,14 @@ RC SM_Manager::Print(const char *relName)
    Printer p(attributes, ((SM_RelcatRec *)relcatData)->attrCount);
 
    // Open relation file
-   if ((rc = pRmm->OpenFile(relName, fh)))
+   if (rc = pRmm->OpenFile(relName, fh))
       goto err_delete;
    // Print the header information
    p.PrintHeader(cout);
 
    // Normal Print
    if (useIndexNo < 0) {
-      if ((rc = fs.OpenScan(fh, INT, sizeof(int), 0, NO_OP, NULL)))
+      if (rc = fs.OpenScan(fh, INT, sizeof(int), 0, NO_OP, NULL))
          goto err_closefile;
 
       while ((rc = fs.GetNextRec(rec)) != RM_EOF) {
@@ -787,13 +725,13 @@ RC SM_Manager::Print(const char *relName)
          if (rc != 0)
             goto err_closescan;
 
-         if ((rc = rec.GetData(data)))
+         if (rc = rec.GetData(data))
             goto err_closescan;
 
          p.Print(cout, data);
       }
 
-      if ((rc = fs.CloseScan()))
+      if (rc = fs.CloseScan())
          goto err_closefile;
    }
    // Sorted Print
@@ -802,10 +740,10 @@ RC SM_Manager::Print(const char *relName)
       IX_IndexScan is;
       RID rid;
 
-      if ((rc = pIxm->OpenIndex(relName, useIndexNo, ih)))
+      if (rc = pIxm->OpenIndex(relName, useIndexNo, ih))
          goto err_closefile;
 
-      if ((rc = is.OpenScan(ih, NO_OP, NULL))) {
+      if (rc = is.OpenScan(ih, NO_OP, NULL)) {
          pIxm->CloseIndex(ih);
          goto err_closefile;
       }
@@ -818,31 +756,31 @@ RC SM_Manager::Print(const char *relName)
             pIxm->CloseIndex(ih);
             goto err_closefile;
          }
-
-         if ((rc = fh.GetRec(rid, rec))) {
+          
+         if (rc = fh.GetRec(rid, rec)) {
             is.CloseScan();
             pIxm->CloseIndex(ih);
             goto err_closefile;
          }
 
-         if ((rc = rec.GetData(data)))
+         if (rc = rec.GetData(data))
             goto err_closescan;
 
          p.Print(cout, data);
       }
 
-      if ((rc = is.CloseScan())) {
+      if (rc = is.CloseScan()) {
          pIxm->CloseIndex(ih);
          goto err_closefile;
       }
-      if ((rc = pIxm->CloseIndex(ih)))
+      if (rc = pIxm->CloseIndex(ih))
          goto err_closefile;
    }
 
    // Print the footer information
    p.PrintFooter(cout);
    // Close relation file
-   if ((rc = pRmm->CloseFile(fh)))
+   if (rc = pRmm->CloseFile(fh))
       goto err_delete;
 
    // Deallocate attributes
@@ -865,38 +803,17 @@ err_delete:
 //
 // Set
 //
-// Desc:
-// In:   paramName -
-//       value -
-// Ret:
+// Desc: 
+// In:   paramName - 
+//       value - 
+// Ret:  
 //
 RC SM_Manager::Set(const char *paramName, const char *value)
 {
-   if (strcasecmp(paramName, "IxScan") == 0) {
-      bIxScan = atoi(value);
-   } else if (strcasecmp(paramName, "NLIJ") == 0) {
-      bNLIJ = atoi(value);
-   } else if (strcasecmp(paramName, "PushProj") == 0) {
-      bPushProj = atoi(value);
-   } else if (strcasecmp(paramName, "NBJ") == 0) {
-      bNBJ = atoi(value);
-   } else if (strcasecmp(paramName, "Rocking") == 0) {
-      bRocking = atoi(value);
-   } else if (strcasecmp(paramName, "Optimize") == 0) {
-      bOptimize = atoi(value);
-   } else if (strcasecmp(paramName, "PlanOnly") == 0) {
-      bPlanOnly = atoi(value);
-   } else {
+   if (strcasecmp(paramName, "useindex") == 0)
+      useIndexNo = atoi(value);
+   else
       return (SM_PARAMUNDEFINED);
-   }
-
-   cout << "IxScan  : " << bIxScan   << "\n";
-   cout << "NLIJ    : " << bNLIJ     << "\n";
-   cout << "PushProj: " << bPushProj << "\n";
-   cout << "NBJ     : " << bNBJ      << "\n";
-   cout << "Rocking : " << bRocking  << "\n";
-   cout << "Optimize: " << bOptimize << "\n";
-   cout << "PlanOnly: " << bPlanOnly << "\n";
 
    // Return ok
    return (0);
@@ -905,36 +822,33 @@ RC SM_Manager::Set(const char *paramName, const char *value)
 //
 // Help
 //
-// Desc:
+// Desc: 
 // Ret:  RM return code
 //
 RC SM_Manager::Help()
 {
    RC rc;
-   DataAttrInfo attributes[5];
+   DataAttrInfo attributes[4];
    RM_FileScan fs;
    RM_Record rec;
 
    // Instantiate a Printer object
-   SetDataAttrInfo(attributes[0],
-                   RELCAT, "relName", OFFSET(SM_RelcatRec, relName),
-                   STRING, MAXNAME, -1);
-   SetDataAttrInfo(attributes[1],
-                   RELCAT, "tupleLength", OFFSET(SM_RelcatRec, tupleLength),
-                   INT, sizeof(int), -1);
-   SetDataAttrInfo(attributes[2],
-                   RELCAT, "attrCount", OFFSET(SM_RelcatRec, attrCount),
-                   INT, sizeof(int), -1);
-   SetDataAttrInfo(attributes[3],
-                   RELCAT, "cardinality", OFFSET(SM_RelcatRec, cardinality),
-                   INT, sizeof(int), -1);
-   SetDataAttrInfo(attributes[4],
-                   RELCAT, "numPages", OFFSET(SM_RelcatRec, numPages),
-                   INT, sizeof(int), -1);
-   Printer p(attributes, 5);
+   SM_SetAttrcatRec(attributes[0],
+                    RELCAT, "relName", OFFSET(SM_RelcatRec, relName),
+                    STRING, MAXNAME, -1);
+   SM_SetAttrcatRec(attributes[1],
+                    RELCAT, "tupleLength", OFFSET(SM_RelcatRec, tupleLength),
+                    INT, sizeof(int), -1);
+   SM_SetAttrcatRec(attributes[2],
+                    RELCAT, "attrCount", OFFSET(SM_RelcatRec, attrCount),
+                    INT, sizeof(int), -1);
+   SM_SetAttrcatRec(attributes[3],
+                    RELCAT, "indexCount", OFFSET(SM_RelcatRec, indexCount),
+                    INT, sizeof(int), -1);
+   Printer p(attributes, 4);
 
    // Open a file scan for RELCAT
-   if ((rc = fs.OpenScan(fhRelcat, INT, sizeof(int), 0, NO_OP, NULL)))
+   if (rc = fs.OpenScan(fhRelcat, INT, sizeof(int), 0, NO_OP, NULL))
       goto err_return;
 
    // Print the header information
@@ -947,7 +861,7 @@ RC SM_Manager::Help()
       if (rc != 0)
          goto err_closescan;
 
-      if ((rc = rec.GetData(data)))
+      if (rc = rec.GetData(data))
          goto err_closescan;
 
       p.Print(cout, data);
@@ -957,7 +871,7 @@ RC SM_Manager::Help()
    p.PrintFooter(cout);
 
    // Close a file scan for RELCAT
-   if ((rc = fs.CloseScan()))
+   if (rc = fs.CloseScan())
       goto err_return;
 
    // Return ok
@@ -973,7 +887,7 @@ err_return:
 //
 // Help
 //
-// Desc:
+// Desc: 
 // In:   relName -
 // Ret:  SM_RELNOTFOUND, RM return code
 //
@@ -982,54 +896,42 @@ RC SM_Manager::Help(const char *relName)
    RC rc;
    RM_Record tmpRec;
    char *relcatData;
-   DataAttrInfo attributes[10];
+   DataAttrInfo attributes[6];
    char _relName[MAXNAME];
    RM_FileScan fs;
    RM_Record rec;
    int i = 0;
 
    // Get the attribute count
-   if ((rc = GetRelationInfo(relName, tmpRec, relcatData)))
+   if (rc = GetRelationInfo(relName, tmpRec, relcatData))
       return (rc);
 
    // Instantiate a Printer object
-   SetDataAttrInfo(attributes[0],
-                   ATTRCAT, "relName", OFFSET(SM_AttrcatRec, relName),
-                   STRING, MAXNAME, -1);
-   SetDataAttrInfo(attributes[1],
-                   ATTRCAT, "attrName", OFFSET(SM_AttrcatRec, attrName),
-                   STRING, MAXNAME, -1);
-   SetDataAttrInfo(attributes[2],
-                   ATTRCAT, "offset", OFFSET(SM_AttrcatRec, offset),
-                   INT, sizeof(int), -1);
-   SetDataAttrInfo(attributes[3],
-                   ATTRCAT, "attrType", OFFSET(SM_AttrcatRec, attrType),
-                   INT, sizeof(int), -1);
-   SetDataAttrInfo(attributes[4],
-                   ATTRCAT, "attrLength", OFFSET(SM_AttrcatRec, attrLength),
-                   INT, sizeof(int), -1);
-   SetDataAttrInfo(attributes[5],
-                   ATTRCAT, "indexNo", OFFSET(SM_AttrcatRec, indexNo),
-                   INT, sizeof(int), -1);
-   SetDataAttrInfo(attributes[6],
-                   ATTRCAT, "distinctVals", OFFSET(SM_AttrcatRec, distinctVals),
-                   INT, sizeof(int), -1);
-   SetDataAttrInfo(attributes[7],
-                   ATTRCAT, "ixDepth", OFFSET(SM_AttrcatRec, ixDepth),
-                   INT, sizeof(int), -1);
-   SetDataAttrInfo(attributes[8],
-                   ATTRCAT, "minValue   ", OFFSET(SM_AttrcatRec, minValue),
-                   INT, sizeof(int), -1);
-   SetDataAttrInfo(attributes[9],
-                   ATTRCAT, "maxValue   ", OFFSET(SM_AttrcatRec, maxValue),
-                   INT, sizeof(int), -1);
-   Printer p(attributes, 10);
+   SM_SetAttrcatRec(attributes[0],
+                    ATTRCAT, "relName", OFFSET(SM_AttrcatRec, relName),
+                    STRING, MAXNAME, -1);
+   SM_SetAttrcatRec(attributes[1],
+                    ATTRCAT, "attrName", OFFSET(SM_AttrcatRec, attrName),
+                    STRING, MAXNAME, -1);
+   SM_SetAttrcatRec(attributes[2],
+                    ATTRCAT, "offset", OFFSET(SM_AttrcatRec, offset),
+                    INT, sizeof(int), -1);
+   SM_SetAttrcatRec(attributes[3],
+                    ATTRCAT, "attrType", OFFSET(SM_AttrcatRec, attrType),
+                    INT, sizeof(int), -1);
+   SM_SetAttrcatRec(attributes[4],
+                    ATTRCAT, "attrLength", OFFSET(SM_AttrcatRec, attrLength),
+                    INT, sizeof(int), -1);
+   SM_SetAttrcatRec(attributes[5],
+                    ATTRCAT, "indexNo", OFFSET(SM_AttrcatRec, indexNo),
+                    INT, sizeof(int), -1);
+   Printer p(attributes, 6);
 
    // Open a file scan for ATTRCAT
    memset(_relName, '\0', sizeof(_relName));
    strncpy(_relName, relName, MAXNAME);
-   if ((rc = fs.OpenScan(fhAttrcat, STRING, MAXNAME,
-                         OFFSET(SM_AttrcatRec, relName), EQ_OP, _relName)))
+   if (rc = fs.OpenScan(fhAttrcat, STRING, MAXNAME,
+                        OFFSET(SM_AttrcatRec, relName), EQ_OP, _relName))
       goto err_return;
 
    // Print the header information
@@ -1042,23 +944,19 @@ RC SM_Manager::Help(const char *relName)
       if (rc != 0)
          goto err_closescan;
 
-      if ((rc = rec.GetData(data)))
+      if (rc = rec.GetData(data))
          goto err_closescan;
 
-      attributes[8].attrType = ((SM_AttrcatRec *)data)->attrType;
-      attributes[9].attrType = ((SM_AttrcatRec *)data)->attrType;
-
-      Printer pp(attributes, 10);
-      pp.Print(cout, data);
+      p.Print(cout, data);
       if (++i == ((SM_RelcatRec *)relcatData)->attrCount)
          break;
    }
 
    // Print the footer information
-// p.PrintFooter(cout);
+   p.PrintFooter(cout);
 
    // Close a file scan for ATTRCAT
-   if ((rc = fs.CloseScan()))
+   if (rc = fs.CloseScan())
       goto err_return;
 
    // Return ok
@@ -1076,11 +974,11 @@ err_return:
 //
 // Desc: Get relation informtion by accessing catalog RELCAT
 // In:   relName -
-// Out:  rec -
+// Out:  rec - 
 //       data -
 // Ret:  SM_RELNOTFOUND, RM return code
 //
-RC SM_Manager::GetRelationInfo(const char *relName,
+RC SM_Manager::GetRelationInfo(const char *relName, 
                                RM_Record &rec, char *&data)
 {
    RC rc;
@@ -1090,21 +988,21 @@ RC SM_Manager::GetRelationInfo(const char *relName,
    // Open a file scan for RELCAT
    memset(_relName, '\0', sizeof(_relName));
    strncpy(_relName, relName, MAXNAME);
-   if ((rc = fs.OpenScan(fhRelcat, STRING, MAXNAME,
-                         OFFSET(SM_RelcatRec, relName), EQ_OP, _relName)))
+   if (rc = fs.OpenScan(fhRelcat, STRING, MAXNAME,
+                        OFFSET(SM_RelcatRec, relName), EQ_OP, _relName))
       goto err_return;
 
    // Find the matching record
-   if ((rc = fs.GetNextRec(rec))) {
+   if (rc = fs.GetNextRec(rec)) {
       rc = (rc == RM_EOF) ? SM_RELNOTFOUND : rc;
       goto err_closescan;
    } else {
-      if ((rc = rec.GetData(data)))
+      if (rc = rec.GetData(data))
          goto err_closescan;
    }
 
    // Close a file scan for RELCAT
-   if ((rc = fs.CloseScan()))
+   if (rc = fs.CloseScan())
       goto err_return;
 
    // Return ok
@@ -1118,29 +1016,28 @@ err_return:
 }
 
 //
-// SetRelationInfo
+// SetRelationIndexCount
 //
-// Desc: modify relation info by accessing catalog RELCAT
+// Desc: sets attribute count by accessing catalog RELCAT
 // In:   relName - should exist
-// Out:  cardInc - value to be added to cardinality
-//       numPages - value to be set to numPages
+// Out:  value - value to be added to indexCount
+//               indexCount is the only attribute which can be updated
 // Ret:  SM_RELNOTFOUND, RM return code
 //
-RC SM_Manager::SetRelationInfo(const char *relName, int cardInc, int numPages)
+RC SM_Manager::SetRelationIndexCount(const char *relName, int value)
 {
    RC rc;
    RM_Record rec;
    char *relcatData;
 
-   if ((rc = GetRelationInfo(relName, rec, relcatData)))
+   if (rc = GetRelationInfo(relName, rec, relcatData))
       goto err_return;
-
-   ((SM_RelcatRec *)relcatData)->cardinality += cardInc;
-   ((SM_RelcatRec *)relcatData)->numPages = numPages;
-
-   if ((rc = fhRelcat.UpdateRec(rec)))
+      
+   // Update indexCount
+   ((SM_RelcatRec *)relcatData)->indexCount += value;
+   if (rc = fhRelcat.UpdateRec(rec))
       goto err_return;
-   if ((rc = fhRelcat.ForcePages()))
+   if (rc = fhRelcat.ForcePages())
       goto err_return;
 
    // Return ok
@@ -1157,7 +1054,7 @@ err_return:
 // Desc: Get attribute informtion by accessing catalog ATTRCAT
 // In:   relName -
 //       attrName -
-// Out:  rec -
+// Out:  rec - 
 //       data -
 // Ret:  SM_ATTRNOTFOUND, RM return code
 //
@@ -1172,21 +1069,21 @@ RC SM_Manager::GetAttributeInfo(const char *relName, const char *attrName,
    memset(_relattrName, '\0', sizeof(_relattrName));
    strncpy(_relattrName, relName, MAXNAME);
    strncpy(_relattrName + MAXNAME, attrName, MAXNAME);
-   if ((rc = fs.OpenScan(fhAttrcat, STRING, MAXNAME*2,
-                         OFFSET(SM_AttrcatRec, relName), EQ_OP, _relattrName)))
+   if (rc = fs.OpenScan(fhAttrcat, STRING, MAXNAME*2,
+                        OFFSET(SM_AttrcatRec, relName), EQ_OP, _relattrName))
       goto err_return;
 
    // Find the matching record
-   if ((rc = fs.GetNextRec(rec))) {
+   if (rc = fs.GetNextRec(rec)) {
       rc = (rc == RM_EOF) ? SM_ATTRNOTFOUND : rc;
       goto err_closescan;
    } else {
-      if ((rc = rec.GetData(data)))
+      if (rc = rec.GetData(data))
          goto err_closescan;
    }
 
    // Close a file scan for ATTRCAT
-   if ((rc = fs.CloseScan()))
+   if (rc = fs.CloseScan())
       goto err_return;
 
    // Return ok

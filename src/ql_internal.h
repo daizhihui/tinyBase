@@ -30,17 +30,17 @@ struct QL_RelAttrInfo {
 
 class QL_Operator {
 public:
-    QL_Operator            ()            {};
-    virtual ~QL_Operator   ()            {};
+    QL_Operator(){}
+    virtual ~QL_Operator   ()            {}
     virtual RC Initialize  (AttrType = INT, int = 0, char * = NULL)
-                                         { return (0); };
-    virtual RC GetNext     (RM_Record &) { return (0); };
-    virtual RC Finalize    ()            { return (0); };
-    virtual RC SchemaLookup(const RelAttr &, QL_RelAttrInfo &)
-                                         { return (0); };
-    virtual RC EstimateCard(double &)    { return (0); };
-    virtual RC EstimateIO  (double &)    { return (0); };
-    virtual void Print     (ostream &, int = 0) {};
+                                         { return (0); }
+    virtual RC GetNext     (RM_Record &) { return (0); }
+    virtual RC Finalize    ()            { return (0); }
+    virtual RC SchemaLookup(const RelAttr &, QL_RelAttrInfo &) 
+    {}
+    virtual RC EstimateCard(double &)    { return (0); }
+    virtual RC EstimateIO  (double &)    { return (0); }
+    virtual void Print     (ostream &, int = 0) {}
 
     int tupleLength;
 

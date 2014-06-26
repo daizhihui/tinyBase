@@ -46,16 +46,16 @@ public:
     RC Set        (const char *paramName,         // set parameter to
                    const char *value);            //   value
 
-    RC GetRelationInfo (const char *relName, RM_Record &rec, char *&data);
-    RC SetRelationInfo (const char *relName, int, int);
-    RC GetAttributeInfo(const char *relName, const char *attrName,
-                        RM_Record &rec, char *&data);
-
 private:
     // Copy constructor
     SM_Manager(const SM_Manager &manager);
     // Overloaded =
     SM_Manager& operator=(const SM_Manager &manager);
+
+    RC GetRelationInfo(const char *relName, RM_Record &rec, char *&data);
+    RC SetRelationIndexCount(const char *relName, int value);
+    RC GetAttributeInfo(const char *relName, const char *attrName,
+                        RM_Record &rec, char *&data);
 
     IX_Manager *pIxm;
     RM_Manager *pRmm;

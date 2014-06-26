@@ -1,16 +1,13 @@
-// dbdestroy.cc
 //
-// Author: xiao FAN
+// File:        dbdestroy.cc
+// Description: dbdestroy command line utility
+// Author:      Hyunjung Park (hyunjung@stanford.edu)
 //
-// This shell is provided for the student.
 
 #include <iostream>
-#include <cstdio>
 #include <cstring>
-#include <unistd.h>
-#include "rm.h"
-#include "sm.h"
 #include "redbase.h"
+#include "sm_internal.h"
 
 using namespace std;
 
@@ -19,25 +16,33 @@ using namespace std;
 //
 int main(int argc, char *argv[])
 {
-    char *dbname;
-    char command[255] = "rm -r "; //remove all the file in the directory
-    
-    // Look for 2 arguments. The first is always the name of the program
-    // that was executed, and the second should be the name of the
-    // database.
-    if (argc != 2) {
-        cerr << "Usage: " << argv[0] << " dbname \n";
-        exit(1);
-    }
-    
-    // The database name is the second argument
-    dbname = argv[1];
-    
-    // Create a subdirectory for the database
-    system (strcat(command,dbname));
-    
-    
-    // Fair amount to be filled in here!!
-    
-    return(0);
+   char *dbname;
+   char command[8+MAXDBNAME] = "rm -r ";
+
+   // Look for 2 arguments. The first is always the name of the program
+   // that was executed, and the second should be the name of the
+   // database.
+   if (argc != 2) {
+      cerr << "Usage: " << argv[0] << " DBname\n";
+      goto err_exit;
+   }
+
+   // The database name is the second argument
+   dbname = argv[1];
+
+   // Sanity Check: Length of the argument should be less than MAXDBNAME
+   //               DBname cannot contain ' ' or '/' 
+   if (strlen(dbname) > MAXDBNAME
+       || strchr(dbname, ' ') || strchr(dbname, '/')) {
+      SM_PrintError(SM_INVALIDDBNAME);
+      goto err_exit;
+   }
+
+   // Remove a subdirectory for the database
+   return system(strcat(command, dbname));
+
+   // Return error
+err_exit:
+   return (1);
 }
+

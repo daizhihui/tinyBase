@@ -34,17 +34,17 @@ drop table test8;
 drop table test8;
 help test8;
 print test8;
-load test8("/usr/class/cs346/redbase/data/soaps.data");
+load test8("../soaps.data");
 
 /* SM warning: invalid relation name */
 drop table attrcat;
 drop table relcat;
-load relcat("/usr/class/cs346/redbase/data/soaps.data");
-load attrcat("/usr/class/cs346/redbase/data/soaps.data");
+load relcat("../soaps.data");
+load attrcat("../soaps.data");
 
 /* SM warning: relation/attribute not found */
 create table stars(starid  i, stname  c20, plays  c12, soapid  i);
-load stars("/usr/class/cs346/redbase/data/stars.data");
+load stars("../stars.data");
 create index star(starid);
 create index stars(id);
 drop index star(starid);
