@@ -261,6 +261,9 @@ RC QL_Manager::Insert(const char *relName,
         if (attributes[i].indexNo == -1)
             continue;
         if ((rc = pIxm->CloseIndex(ihs[i]))){
+                for (i = 0; i < ((SM_RelcatRec *)relcatData)->attrCount; i++)
+        if (attributes[i].indexNo != -1)
+            pIxm->CloseIndex(ihs[i]);
             delete []ihs;
             return (rc);
         }
@@ -282,13 +285,6 @@ RC QL_Manager::Insert(const char *relName,
     // Return ok
     return (0);
     
-    // Return error
-err_closeindexes:
-    for (i = 0; i < ((SM_RelcatRec *)relcatData)->attrCount; i++)
-        if (attributes[i].indexNo != -1)
-            pIxm->CloseIndex(ihs[i]);
-    //err_closefile:
-    pRmm->CloseFile(fh);
 
 #endif
 }
