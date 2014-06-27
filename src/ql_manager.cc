@@ -330,7 +330,8 @@ RC QL_Manager::Delete(const char *relName,
        int count;
        bool attCorrect;
        bool valCorrecte;
-
+int numIndexAttr;
+int numIndexCond;
  
 
        // Sanity Check: relName should not be RELCAT or ATTRCAT
@@ -343,7 +344,8 @@ RC QL_Manager::Delete(const char *relName,
                        return QL_RELATIONDONOTEXIST;
 
                   relCat=(SM_RelcatRec*)relcatData;
-DataAttrInfo attributes[relCat->attrCount];
+                 int numAtt =relCat->attrCount
+DataAttrInfo attributes[numAtt];
 
 if(nConditions==0)
    {
@@ -392,7 +394,7 @@ if(nConditions==0)
     
     
     // Opening of Relation file
-    if(rc=pRmm->OpenFile(relName,fh)) return (rc);
+    if((rc=pRmm->OpenFile(relName,fh))) return (rc);
     
     //Opening of the scan
     if((rc=fs.OpenScan(fh, INT, sizeof(int), 0, NO_OP , NULL))) return (rc);
@@ -404,9 +406,9 @@ if(nConditions==0)
         //get records until the end
         rc=rec.GetRid(rid);
         if(rc!=0)
-          goto err_return;
+          return rc;
 
-       if( rc= fh.DeleteRec(rid)) return (rc);
+       if( (rc= fh.DeleteRec(rid))) return (rc);
             
             
         }
@@ -414,9 +416,9 @@ if(nConditions==0)
 
     if((rc=fs.CloseScan())) return (rc);
 
-    if( rc= fh.ForcePages(ALL_PAGES)) return (rc);
+    if( (rc= fh.ForcePages(ALL_PAGES))) return (rc);
 
-    if(rc=pRmm->CloseFile(fh)) return (rc);
+    if((rc=pRmm->CloseFile(fh))) return (rc);
     
     
     }else{ // s'il existe des conditions
@@ -425,7 +427,7 @@ if(nConditions==0)
 
                   attCorrect=false;
                   valCorrecte=false;
-                  for(int count=0;count<relcat->attrCount;count++)
+                  for(int count=0;count<relCat->attrCount;count++)
                   {
                       if(strcmp(conditions[i].lhsAttr.attrName,attributes[count].attrName)==0)
                       {
@@ -461,9 +463,9 @@ if(nConditions==0)
 
                   }
                   if(!attCorrect)
-                      return QL_INCOHERENCECONDITIONATTRIBUT;
+                      return QL_BADCONDITIONATTRIBUT;
                   if(!valCorrecte)
-                      return QL_INCOHERENCECONDITIONVALEUR;
+                      return QL_BADCONDITIONVALUE;
               }
 
               // Aucun attribut ne possede un index
@@ -473,11 +475,11 @@ if(nConditions==0)
                  p=-1; 
                   rc=pRmm->OpenFile(relName,fh);
                   if(rc!=0)
-                      goto err_return;
+                      return rc;
 
                   rc=fs.OpenScan(fh,INT,4,0,NO_OP,NULL,NO_HINT);
                   if(rc!=0)
-                      goto err_return;
+                      return rc;
 
                   rc=fs.GetNextRec(rec);
 
@@ -489,7 +491,7 @@ if(nConditions==0)
 
                       rc=rec.GetData(data);
                       if(rc!=0)
-                          goto err_return;
+                          return rc;
 
 
 
@@ -500,13 +502,12 @@ if(nConditions==0)
                           {
                               rc=fh.DeleteRec(rid1);
                               if(rc!=0)
-                                  goto err_return;
+                                  return rc;
                           }
 
                           rc=rec.GetRid(rid);
                           if(rc!=0)
-                              goto err_return;
-
+                              return rc;
                           rid.GetPageNum(p);
                           rid.GetSlotNum(s);
 
@@ -519,23 +520,22 @@ if(nConditions==0)
                               {
                                  rc=pIxm->OpenIndex(relName,attributes[i].indexNo,ixh1);
                                   if(rc!=0)
-                                      goto err_return;
+                                      return rc;
 
                                   data1=data+attributes[i].offset;
 
 
                                   rc=ixh1.DeleteEntry(data1,rid);
                                   if(rc!=0)
-                                      goto err_return;
+                                      return rc;
 
                                   rc=ixh1.ForcePages();
                                   if(rc!=0)
-                                      goto err_return;
+                                      return rc;
 
                                   rc=pIxm->CloseIndex(ixh1);
                                   if(rc!=0)
-                                      goto err_return;
-
+                                      return rc;
                               }
                           }
                       }
@@ -545,23 +545,22 @@ if(nConditions==0)
 
                   rc=fs.CloseScan();
                   if(rc!=0)
-                      goto err_return;
+                      return rc;
 
                   if(p!=-1)
                   {
                       rc=fh.DeleteRec(rid1);
                       if(rc!=0)
-                          goto err_return;
+                          return rc;
                   }
 
                   rc=fh.ForcePages(ALL_PAGES);
                   if(rc!=0)
-                      goto err_return;
+                      return rc;
 
                   rc=pRmm->CloseFile(fh);
                   if(rc!=0)
-                      goto err_return;
-
+                      return rc;
               }
 
 
@@ -573,16 +572,15 @@ if(nConditions==0)
                 
                   rc=pRmm->OpenFile(relName,fh);
                   if(rc!=0)
-                      goto err_return;
+                      return rc;
 
                   rc=pIxm->OpenIndex(relName,attributes[numIndexAttr].indexNo,ixh1);
                   if(rc!=0)
-                      goto err_return;
+                      return rc;
 
                   rc=ixis.OpenScan (ixh1,conditions[numIndexCond].op, conditions[numIndexCond].rhsValue.data, NO_HINT);// ouverture d'un scan sur l'index
                   if(rc!=0)
-                      goto err_return;
-
+                      return rc;
                   rc=ixis.GetNextEntry(rid);
                   if (rc!=0 && rc!=IX_EOF)
                       return (rc);
@@ -591,13 +589,13 @@ if(nConditions==0)
                   {
                       rc=fh.GetRec(rid,rec);
                       if(rc!=0)
-                          goto err_return;
+                          return rc;
 
                       rc=rec.GetData(data);
                       if(rc!=0)
-                          goto err_return;
+                          return rc;
 
-                      if(CheckConditionsForAttr(nConditions,conditions,data,relcat->attrCount,attributes,numIndexCond)) // verification du reste des conditions
+                      if(CheckConditionsForAttr(nConditions,conditions,data,relCat->attrCount,attributes,numIndexCond)) // verification du reste des conditions
                       {
                           for(int i=0;i<relcat->attrCount;i++)
                           {
@@ -605,27 +603,27 @@ if(nConditions==0)
                               {
                                   rc=pIxm->OpenIndex(relName,attributes[i].indexNo,ixh2);
                                   if(rc!=0)
-                                      goto err_return;
+                                      return rc;
 
                                   data1=data+attributes[i].offset;
 
 
                                   rc=ixh2.DeleteEntry(data1,rid); // suppression du tuple des differents indexs
                                   if(rc!=0)
-                                      goto err_return;
+                                      return rc;
 
                                   rc=ixh2.ForcePages();
                                   if(rc!=0)
-                                      goto err_return;
+                                      return rc;
 
                                   rc=pIxm->CloseIndex(ixh2);
                                   if(rc!=0)
-                                      goto err_return;
+                                      return rc;
                               }
                           }
                           rc=fh.DeleteRec(rid);// .. et de la relation
                           if(rc!=0)
-                              goto err_return;
+                              return rc;
                       }
                       rc=ixis.GetNextEntry(rid);
                   }
@@ -718,7 +716,7 @@ int compareValues(AttrType attrType,int attrLength,void* value1, void* value2) {
 
 }
 
-bool QL_Manager::CheckConditionsForAttr(int nConditions,const Condition conditions[],char * Data, int nAttr, DataAttrInfo attrInfo[],int numConditionCheckedWithIndex)
+bool CheckConditionsForAttr(int nConditions,const Condition conditions[],char * Data, int nAttr, DataAttrInfo attrInfo[],int numConditionCheckedWithIndex)
 {
         int i,j;
 
