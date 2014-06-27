@@ -344,8 +344,8 @@ int numIndexCond;
                        return QL_RELATIONDONOTEXIST;
 
                   relCat=(SM_RelcatRec*)relcatData;
-                 int numAtt =relCat->attrCount
-DataAttrInfo attributes[numAtt];
+                
+DataAttrInfo attributes[MAXATTRS];
 
 if(nConditions==0)
    {
@@ -511,10 +511,10 @@ if(nConditions==0)
                           rid.GetPageNum(p);
                           rid.GetSlotNum(s);
 
-                          rid1 = RID(p,s);
+                          rid1 = new RID(p,s);
 
 
-                          for(int i=0;i<relcat->attrCount;i++)
+                          for(int i=0;i<relCat->attrCount;i++)
                           {
                               if(attributes[i].indexNo!=-1)
                               {
@@ -597,7 +597,7 @@ if(nConditions==0)
 
                       if(CheckConditionsForAttr(nConditions,conditions,data,relCat->attrCount,attributes,numIndexCond)) // verification du reste des conditions
                       {
-                          for(int i=0;i<relcat->attrCount;i++)
+                          for(int i=0;i<relCat->attrCount;i++)
                           {
                               if((attributes[i].indexNo!=-1))
                               {
@@ -630,15 +630,15 @@ if(nConditions==0)
 
                   rc=ixis.CloseScan();
                   if(rc!=0)
-                      goto err_return;
+                     return rc;
 
                   rc=pRmm->CloseFile(fh);
                   if(rc!=0)
-                      goto err_return;
+                      return rc;
 
                   rc=pIxm->CloseIndex(ixh1);
                   if(rc!=0)
-                      goto err_return;
+                      return rc;
 
               }
 
