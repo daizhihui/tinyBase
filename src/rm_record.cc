@@ -50,6 +50,13 @@ RC RM_Record::GetData(char *&_pData) const
    return (0);
 }
 
+//set data
+RC RM_Record::SetData(char *_pData){
+    pData = _pData;
+    return 0;
+}
+
+
 //
 // GetData
 // 

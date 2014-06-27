@@ -13,7 +13,9 @@ QL_TblScanOp::QL_TblScanOp(const char *tblName, RM_FileHandle &fh, const Conditi
     pSmm = sm;
     op = pCondition->op;
     //rmfs = new RM_FileScan();
-    SchemaLookup(pCondition->lhsAttr,fsAttrInfo);
+    if(pCondition->op != NO_OP){
+        SchemaLookup(pCondition->lhsAttr,fsAttrInfo);
+    }
     //valueData = c.rhsValue.data;
     alwaysEOF = false;
     pinHint = NO_HINT;
@@ -43,12 +45,23 @@ RC QL_TblScanOp::Initialize(AttrType aT, int i, char * name){
 #ifdef QL_DEBUG_OPERATOR
     cout << "begin Initialize TblScan" << endl;
 #endif
-    rc = rmfs.OpenScan((*pRmfh),fsAttrInfo.attrType,fsAttrInfo.attrLength,
+    if(op==NO_OP){
+        //scan for all elements
+        cout << "ALL MATCHES" << endl;
+        rc = rmfs.OpenScan((*pRmfh),INT,sizeof(int),
+                             0,op,NULL,pinHint);
+    }
+    else{
+        rc = rmfs.OpenScan((*pRmfh),fsAttrInfo.attrType,fsAttrInfo.attrLength,
                          fsAttrInfo.offset,op,pCondition->rhsValue.data,pinHint);
+//#ifdef QL_DEBUG_OPERATOR
+//    cout << "fsAttrInfo.attrType" << fsAttrInfo.attrType << "=" << (char*)pCondition->rhsValue.data <<endl;
+//#endif
+    }
 #ifdef QL_DEBUG_OPERATOR
-    cout << "fsAttrInfo.attrType" << fsAttrInfo.attrType << "=" << (char*)pCondition->rhsValue.data <<endl;
+    cout << "END Initialize TblScan" << endl;
+    assert(rc==0);
 #endif
-
     return rc;
 
 }
@@ -78,7 +91,9 @@ RC QL_TblScanOp::GetNext(RM_Record & rec){
             cout << "rc=" << rc << endl;
             assert(0);
 #endif
-
+#ifdef QL_DEBUG_OPERATOR
+    cout << "END getNext of TblScan" << endl;
+#endif
             return rc;
         }
 }
@@ -90,22 +105,34 @@ RC QL_TblScanOp::Finalize (){
 RC QL_TblScanOp::SchemaLookup(const RelAttr &relattr, QL_RelAttrInfo &info){
 #ifdef QL_DEBUG_OPERATOR
     cout << "begin SchemaLookup of QL_TblScanOp" << endl;
+    this->Print(cout,0);
+    cout << "relAttre" << relattr << endl;
 #endif
     RC rc;
+
+
+    //compare relattr.relName with tableName
+    if(strcmp(relattr.relName, tableName)) {
+
+        return SM_ATTRNOTFOUND;
+    }
+
     //calculer offset
     RM_Record rec;
     char *pdata;
-    if(rc = pSmm->GetAttributeInfo(relattr.relName,relattr.attrName,rec,pdata))
+    if(rc = pSmm->GetAttributeInfo(tableName,relattr.attrName,rec,pdata))
     {
-#ifdef DEBUG_QL
+#ifdef QL_DEBUG_OPERATOR
         if(!rc)
                 assert(0);
 #endif
         return rc;
     }
+    info.attrType = *(AttrType*)(pdata+2*MAXNAME+sizeof(int));
     info.attrLength = *(int*)(pdata+2*MAXNAME+sizeof(int)+sizeof(AttrType));
     info.offset = *(int*)(pdata+2*MAXNAME);
 #ifdef QL_DEBUG_OPERATOR
+    cout << "in TAble scan,"<<info.attrType << "****" << info.attrLength << "*****" << info.offset << endl;
     cout << "END OF SchemaLookup of QL_TblScanOp" << endl;
 #endif
     return 0;

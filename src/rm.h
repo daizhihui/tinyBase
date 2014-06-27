@@ -35,6 +35,7 @@ public:
     // Return the data corresponding to the record.  Sets *pData to the
     // record contents.
     RC GetData(char *&pData) const;
+    RC SetData(char *pData);
 
     // Return the RID associated with the record
     RC GetRid (RID &rid) const;
