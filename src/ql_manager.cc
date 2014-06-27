@@ -995,7 +995,8 @@ RC QL_Manager::SelectPlan1(int   nSelAttrs,
     //
     //filter then joins always.
     //all tables have at least one join attribute between them
-    
+    alwaysMatch.op = NO_OP;
+
     
     //--------
     //get all filters to apply on first relation
@@ -1022,13 +1023,18 @@ RC QL_Manager::SelectPlan1(int   nSelAttrs,
     QL_Operator* leftSide;
  
     // start with tablescan
+    if(numberOfResultConditions != 0 ){
         leftSide = new QL_TblScanOp(relations[0],pRmfhs[0][0],conditions[conditionArr[0]],pSmm)
         for(int sC = 1;sC<numberOfResultConditions;sC++)
         {    //apply rest of filters before join
             QL_FilterOp * fOp = new QL_FilterOp(leftSide,conditions[conditionArr[sC]],pSmm);
             leftSide=fOp;
         }
-    
+    }
+    else
+        leftSide = new QL_TblScanOp(relations[0],pRmfhs[0][0],alwaysMatch,pSmm)
+
+        
     
     //do join
  
@@ -1074,12 +1080,22 @@ RC QL_Manager::SelectPlan1(int   nSelAttrs,
                         break;
                     }
             }
-        if(indexOnJoinA)
+        if(indexOnJoinA)//index scan on join attribute
         {
             R2 = new QL_IxScanOp(relations[rightRelationIndex],*(pRmfhs[rightRelationIndex]),resultIndexConditions[indexedAttributeCondition],pIxm,pSmm);
         }
-        else if(indexNo!=-1)
-            R2 = new QL_TblScanOp(relations[rightRelationIndex],*(pRmfhs[rightRelationIndex]),condtionArrR2[indexedAttributeCondition],pSmm);
+        else if(indexNo!=-1)//index scan on filter condition
+        {
+            R2 = new QL_IxScanOp(relations[rightRelationIndex],*(pRmfhs[rightRelationIndex]),conditions[condtionArrR2[indexedAttributeCondition]],pSmm);
+        }
+        else//table scan
+        {
+            if(numberOfResultConditionsR2 > 0){
+            R2 = new QL_TblScanOp(relations[rightRelationIndex],*(pRmfhs[rightRelationIndex]),conditions[condtionArrR2[0]],pSmm);
+            }
+            else
+                R2 =new QL_TblScanOp(relations[rightRelationIndex],*(pRmfhs[rightRelationIndex]),alwaysMatch,pSmm);
+        }
         //do remaining filters:
         //do remaining filters on right table R2
         for(int sC = 0;sC<numberOfResultConditionsR2;sC++)
