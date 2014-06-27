@@ -46,6 +46,8 @@ select student.no, student.name from student where student.comment = "foo" and s
 //test join, the first relation has selection
  select stars.stname, soaps.sname from soaps, stars where soaps.soapid= stars.soapid and soaps.network = "ABC";
 
+ select stars.stname, soaps.sname from soaps, stars where soaps.soapid= stars.soapid and soaps.network = "ABC" and stars.plays = "Opal";
+
 //test join, the first relation has selection and filter
  select stars.stname, soaps.sname from soaps, stars where soaps.soapid = stars.soapid and soaps.network = "ABC" AND soaps.name = "xx"
 

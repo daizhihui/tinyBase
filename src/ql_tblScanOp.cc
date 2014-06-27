@@ -34,7 +34,7 @@ QL_TblScanOp::QL_TblScanOp(const char *tblName, RM_FileHandle &fh, const Conditi
 }
 
 QL_TblScanOp::~QL_TblScanOp(){
-    delete pRmfh;
+    //delete pRmfh;
     //delete pSmm;
     delete valueData;
     delete leftData;
@@ -48,8 +48,10 @@ RC QL_TblScanOp::Initialize(AttrType aT, int i, char * name){
     if(op==NO_OP){
         //scan for all elements
         cout << "ALL MATCHES" << endl;
+        assert(pRmfh != NULL);
         rc = rmfs.OpenScan((*pRmfh),INT,sizeof(int),
                              0,op,NULL,pinHint);
+
     }
     else{
         rc = rmfs.OpenScan((*pRmfh),fsAttrInfo.attrType,fsAttrInfo.attrLength,

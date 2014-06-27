@@ -59,6 +59,7 @@ RC RM_FileScan::OpenScan(const RM_FileHandle &fileHandle,
                          void       *_value,
                          ClientHint _pinHint)
 {
+
    // Sanity Check: 'this' should not be open yet
    if (bScanOpen)
       // Test: opened RM_FileScan

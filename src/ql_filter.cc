@@ -137,8 +137,11 @@ QL_ProjectOp::QL_ProjectOp     (QL_Operator *pCld, int nPAttrs , const RelAttr r
         else projAttrInfos[i].offset = projAttrInfos[i-1].offset + projAttrInfos[i-1].attrLength;
     }
     this->tupleLength = projAttrInfos[nProjAttrs-1].offset + projAttrInfos[nProjAttrs-1].attrLength;
-    cout << "tuple Length after projection " << tupleLength<<  endl;
-
+    //cout << "tuple Length after projection " << tupleLength<<  endl;
+    //print all in projAttrInfos
+    for(int i = 0; i< nProjAttrs; i++){
+        cout <<projAttrInfos[i].attrType << projAttrInfos[i].attrLength << "offset" <<projAttrInfos[i].offset <<endl;
+    }
 }
 QL_ProjectOp::~QL_ProjectOp    (){
     delete pChild;
@@ -169,23 +172,26 @@ RC QL_ProjectOp::GetNext(RM_Record &rec){
     cout << *(int*)pDataRec << endl;
     cout << "this->tupleLength = " << this->tupleLength << endl;
     //cout << "name tested " << pDataRec+4 << endl;
-    char * pData = new char[this->tupleLength];
-    for(int i = 0; i< nProjAttrs; i++){
-        QL_RelAttrInfo tInfo;
-        pChild->SchemaLookup(projAttrs[i],tInfo);
-#ifdef QL_DEBUG_OPERATOR
-//    cout << "tupleLength" << this->tupleLength<<endl;
-        cout << "projAttr OFFSET in last operator" << tInfo.offset <<endl;
-        cout << "tInfo.attrLength = " << tInfo.attrLength <<endl;
-#endif
-        memcpy(pData+projAttrInfos[i].offset,pDataRec+tInfo.offset,tInfo.attrLength);
-    }
-    rec.SetData(pData);
-#ifdef QL_DEBUG_OPERATOR
-//    cout << "tupleLength" << this->tupleLength<<endl;
-   cout << "projAttr OFFSET in this operator" << projAttrInfos[0].offset <<endl;
-    cout << "data content" << pData <<endl;
-#endif
+    cout << "before pData" << endl;
+//    char * pData = new char[this->tupleLength]; //--->error no memory
+//    cout << "after pData" << endl;
+//    for(int i = 0; i< nProjAttrs; i++){
+//        QL_RelAttrInfo tInfo;
+//        cout << "proj" << projAttrs[i] << endl;
+//        pChild->SchemaLookup(projAttrs[i],tInfo);
+//#ifdef QL_DEBUG_OPERATOR
+////    cout << "tupleLength" << this->tupleLength<<endl;
+//        cout << "projAttr OFFSET in last operator" << tInfo.offset <<endl;
+//        cout << "tInfo.attrLength = " << tInfo.attrLength <<endl;
+//#endif
+//        memcpy(pData+projAttrInfos[i].offset,pDataRec+tInfo.offset,tInfo.attrLength);
+//    }
+//    rec.SetData(pData);
+//#ifdef QL_DEBUG_OPERATOR
+////    cout << "tupleLength" << this->tupleLength<<endl;
+//   cout << "projAttr OFFSET in this operator" << projAttrInfos[0].offset <<endl;
+//    cout << "data content" << pData <<endl;
+//#endif
 
 //#ifdef QL_DEBUG_OPERATOR
 //    char * testData;
@@ -329,7 +335,7 @@ RC QL_NLJOp::SchemaLookup  (const RelAttr &relattr, QL_RelAttrInfo &info){
     if(rc=pLeftChild->SchemaLookup(relattr,tInfo)) {
         rc = pRightChild->SchemaLookup(relattr,tInfo);
 #ifdef QL_DEBUG_OPERATOR
-        if(!rc)
+        if(rc)
                 assert(0);
 
 #endif

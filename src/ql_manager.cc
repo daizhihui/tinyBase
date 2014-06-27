@@ -931,15 +931,21 @@ RC QL_Manager::SelectPlan0(int   nSelAttrs,
                                       conditionArrR2);
         QL_Operator* R2;
         if(numberOfResultConditionsR2 > 0){
+            assert((pRmfhs[rightRelationIndex]) != NULL);
+            RM_FileScan      rmfs;
+
+            RC rc = rmfs.OpenScan((*pRmfhs)[rightRelationIndex],INT,sizeof(int),
+                          0,NO_OP,NULL);
+            assert(rc==0);
             R2 = new QL_TblScanOp(relations[rightRelationIndex],
-                                            *(pRmfhs[rightRelationIndex]),
+                                            (*pRmfhs)[rightRelationIndex],
                                             conditions[conditionArrR2[0]],pSmm);//with 1 condition
         }
         else {
     #ifdef QL_DEBUG
             cout << "this relation has no selection attr = value" << endl;
     #endif
-            R2 = new QL_TblScanOp(relations[rightRelationIndex],*(pRmfhs[rightRelationIndex]),alwaysMatch,pSmm);
+            R2 = new QL_TblScanOp(relations[rightRelationIndex],(*pRmfhs)[rightRelationIndex],alwaysMatch,pSmm);
         }
         //do remaining filters on right table R2
         for(int sC = 1;sC<numberOfResultConditionsR2;sC++)
