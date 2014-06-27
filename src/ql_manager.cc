@@ -112,7 +112,6 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
 RC QL_Manager::Insert(const char *relName,
                       int nValues, const Value values[])
 {
- #ifndef QL_SELECT_DEBUG
       RC rc;
     RM_Record tmpRec;
     char *relcatData;
@@ -290,7 +289,6 @@ err_deleteihs:
 err_return:
     return (rc);
 
-#endif
 }
 
 
@@ -300,7 +298,6 @@ err_return:
 RC QL_Manager::Delete(const char *relName,
                       int nConditions, const Condition conditions[])
 {
-#ifndef QL_SELECT_DEBUG
 
     int i;
     
@@ -646,7 +643,6 @@ if(nConditions==0)
 
 }
     
-#endif
 
  
     return 0;
@@ -659,7 +655,6 @@ if(nConditions==0)
 
 
 
-#ifndef QL_SELECT_DEBUG
 
 
 int compareValues(AttrType attrType,int attrLength,void* value1, void* value2) {
@@ -805,7 +800,6 @@ bool CheckConditionsForAttr(int nConditions,const Condition conditions[],char * 
         }
         return true;
 }
-#endif
 //
 // Update from the relName all tuples that satisfy conditions
 //
@@ -988,7 +982,6 @@ RC QL_Manager::SelectPlan1(int   nSelAttrs,
                            RM_FileHandle **pRmfhs,
                            QL_Operator *&root)
 {
-    #ifndef QL_SELECT_DEBUG
    //indexed, filter then join
     //If index on restriction attribute AND on join attribute, we will chose join attribute index.
     //SelectPlan2 will do the other way around.
@@ -1002,7 +995,7 @@ RC QL_Manager::SelectPlan1(int   nSelAttrs,
     //get all filters to apply on first relation
     
     //join conditions:
-    int* nResultCond = new int[nConditions];
+    int* nResultCond = new int[nConditions-1];
     int** resultIndexConditions= new int*[nConditions];
     for(int i =0;i<nConditions;i++)
     {
@@ -1024,7 +1017,7 @@ RC QL_Manager::SelectPlan1(int   nSelAttrs,
  
     // start with tablescan
     if(numberOfResultConditions != 0 ){
-        leftSide = new QL_TblScanOp(relations[0],pRmfhs[0][0],conditions[conditionArr[0]],pSmm)
+        leftSide = new QL_TblScanOp(relations[0],pRmfhs[0][0],conditions[conditionArr[0]],pSmm);
         for(int sC = 1;sC<numberOfResultConditions;sC++)
         {    //apply rest of filters before join
             QL_FilterOp * fOp = new QL_FilterOp(leftSide,conditions[conditionArr[sC]],pSmm);
@@ -1032,7 +1025,7 @@ RC QL_Manager::SelectPlan1(int   nSelAttrs,
         }
     }
     else
-        leftSide = new QL_TblScanOp(relations[0],pRmfhs[0][0],alwaysMatch,pSmm)
+        leftSide = new QL_TblScanOp(relations[0],pRmfhs[0][0],alwaysMatch,pSmm);
 
         
     
@@ -1060,9 +1053,9 @@ RC QL_Manager::SelectPlan1(int   nSelAttrs,
         //    //---
             int indexedAttributeCondition;
             int indexNo=-1;
-            for(int rC=0;rC<nResultCond,rC++)
+            for(int rC=0;rC<nResultCond[i];rC++)
             {
-                if(resultIndexConditions[rC].relAttr.tableName == R2 && (indexNo=resultIndexConditions[rC].relAttr)>-1){
+                if(conditions[resultIndexConditions[i][rC]].lhsAttr.relName == relations[i] && (indexNo=attributeHasIndex(conditions[resultIndexConditions[i][rC]].lhsAttr))>-1){
                     //use this index
                     //remember this condition's index.
                     indexedAttributeCondition=rC;
@@ -1073,7 +1066,7 @@ RC QL_Manager::SelectPlan1(int   nSelAttrs,
             if(indexNo==-1)
             {//no index on join attribute, check on others
                 for(int sRC=0;sRC<numberOfResultConditions;sRC++)
-                    if(conditionArrR2[sRC].relAttr.tableName == R2 && (indexNo=conditionArrR2[sRC].relAttr)>-1){
+                    if(conditions[conditionArrR2[sRC]].lhsAttr.relName== relations[i] && (indexNo=attributeHasIndex(conditions[conditionArrR2[sRC]].lhsAttr))>-1){
                         //use this index
                         //remember this condition's index.
                         indexedAttributeCondition=sRC;
@@ -1082,16 +1075,16 @@ RC QL_Manager::SelectPlan1(int   nSelAttrs,
             }
         if(indexOnJoinA)//index scan on join attribute
         {
-            R2 = new QL_IxScanOp(relations[rightRelationIndex],*(pRmfhs[rightRelationIndex]),resultIndexConditions[indexedAttributeCondition],pIxm,pSmm);
+            R2 = new QL_IxScanOp(relations[rightRelationIndex],*(pRmfhs[rightRelationIndex]),conditions[resultIndexConditions[i][indexedAttributeCondition]],pIxm,pSmm);
         }
         else if(indexNo!=-1)//index scan on filter condition
         {
-            R2 = new QL_IxScanOp(relations[rightRelationIndex],*(pRmfhs[rightRelationIndex]),conditions[condtionArrR2[indexedAttributeCondition]],pSmm);
+            R2 = new QL_IxScanOp(relations[rightRelationIndex],*(pRmfhs[rightRelationIndex]),conditions[conditionArrR2[indexedAttributeCondition]],pIxm,pSmm);
         }
         else//table scan
         {
             if(numberOfResultConditionsR2 > 0){
-            R2 = new QL_TblScanOp(relations[rightRelationIndex],*(pRmfhs[rightRelationIndex]),conditions[condtionArrR2[0]],pSmm);
+            R2 = new QL_TblScanOp(relations[rightRelationIndex],*(pRmfhs[rightRelationIndex]),conditions[conditionArrR2[0]],pSmm);
             }
             else
                 R2 =new QL_TblScanOp(relations[rightRelationIndex],*(pRmfhs[rightRelationIndex]),alwaysMatch,pSmm);
@@ -1136,7 +1129,6 @@ RC QL_Manager::SelectPlan1(int   nSelAttrs,
     delete [] resultIndexConditions;
     
     cout << "end of selectPlan1" << endl;
-#endif
     return 0;
     
 }
