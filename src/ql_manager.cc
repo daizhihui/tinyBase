@@ -133,20 +133,20 @@ RC QL_Manager::Insert(const char *relName,
     
     // Get the attribute count
     if ((rc = pSmm->GetRelationInfo(relName, tmpRec, relcatData)))
-        goto err_return;
+        return (rc);
     
     // Allocate indexhandle array
     ihs = new IX_IndexHandle[((SM_RelcatRec *)relcatData)->attrCount];
     if (ihs == NULL) {
         rc = SM_NOMEM;
-        goto err_return;
+       return (rc);
     }
     
     // Allocate attributes array
     attributes = new SM_AttrcatRec[((SM_RelcatRec *)relcatData)->attrCount];
     if (attributes == NULL) {
         rc = SM_NOMEM;
-        goto err_deletedata;
+        return (rc);
     }
     
     
@@ -162,7 +162,7 @@ RC QL_Manager::Insert(const char *relName,
     strncpy(_relName, relName, MAXNAME);
     if ((rc = fs.OpenScan(pSmm->fhAttrcat, STRING, MAXNAME,
                           OFFSET(SM_AttrcatRec, relName), EQ_OP, _relName)))
-        goto err_deletedata;
+        return (rc);
     
     // Fill out attributes array
     while ((rc = fs.GetNextRec(rec)) != RM_EOF) {
@@ -170,11 +170,11 @@ RC QL_Manager::Insert(const char *relName,
         
         if (rc != 0) {
             fs.CloseScan();
-            goto err_deletedata;
+            return (rc);
         }
         if ((rc = rec.GetData(_data))) {
             fs.CloseScan();
-            goto err_deletedata;
+            return (rc);
         }
         
         memcpy(&attributes[i], _data, sizeof(SM_AttrcatRec));
@@ -184,8 +184,7 @@ RC QL_Manager::Insert(const char *relName,
     
     // Close a file scan for ATTRCAT
     if ((rc = fs.CloseScan()))
-        goto err_deletedata;
-    
+        return (rc);
     
     // Open relation file
     if ((rc = pRmm->OpenFile(relName, fh))) return(rc);
@@ -194,8 +193,15 @@ RC QL_Manager::Insert(const char *relName,
     for (i = 0; i < ((SM_RelcatRec *)relcatData)->attrCount; i++) {
         if (attributes[i].indexNo == -1)
             continue;
-        if ((rc = pIxm->OpenIndex(relName, attributes[i].indexNo, ihs[i])))
-            goto err_closeindexes;
+        if ((rc = pIxm->OpenIndex(relName, attributes[i].indexNo, ihs[i]))){
+                for (i = 0; i < ((SM_RelcatRec *)relcatData)->attrCount; i++)
+        if (attributes[i].indexNo != -1)
+            pIxm->CloseIndex(ihs[i]);
+    //err_closefile:
+    pRmm->CloseFile(fh);
+    return (rc);
+        }
+            
     }
     
     
@@ -253,8 +259,14 @@ RC QL_Manager::Insert(const char *relName,
     for (i = 0; i < ((SM_RelcatRec *)relcatData)->attrCount; i++) {
         if (attributes[i].indexNo == -1)
             continue;
-        if ((rc = pIxm->CloseIndex(ihs[i])))
-            goto err_closeindexes;
+        if ((rc = pIxm->CloseIndex(ihs[i]))){
+                for (i = 0; i < ((SM_RelcatRec *)relcatData)->attrCount; i++)
+        if (attributes[i].indexNo != -1)
+            pIxm->CloseIndex(ihs[i]);
+    //err_closefile:
+    return (rc);
+        }
+            
     }
     
     
