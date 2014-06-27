@@ -523,7 +523,7 @@ if(nConditions==0)
                           rid.GetPageNum(p);
                           rid.GetSlotNum(s);
 
-                          rid1 = new RID(p,s);
+                          rid1(p,s);
 
 
                           for(int i=0;i<relCat->attrCount;i++)
