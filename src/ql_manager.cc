@@ -22,7 +22,8 @@
 #define QL_SELECT_DEBUG 1
 #define QL_DEBUG
 using namespace std;
-
+bool CheckConditionsForAttr(int nConditions,const Condition conditions[],char * Data, int nAttr, DataAttrInfo attrInfo[],int numConditionCheckedWithIndex);
+int compareValues(AttrType attrType,int attrLength,void* value1, void* value2);
 //prototype
 // QL_Manager::QL_Manager(SM_Manager &smm, IX_Manager &ixm, RM_Manager &rmm)
 //
@@ -520,7 +521,7 @@ if(nConditions==0)
                           rid.GetPageNum(p);
                           rid.GetSlotNum(s);
 
-                          rid1(p,s);
+                          rid1=rid;
 
 
                           for(int i=0;i<relCat->attrCount;i++)
