@@ -128,26 +128,25 @@ RC QL_Manager::Insert(const char *relName,
     // Sanity Check: relName should not be RELCAT or ATTRCAT
     if (strcmp(relName, RELCAT) == 0 || strcmp(relName, ATTRCAT) == 0) {
         rc = SM_INVALIDRELNAME;
-        return (rc);
+        goto err_return;
     }
     
     // Get the attribute count
     if ((rc = pSmm->GetRelationInfo(relName, tmpRec, relcatData)))
-        return (rc);
+        goto err_return;
     
     // Allocate indexhandle array
     ihs = new IX_IndexHandle[((SM_RelcatRec *)relcatData)->attrCount];
     if (ihs == NULL) {
         rc = SM_NOMEM;
-        return (rc);
+        goto err_return;
     }
     
     // Allocate attributes array
     attributes = new SM_AttrcatRec[((SM_RelcatRec *)relcatData)->attrCount];
     if (attributes == NULL) {
         rc = SM_NOMEM;
-        delete[] record_data;
-return (rc);
+        goto err_deletedata;
     }
     
     
@@ -163,7 +162,7 @@ return (rc);
     strncpy(_relName, relName, MAXNAME);
     if ((rc = fs.OpenScan(pSmm->fhAttrcat, STRING, MAXNAME,
                           OFFSET(SM_AttrcatRec, relName), EQ_OP, _relName)))
-        return rc;
+        goto err_deletedata;
     
     // Fill out attributes array
     while ((rc = fs.GetNextRec(rec)) != RM_EOF) {
@@ -171,11 +170,11 @@ return (rc);
         
         if (rc != 0) {
             fs.CloseScan();
-            return (rc);
+            goto err_deletedata;
         }
         if ((rc = rec.GetData(_data))) {
             fs.CloseScan();
-            return (rc);
+            goto err_deletedata;
         }
         
         memcpy(&attributes[i], _data, sizeof(SM_AttrcatRec));
@@ -185,7 +184,7 @@ return (rc);
     
     // Close a file scan for ATTRCAT
     if ((rc = fs.CloseScan()))
-        return (rc);
+        goto err_deletedata;
     
     
     // Open relation file
@@ -195,15 +194,8 @@ return (rc);
     for (i = 0; i < ((SM_RelcatRec *)relcatData)->attrCount; i++) {
         if (attributes[i].indexNo == -1)
             continue;
-        if ((rc = pIxm->OpenIndex(relName, attributes[i].indexNo, ihs[i]))){
-    for (i = 0; i < ((SM_RelcatRec *)relcatData)->attrCount; i++)
-        if (attributes[i].indexNo != -1)
-            pIxm->CloseIndex(ihs[i]);
-    //err_closefile:
-    pRmm->CloseFile(fh);
-return (rc);
-}
-            
+        if ((rc = pIxm->OpenIndex(relName, attributes[i].indexNo, ihs[i])))
+            goto err_closeindexes;
     }
     
     
@@ -261,13 +253,8 @@ return (rc);
     for (i = 0; i < ((SM_RelcatRec *)relcatData)->attrCount; i++) {
         if (attributes[i].indexNo == -1)
             continue;
-        if ((rc = pIxm->CloseIndex(ihs[i]))){
-    for (i = 0; i < ((SM_RelcatRec *)relcatData)->attrCount; i++)
-        if (attributes[i].indexNo != -1)
-            pIxm->CloseIndex(ihs[i]);
-return (rc);
-}
-            
+        if ((rc = pIxm->CloseIndex(ihs[i])))
+            goto err_closeindexes;
     }
     
     
@@ -353,7 +340,7 @@ int numIndexCond;
                }
            // Sanity Check: relation should exist
 
-                   if(rc!=GetRelationInfo(relName,tmpRec,relcatData))
+                   if((rc = pSmm->GetRelationInfo(relName, tmpRec, relcatData)))
                        return QL_RELATIONDONOTEXIST;
 
                   relCat=(SM_RelcatRec*)relcatData;
