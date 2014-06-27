@@ -942,7 +942,7 @@ RC QL_Manager::SelectPlan1(int   nSelAttrs,
 {
     #ifndef QL_SELECT_DEBUG
    //indexed, filter then join
-    //If index on restriction attribute AND on join attribute, we will chose restriction attribute index.
+    //If index on restriction attribute AND on join attribute, we will chose join attribute index.
     //SelectPlan2 will do the other way around.
     //
     //filter then joins always.
@@ -970,100 +970,110 @@ RC QL_Manager::SelectPlan1(int   nSelAttrs,
     getSelectConditionsByRelation(relations[0],nConditions,conditions,pRmfhs,
                                   numberOfResultConditions,conditionArr);
     
-    bool indexOnJoinA= false;
-    //---
-    int indexNo=-1;
-    for(int rC=0;rC<nResultCond,rC++)
-    {
-        if((indexNo=resultIndexConditions[rC].relAttr)>-1){
-            //use this index
-            //remember this attribute.
-            indexOnJoinA=true;
-            break;
-        }
-    }
-    if(indexNo==-1)
-    {//no index on join attribute, check on others
-        for(int srC=0;sRC<numberOfResultConditions;sRC++)
-            if((indexNo=resultIndexConditions[rC].relAttr)>-1){
-                //use this index
-                //remember this attribute.
-                break;
-            }
-    }
-    
-    if(indexOnJoinA)
-    {// do filters first then join
-        
-    }
-    else
-    {// filters on non-join attributes
-        
-    }
-    
-    QL_Operator* leftSide = new QL_TblScanOp(relations[0],pRmfhs[0][0],conditions[conditionArr[0]],pSmm);//always is left side
-    //do filters on first relation
-    for(int sC = 1;sC<numberOfResultConditions;sC++)
-    {
-        QL_FilterOp * fOp = new QL_FilterOp(leftSide,conditions[conditionArr[sC]],pSmm);
-        leftSide=fOp;
-    }
-    //left side is now filtered
+    //suppose a tablescan on leftside always.
+    QL_Operator* leftSide;
  
+    // start with tablescan
+        leftSide = new QL_TblScanOp(relations[0],pRmfhs[0][0],conditions[conditionArr[0]],pSmm)
+        for(int sC = 1;sC<numberOfResultConditions;sC++)
+        {    //apply rest of filters before join
+            QL_FilterOp * fOp = new QL_FilterOp(leftSide,conditions[conditionArr[sC]],pSmm);
+            leftSide=fOp;
+        }
     
+    
+    //do join
+ 
     //----
-
-    
-    //do filters on first relation
-    for(int sC = 1;sC<numberOfResultConditions;sC++)
-    {
-        QL_FilterOp * fOP = new QL_FilterOp(leftSide,conditionArr[sC],pSmm);
-        leftSide=fOp;
-    }
-    //left side is now filtered
-    
+ 
     int i =0;
     //do joins as left sided tree
     while(i<nRelations)
     {
         //get join conditions, and right relation
-        int * joinCondArr;
-        int numberOfJoinResultConditions;
-        int rightRelationIndex;
-        getJoinConditions(nRelations, relations, nConditions, conditions, i, pRmfhs
-                          , &numberOfResultConditions,joinCondArr,&rightRelationIndex));
+        int * joinCondArr = resultIndexConditions[i];
+        int numberOfJoinResultConditions=nResultCond[i];
+        int rightRelationIndex=rightRelationIndexes[i];
         
         //get condition filters on right table
-        int * conditionArrR2;
+        int * conditionArrR2 = new int[nConditions];
         int numberOfResultConditionsR2;
-        getSelectConditionsByRelation(relations[rightRelationIndex],nConditions,conditions,pRmfhs,&numberOfResultConditionsR2,conditionArrR2);
-        
-        QL_TblScanOp* R2 = new QL_TblScanOp(relations[rightRelationIndex],pRmfhs[rightRelationIndex],conditionArrR2[0],pSmm);//with 1 condition
-        
-        //do remaining filters on right table R2
-        for(int sC = 1;sC<numberOfResultConditionsR2;sC++)
+        getSelectConditionsByRelation(relations[rightRelationIndex],nConditions,
+                                      conditions,pRmfhs,numberOfResultConditionsR2,
+                                      conditionArrR2);
+        QL_Operator* R2;
+            bool indexOnJoinA= false;
+        //    //---
+            int indexedAttributeCondition;
+            int indexNo=-1;
+            for(int rC=0;rC<nResultCond,rC++)
+            {
+                if(resultIndexConditions[rC].relAttr.tableName == R2 && (indexNo=resultIndexConditions[rC].relAttr)>-1){
+                    //use this index
+                    //remember this condition's index.
+                    indexedAttributeCondition=rC;
+                    indexOnJoinA=true;
+                    break;
+                }
+            }
+            if(indexNo==-1)
+            {//no index on join attribute, check on others
+                for(int sRC=0;sRC<numberOfResultConditions;sRC++)
+                    if(conditionArrR2[sRC].relAttr.tableName == R2 && (indexNo=conditionArrR2[sRC].relAttr)>-1){
+                        //use this index
+                        //remember this condition's index.
+                        indexedAttributeCondition=sRC;
+                        break;
+                    }
+            }
+        if(indexOnJoinA)
         {
-            QL_FilterOp * fOP = new QL_FilterOp(R2,conditionArrR2[sC],pSmm);
+            R2 = new QL_IxScanOp(relations[rightRelationIndex],*(pRmfhs[rightRelationIndex]),resultIndexConditions[indexedAttributeCondition],pIxm,pSmm);
+        }
+        else if(indexNo!=-1)
+            R2 = new QL_TblScanOp(relations[rightRelationIndex],*(pRmfhs[rightRelationIndex]),condtionArrR2[indexedAttributeCondition],pSmm);
+        //do remaining filters:
+        //do remaining filters on right table R2
+        for(int sC = 0;sC<numberOfResultConditionsR2;sC++)
+        {
+            QL_Operator * fOp;
+            if(indexNo!=-1 && !indexOnJoinA && sC!=indexedAttributeCondition)//index was on cond, only add if != iAC
+                    fOp= new QL_FilterOp(R2,conditions[conditionArrR2[sC]],pSmm);
+            else if(indexNo==-1 || indexOnJoinA)//no index or index on join A, add anyway
+                fOp= new QL_FilterOp(R2,conditions[conditionArrR2[sC]],pSmm);
+            
             R2=fOp;
         }
+        //do join:
         
+            
         //do nested loop join left side with filtered R2
-        QL_NLJOp* NLJOP = new QL_NLJOp(leftSide, R2, joinCondArr[0], pSmm);//do join on 1 attribute
+        QL_Operator* NLJOP = new QL_NLJOp(leftSide, R2, conditions[joinCondArr[0]], pSmm);//do join on 1 attribute
         //do filter for all remaining join attributes
         for(int jA = 1; jA<numberOfJoinResultConditions;jA++)
         {
-            QL_FilterOp * fOP = new QL_FilterOp(NJLOP,joinCondArr[jA],pSmm);
-            NJLOP=fOP;
+            QL_Operator * fOP = new QL_FilterOp(NLJOP,conditions[joinCondArr[jA]],pSmm);
+            NLJOP=fOP;
         }
         leftSide=NLJOP;
         //join done
         i++;
+        delete []conditionArrR2;
     }
-    root = leftSide;
+    QL_Operator *projOp = new QL_ProjectOp(leftSide,nSelAttrs,selAttrs);
+    root = projOp;
+    delete []conditionArr;
+    delete []nResultCond;
+    delete []rightRelationIndexes;
+    for(int i=0;i<nConditions;i++)
+    {
+        delete[] resultIndexConditions[i];
+    }
+    delete [] resultIndexConditions;
     
+    cout << "end of selectPlan1" << endl;
 #endif
     return 0;
-    
     
 }
 RC QL_Manager::SelectPlan2(int   nSelAttrs,
