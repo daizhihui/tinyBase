@@ -337,7 +337,7 @@ int numIndexCond;
                }
            // Sanity Check: relation should exist
 
-                   if(rc!=GetRelationInfo(relName,tmpRec,relcatData))
+                   if((rc = pSmm->GetRelationInfo(relName, tmpRec, relcatData)))
                        return QL_RELATIONDONOTEXIST;
 
                   relCat=(SM_RelcatRec*)relcatData;
