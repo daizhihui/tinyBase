@@ -128,7 +128,7 @@ RC QL_Manager::Insert(const char *relName,
     // Sanity Check: relName should not be RELCAT or ATTRCAT
     if (strcmp(relName, RELCAT) == 0 || strcmp(relName, ATTRCAT) == 0) {
         rc = SM_INVALIDRELNAME;
-        goto err_return;
+     return (rc);
     }
     
     // Get the attribute count
