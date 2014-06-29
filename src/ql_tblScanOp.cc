@@ -1,5 +1,5 @@
 #include "ql_internal.h"
-#define QL_DEBUG_OPERATOR
+//#define QL_DEBUG_OPERATOR
 
 #define OFFSET(type, member) ((int)&((type *) 0)->member)
 QL_TblScanOp::QL_TblScanOp(const char *tblName, RM_FileHandle &fh, const Condition & c,SM_Manager *sm){
@@ -47,7 +47,7 @@ RC QL_TblScanOp::Initialize(AttrType aT, int i, char * name){
 #endif
     if(op==NO_OP){
         //scan for all elements
-        cout << "ALL MATCHES" << endl;
+        //cout << "ALL MATCHES" << endl;
         assert(pRmfh != NULL);
         rc = rmfs.OpenScan((*pRmfh),INT,sizeof(int),
                              0,op,NULL,pinHint);

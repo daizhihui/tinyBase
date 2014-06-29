@@ -171,16 +171,19 @@ void Printer::Print(ostream &c, const void * const data[])
         if (attributes[i].attrType == STRING) {
             // We will only print out the first MAXNAME+10 characters of
             // the string value.
+            cout << "String" << endl;
             memset(str,0,MAXPRINTSTRING);
 
             if (attributes[i].attrLength>MAXPRINTSTRING) {
                 strncpy(str, (char *)data[i], MAXPRINTSTRING-1);
                 str[MAXPRINTSTRING-3] ='.';
                 str[MAXPRINTSTRING-2] ='.';
+                cout << "cout direct" << str << endl;
                 c << str;
                 Spaces(MAXPRINTSTRING, strlen(str));
             } else {
                 strncpy(str, (char *)data[i], attributes[i].attrLength);
+                cout << "cout direct < MAXPRINTSTRING" << str << endl;
                 c << str;
                 if (attributes[i].attrLength < (int) strlen(psHeader[i]))
                     Spaces(strlen(psHeader[i]), strlen(str));

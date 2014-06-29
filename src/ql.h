@@ -146,7 +146,7 @@ private:
                                      int* resultIndexConditions, int   &nResultRelations, int * resultIndexRelations);
     RC getRelationByBoolMap(bool *used, int nRelation, int i, int &numResult);
     
-    int attributeHasIndex(RelAttr attribute);//returns indexNo
+//    int attributeHasIndex(RelAttr attribute);//returns indexNo
 
     //to get relation name for relAttr even relAttr is not "rel.attr"
     RC getRelName(const RelAttr &relAttr, int nRelations, const char * const relations[], const char* relName, DataAttrInfo &dataAttr);

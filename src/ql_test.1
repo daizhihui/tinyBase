@@ -31,11 +31,11 @@ select student.name, student.dept from student where student.no=1;
 
 exit;
 
-//test if tableScan without conditons work(projection work ?)
-select student.name from student    
+//test if tableScan without conditons work(projection work)
+select student.name from student;    
 	-> OK
 //test if selection works
-select student.name from student where student.no = 1
+select student.name from student where student.no = 1;
 	-> OK
 //test if filter works
 select student.name from student where student.no = 1 AND student.name = "Adams";
@@ -43,11 +43,13 @@ select student.no, student.name from student where student.comment = "foo" and s
 	-> OK
 //test join, the first relation has no selection and filter
  select stars.stname, soaps.sname from soaps, stars where soaps.soapid= stars.soapid;
+ok
 //test join, the first relation has selection
  select stars.stname, soaps.sname from soaps, stars where soaps.soapid= stars.soapid and soaps.network = "ABC";
+OK
 
  select stars.stname, soaps.sname from soaps, stars where soaps.soapid= stars.soapid and soaps.network = "ABC" and stars.plays = "Opal";
-
+OK
 //test join, the first relation has selection and filter
- select stars.stname, soaps.sname from soaps, stars where soaps.soapid = stars.soapid and soaps.network = "ABC" AND soaps.name = "xx"
+ select stars.stname, soaps.sname from soaps, stars where soaps.soapid = stars.soapid and soaps.network = "ABC" AND soaps.name = "All My Children";
 

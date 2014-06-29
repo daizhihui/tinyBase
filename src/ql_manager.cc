@@ -20,7 +20,7 @@
 #include "rm.h"
 #include "sm_internal.h"
 #define QL_SELECT_DEBUG 1
-#define QL_DEBUG
+//#define QL_DEBUG
 using namespace std;
 bool CheckConditionsForAttr(int nConditions,const Condition conditions[],char * Data, int nAttr, DataAttrInfo attrInfo[],int numConditionCheckedWithIndex);
 int compareValues(AttrType attrType,int attrLength,void* value1, void* value2);
@@ -59,19 +59,19 @@ RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
     RC rc;
     int i;
 
-    cout << "Select\n";
+//    cout << "Select\n";
 
-    cout << "   nSelAttrs = " << nSelAttrs << "\n";
-    for (i = 0; i < nSelAttrs; i++)
-        cout << "   selAttrs[" << i << "]:" << selAttrs[i] << "\n";
+//    cout << "   nSelAttrs = " << nSelAttrs << "\n";
+//    for (i = 0; i < nSelAttrs; i++)
+//        cout << "   selAttrs[" << i << "]:" << selAttrs[i] << "\n";
 
-    cout << "   nRelations = " << nRelations << "\n";
-    for (i = 0; i < nRelations; i++)
-        cout << "   relations[" << i << "] " << relations[i] << "\n";
+//    cout << "   nRelations = " << nRelations << "\n";
+//    for (i = 0; i < nRelations; i++)
+//        cout << "   relations[" << i << "] " << relations[i] << "\n";
 
-    cout << "   nCondtions = " << nConditions << "\n";
-    for (i = 0; i < nConditions; i++)
-        cout << "   conditions[" << i << "]:" << conditions[i] << "\n";
+//    cout << "   nCondtions = " << nConditions << "\n";
+//    for (i = 0; i < nConditions; i++)
+//        cout << "   conditions[" << i << "]:" << conditions[i] << "\n";
 
     //define a printer
     Condition alwaysMatch;
@@ -869,10 +869,10 @@ RC QL_Manager::SelectPlan0(int   nSelAttrs,
     getSelectConditionsByRelation(relations[0],nConditions,conditions,pRmfhs,
             numberOfResultConditions,conditionArr);
 
-    cout << "list selection conditions for  relation "  << relations[0]<< endl ;
-     for(int hh = 0; hh < numberOfResultConditions; hh++){
-         cout << conditions[conditionArr[hh]] << " : " ;
-     }
+//    cout << "list selection conditions for  relation "  << relations[0]<< endl ;
+//     for(int hh = 0; hh < numberOfResultConditions; hh++){
+//         cout << conditions[conditionArr[hh]] << " : " ;
+//     }
 
      cout << endl;
 
@@ -905,19 +905,19 @@ RC QL_Manager::SelectPlan0(int   nSelAttrs,
                       resultIndexConditions,rightRelationIndexes);
 
 
-    for(int hh = 0; hh < nRelations-1; hh++){
-        cout << "list all conditons for " << hh << " jointure" << endl ;
+//    for(int hh = 0; hh < nRelations-1; hh++){
+//        cout << "list all conditons for " << hh << " jointure" << endl ;
 
-        cout << "number of conditions : " << nResultCond[hh] << endl;
-        for(int x = 0; x< nResultCond[hh]; x++){
-            cout << conditions[resultIndexConditions[hh][x]] << " : " ;
-        }
-    }
+//        cout << "number of conditions : " << nResultCond[hh] << endl;
+//        for(int x = 0; x< nResultCond[hh]; x++){
+//            cout << conditions[resultIndexConditions[hh][x]] << " : " ;
+//        }
+//    }
 
-    cout << "list right relation NAME for " << " jointure" << endl ;
-     for(int hh = 0; hh < nRelations-1; hh++){
-         cout << relations[rightRelationIndexes[hh]] << " : " ;
-     }
+//    cout << "list right relation NAME for " << " jointure" << endl ;
+//     for(int hh = 0; hh < nRelations-1; hh++){
+//         cout << relations[rightRelationIndexes[hh]] << " : " ;
+//     }
 
     //begin with i=0
     int i =0;
@@ -932,13 +932,12 @@ RC QL_Manager::SelectPlan0(int   nSelAttrs,
         //get condition filters on right table
         int * conditionArrR2 = new int[nConditions];
         int numberOfResultConditionsR2;
-        cout << "name of table " << relations[rightRelationIndex] << endl;
+        //cout << "name of table " << relations[rightRelationIndex] << endl;
         getSelectConditionsByRelation(relations[rightRelationIndex],nConditions,
                                       conditions,pRmfhs,numberOfResultConditionsR2,
                                       conditionArrR2);
         QL_Operator* R2;
         if(numberOfResultConditionsR2 > 0){
-            assert((pRmfhs[rightRelationIndex]) != NULL);
             RM_FileScan      rmfs;
 
             RC rc = rmfs.OpenScan((*pRmfhs)[rightRelationIndex],INT,sizeof(int),
@@ -1001,172 +1000,172 @@ RC QL_Manager::SelectPlan1(int   nSelAttrs,
                            RM_FileHandle **pRmfhs,
                            QL_Operator *&root)
 {
-   //indexed, filter then join
-    //If index on restriction attribute AND on join attribute, we will chose join attribute index.
-    //SelectPlan2 will do the other way around.
-    //
-    //filter then joins always.
-    //all tables have at least one join attribute between them
-    alwaysMatch.op = NO_OP;
+//   //indexed, filter then join
+//    //If index on restriction attribute AND on join attribute, we will chose join attribute index.
+//    //SelectPlan2 will do the other way around.
+//    //
+//    //filter then joins always.
+//    //all tables have at least one join attribute between them
+//    alwaysMatch.op = NO_OP;
 
     
-    //--------
-    //get all filters to apply on first relation
+//    //--------
+//    //get all filters to apply on first relation
     
-    //join conditions:
-    int* nResultCond = new int[nConditions-1];
-    int** resultIndexConditions= new int*[nConditions];
-    for(int i =0;i<nConditions;i++)
-    {
-        resultIndexConditions[i]=new int[nConditions];
-    }
-    int* rightRelationIndexes = new int[nRelations-1];
-    getJoinConditions(relations,nRelations,nConditions,conditions,pRmfhs,nResultCond,
-                      resultIndexConditions,rightRelationIndexes);
-    //---
+//    //join conditions:
+//    int* nResultCond = new int[nConditions-1];
+//    int** resultIndexConditions= new int*[nConditions];
+//    for(int i =0;i<nConditions;i++)
+//    {
+//        resultIndexConditions[i]=new int[nConditions];
+//    }
+//    int* rightRelationIndexes = new int[nRelations-1];
+//    getJoinConditions(relations,nRelations,nConditions,conditions,pRmfhs,nResultCond,
+//                      resultIndexConditions,rightRelationIndexes);
+//    //---
     
-    //filters on first relation:
-    int * conditionArr = new int[nConditions]; //index of select conditions
-    int numberOfResultConditions;
-    getSelectConditionsByRelation(relations[0],nConditions,conditions,pRmfhs,
-                                  numberOfResultConditions,conditionArr);
+//    //filters on first relation:
+//    int * conditionArr = new int[nConditions]; //index of select conditions
+//    int numberOfResultConditions;
+//    getSelectConditionsByRelation(relations[0],nConditions,conditions,pRmfhs,
+//                                  numberOfResultConditions,conditionArr);
     
-    //suppose a tablescan on leftside always.
-    QL_Operator* leftSide;
+//    //suppose a tablescan on leftside always.
+//    QL_Operator* leftSide;
  
-    // start with tablescan
-    if(numberOfResultConditions != 0 ){
-        leftSide = new QL_TblScanOp(relations[0],pRmfhs[0][0],conditions[conditionArr[0]],pSmm);
-        for(int sC = 1;sC<numberOfResultConditions;sC++)
-        {    //apply rest of filters before join
-            QL_FilterOp * fOp = new QL_FilterOp(leftSide,conditions[conditionArr[sC]],pSmm);
-            leftSide=fOp;
-        }
-    }
-    else
-        leftSide = new QL_TblScanOp(relations[0],pRmfhs[0][0],alwaysMatch,pSmm);
+//    // start with tablescan
+//    if(numberOfResultConditions != 0 ){
+//        leftSide = new QL_TblScanOp(relations[0],pRmfhs[0][0],conditions[conditionArr[0]],pSmm);
+//        for(int sC = 1;sC<numberOfResultConditions;sC++)
+//        {    //apply rest of filters before join
+//            QL_FilterOp * fOp = new QL_FilterOp(leftSide,conditions[conditionArr[sC]],pSmm);
+//            leftSide=fOp;
+//        }
+//    }
+//    else
+//        leftSide = new QL_TblScanOp(relations[0],pRmfhs[0][0],alwaysMatch,pSmm);
 
         
     
-    //do join
+//    //do join
  
-    //----
+//    //----
  
-    int i =0;
-    //do joins as left sided tree
-    while(i<nRelations)
-    {
-        //get join conditions, and right relation
-        int * joinCondArr = resultIndexConditions[i];
-        int numberOfJoinResultConditions=nResultCond[i];
-        int rightRelationIndex=rightRelationIndexes[i];
+//    int i =0;
+//    //do joins as left sided tree
+//    while(i<nRelations)
+//    {
+//        //get join conditions, and right relation
+//        int * joinCondArr = resultIndexConditions[i];
+//        int numberOfJoinResultConditions=nResultCond[i];
+//        int rightRelationIndex=rightRelationIndexes[i];
         
-        //get condition filters on right table
-        int * conditionArrR2 = new int[nConditions];
-        int numberOfResultConditionsR2;
-        getSelectConditionsByRelation(relations[rightRelationIndex],nConditions,
-                                      conditions,pRmfhs,numberOfResultConditionsR2,
-                                      conditionArrR2);
-        QL_Operator* R2;
-            bool indexOnJoinA= false;
-        //    //---
-            int indexedAttributeCondition;
-            int indexNo=-1;
-            for(int rC=0;rC<nResultCond[i];rC++)
-            {
-                if(conditions[resultIndexConditions[i][rC]].lhsAttr.relName == relations[i] && (indexNo=attributeHasIndex(conditions[resultIndexConditions[i][rC]].lhsAttr))>-1){
-                    //use this index
-                    //remember this condition's index.
-                    indexedAttributeCondition=rC;
-                    indexOnJoinA=true;
-                    break;
-                }
-            }
-            if(indexNo==-1)
-            {//no index on join attribute, check on others
-                for(int sRC=0;sRC<numberOfResultConditions;sRC++)
-                    if(conditions[conditionArrR2[sRC]].lhsAttr.relName== relations[i] && (indexNo=attributeHasIndex(conditions[conditionArrR2[sRC]].lhsAttr))>-1){
-                        //use this index
-                        //remember this condition's index.
-                        indexedAttributeCondition=sRC;
-                        break;
-                    }
-            }
-        if(indexOnJoinA)//index scan on join attribute
-        {
-            R2 = new QL_IxScanOp(relations[rightRelationIndex],*(pRmfhs[rightRelationIndex]),conditions[resultIndexConditions[i][indexedAttributeCondition]],pIxm,pSmm);
-        }
-        else if(indexNo!=-1)//index scan on filter condition
-        {
-            R2 = new QL_IxScanOp(relations[rightRelationIndex],*(pRmfhs[rightRelationIndex]),conditions[conditionArrR2[indexedAttributeCondition]],pIxm,pSmm);
-        }
-        else//table scan
-        {
-            if(numberOfResultConditionsR2 > 0){
-            R2 = new QL_TblScanOp(relations[rightRelationIndex],*(pRmfhs[rightRelationIndex]),conditions[conditionArrR2[0]],pSmm);
-            }
-            else
-                R2 =new QL_TblScanOp(relations[rightRelationIndex],*(pRmfhs[rightRelationIndex]),alwaysMatch,pSmm);
-        }
-        //do remaining filters:
-        //do remaining filters on right table R2
-        for(int sC = 0;sC<numberOfResultConditionsR2;sC++)
-        {
-            QL_Operator * fOp;
-            if(indexNo!=-1 && !indexOnJoinA && sC!=indexedAttributeCondition)//index was on cond, only add if != iAC
-                    fOp= new QL_FilterOp(R2,conditions[conditionArrR2[sC]],pSmm);
-            else if(indexNo==-1 || indexOnJoinA)//no index or index on join A, add anyway
-                fOp= new QL_FilterOp(R2,conditions[conditionArrR2[sC]],pSmm);
+//        //get condition filters on right table
+//        int * conditionArrR2 = new int[nConditions];
+//        int numberOfResultConditionsR2;
+//        getSelectConditionsByRelation(relations[rightRelationIndex],nConditions,
+//                                      conditions,pRmfhs,numberOfResultConditionsR2,
+//                                      conditionArrR2);
+//        QL_Operator* R2;
+//            bool indexOnJoinA= false;
+//        //    //---
+//            int indexedAttributeCondition;
+//            int indexNo=-1;
+//            for(int rC=0;rC<nResultCond[i];rC++)
+//            {
+//                if(conditions[resultIndexConditions[i][rC]].lhsAttr.relName == relations[i] && (indexNo=attributeHasIndex(conditions[resultIndexConditions[i][rC]].lhsAttr))>-1){
+//                    //use this index
+//                    //remember this condition's index.
+//                    indexedAttributeCondition=rC;
+//                    indexOnJoinA=true;
+//                    break;
+//                }
+//            }
+//            if(indexNo==-1)
+//            {//no index on join attribute, check on others
+//                for(int sRC=0;sRC<numberOfResultConditions;sRC++)
+//                    if(conditions[conditionArrR2[sRC]].lhsAttr.relName== relations[i] && (indexNo=attributeHasIndex(conditions[conditionArrR2[sRC]].lhsAttr))>-1){
+//                        //use this index
+//                        //remember this condition's index.
+//                        indexedAttributeCondition=sRC;
+//                        break;
+//                    }
+//            }
+//        if(indexOnJoinA)//index scan on join attribute
+//        {
+//            R2 = new QL_IxScanOp(relations[rightRelationIndex],*(pRmfhs[rightRelationIndex]),conditions[resultIndexConditions[i][indexedAttributeCondition]],pIxm,pSmm);
+//        }
+//        else if(indexNo!=-1)//index scan on filter condition
+//        {
+//            R2 = new QL_IxScanOp(relations[rightRelationIndex],*(pRmfhs[rightRelationIndex]),conditions[conditionArrR2[indexedAttributeCondition]],pIxm,pSmm);
+//        }
+//        else//table scan
+//        {
+//            if(numberOfResultConditionsR2 > 0){
+//            R2 = new QL_TblScanOp(relations[rightRelationIndex],*(pRmfhs[rightRelationIndex]),conditions[conditionArrR2[0]],pSmm);
+//            }
+//            else
+//                R2 =new QL_TblScanOp(relations[rightRelationIndex],*(pRmfhs[rightRelationIndex]),alwaysMatch,pSmm);
+//        }
+//        //do remaining filters:
+//        //do remaining filters on right table R2
+//        for(int sC = 0;sC<numberOfResultConditionsR2;sC++)
+//        {
+//            QL_Operator * fOp;
+//            if(indexNo!=-1 && !indexOnJoinA && sC!=indexedAttributeCondition)//index was on cond, only add if != iAC
+//                    fOp= new QL_FilterOp(R2,conditions[conditionArrR2[sC]],pSmm);
+//            else if(indexNo==-1 || indexOnJoinA)//no index or index on join A, add anyway
+//                fOp= new QL_FilterOp(R2,conditions[conditionArrR2[sC]],pSmm);
             
-            R2=fOp;
-        }
-        //do join:
+//            R2=fOp;
+//        }
+//        //do join:
         
             
-        //do nested loop join left side with filtered R2
-        QL_Operator* NLJOP = new QL_NLJOp(leftSide, R2, conditions[joinCondArr[0]], pSmm);//do join on 1 attribute
-        //do filter for all remaining join attributes
-        for(int jA = 1; jA<numberOfJoinResultConditions;jA++)
-        {
-            QL_Operator * fOP = new QL_FilterOp(NLJOP,conditions[joinCondArr[jA]],pSmm);
-            NLJOP=fOP;
-        }
-        leftSide=NLJOP;
-        //join done
-        i++;
-        delete []conditionArrR2;
-    }
-    QL_Operator *projOp = new QL_ProjectOp(leftSide,nSelAttrs,selAttrs);
-    root = projOp;
-    delete []conditionArr;
-    delete []nResultCond;
-    delete []rightRelationIndexes;
-    for(int i=0;i<nConditions;i++)
-    {
-        delete[] resultIndexConditions[i];
-    }
-    delete [] resultIndexConditions;
+//        //do nested loop join left side with filtered R2
+//        QL_Operator* NLJOP = new QL_NLJOp(leftSide, R2, conditions[joinCondArr[0]], pSmm);//do join on 1 attribute
+//        //do filter for all remaining join attributes
+//        for(int jA = 1; jA<numberOfJoinResultConditions;jA++)
+//        {
+//            QL_Operator * fOP = new QL_FilterOp(NLJOP,conditions[joinCondArr[jA]],pSmm);
+//            NLJOP=fOP;
+//        }
+//        leftSide=NLJOP;
+//        //join done
+//        i++;
+//        delete []conditionArrR2;
+//    }
+//    QL_Operator *projOp = new QL_ProjectOp(leftSide,nSelAttrs,selAttrs);
+//    root = projOp;
+//    delete []conditionArr;
+//    delete []nResultCond;
+//    delete []rightRelationIndexes;
+//    for(int i=0;i<nConditions;i++)
+//    {
+//        delete[] resultIndexConditions[i];
+//    }
+//    delete [] resultIndexConditions;
     
-    cout << "end of selectPlan1" << endl;
-    return 0;
+//    cout << "end of selectPlan1" << endl;
+//    return 0;
     
-}
-RC QL_Manager::SelectPlan2(int   nSelAttrs,
-                           const RelAttr selAttrs[],
-                           int   nRelations,
-                           const char * const relations[],
-                           int   nConditions,
-                           const Condition conditions[],
-                           Condition &alwaysMatch,
-                           RM_FileHandle **pRmfhs,
-                           QL_Operator *&root)
-{
-    /*
+//}
+//RC QL_Manager::SelectPlan2(int   nSelAttrs,
+//                           const RelAttr selAttrs[],
+//                           int   nRelations,
+//                           const char * const relations[],
+//                           int   nConditions,
+//                           const Condition conditions[],
+//                           Condition &alwaysMatch,
+//                           RM_FileHandle **pRmfhs,
+//                           QL_Operator *&root)
+//{
+//    /*
      
-     RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
-     int nRelations, const char * const relations[],
-     int nConditions, const Condition conditions[])
-     */
+//     RC QL_Manager::Select(int nSelAttrs, const RelAttr selAttrs[],
+//     int nRelations, const char * const relations[],
+//     int nConditions, const Condition conditions[])
+//     */
      return 0;
     
 }
@@ -1226,7 +1225,7 @@ RC QL_Manager::getJoinConditionsByRelation(const char * const relations[],
         if(conditions[i].bRhsIsAttr==1){
             const char * rightRelationName = conditions[i].rhsAttr.relName;
             const char * leftRelationName = conditions[i].lhsAttr.relName;
-            cout << leftRelationName << " right" << rightRelationName << endl;
+//            cout << leftRelationName << " right" << rightRelationName << endl;
 
             if(!strcmp(leftRelationName,relationName)){
                 assert(0);
@@ -1241,7 +1240,7 @@ RC QL_Manager::getJoinConditionsByRelation(const char * const relations[],
                 }
             }
             else if(!strcmp(rightRelationName,relationName)){
-                cout <<  " Is right Relation"  << endl;
+//                cout <<  " Is right Relation"  << endl;
                 resultIndexConditions[nResultConditions] = i;
                 nResultConditions++;
                 for(int j=0; j< nRelations; j++){
@@ -1305,18 +1304,18 @@ RC QL_Manager::getJoinConditions(const char * const relations[],
             if(n < nJoinRelations){
 
 
-                cout<< "nResult = " << nResult << endl;
+//                cout<< "nResult = " << nResult << endl;
                 for(int h = 0; h < nResult; h++){
                     //find all the conditions between this relation and all existing relations
                     for(int m = 0; m< nJoinRelations; m++){
-                        cout << "for loop" << endl;
+                        //cout << "for loop" << endl;
                         if(relationsUsed[joinRelations[m]]){  //the m th join relation is used
                             if(!strcmp(conditions[result[h]].lhsAttr.relName,relations[joinRelations[m]])
                                     ||!strcmp(conditions[result[h]].rhsAttr.relName,relations[joinRelations[m]])){
 
                                 resultIndexConditions[i][nResultConditions[i]] = result[h];
                                 nResultConditions[i]++;
-                                cout << nResultConditions[i] << endl;
+                                //cout << nResultConditions[i] << endl;
                             }
                         }
                     }
@@ -1408,14 +1407,19 @@ RC QL_Manager::SelectPrinter(DataAttrInfo *&attributes, int nSelAttrs, const Rel
                 strcpy(attributes[i].relName,"table_OUT");
                 strcpy(attributes[i].attrName,selAttrs[i].attrName);
                 //calculate offset
-                 int offset=0;
-                for (int j=0;j<i;j++){
-                    offset+= attributes[j].attrLength;
-                }
-                attributes[i].offset = offset;
-                attributes[i].attrType= dataAttr.attrType;
-                attributes[i].attrLength= dataAttr.attrLength;
-                attributes[i].indexNo=-1;
+//                int offset=0;
+//                for (int j=0;j<i;j++){
+//                    offset+= attributes[j].attrLength;
+//                }
+//                attributes[i].offset = offset;
+//                attributes[i].attrType= dataAttr.attrType;
+//                attributes[i].attrLength= dataAttr.attrLength;
+//                attributes[i].indexNo=-1;
+                QL_RelAttrInfo info;
+                root->SchemaLookup(selAttrs[i],info);
+                attributes[i].attrLength = info.attrLength;
+                attributes[i].attrType = info.attrType;
+                attributes[i].offset = info.offset;
             }
             else{
 #ifdef SM_DEBUG
@@ -1433,8 +1437,40 @@ RC QL_Manager::SelectPrinter(DataAttrInfo *&attributes, int nSelAttrs, const Rel
         if(QL_LASTWARN ==root->GetNext(recOutput)) break;
         char * output;
         recOutput.GetData(output);
-        cout << output << endl;
+//        cout << output;
+        //void * data[nSelAttrs];
+
+        //restructure output to an array of void*
+//        for (int i=0;i<nSelAttrs;i++){
+//            QL_RelAttrInfo info;
+//            root->SchemaLookup(selAttrs[i],info);
+//            if (attributes[i].attrType == STRING) {
+//                //data[i] = new char[attributes[i].attrLength];
+//                //memcpy(data[i],output+attributes[i].offset,attributes[i].attrLength);
+//                char * str = new char[info.attrLength];
+//                memcpy(str,output+info.offset,info.attrLength);
+//                cout << str << "   "<<endl;
+//                delete []str;
+//            }
+//            else if (attributes[i].attrType == INT) {
+////                data[i] = new int();
+////                memcpy(data[i],output+attributes[i].offset,attributes[i].attrLength);
+//                int a = *(int*)(output+info.offset);
+//                cout << a << "   " << endl;
+//            }
+//            else if (attributes[i].attrType == FLOAT) {
+////                data[i] = new float();
+////                memcpy(data[i],output+attributes[i].offset,attributes[i].attrLength);
+//                 int a = *(float*)(output+info.offset);
+//                cout << a << "   " << endl;
+//            }
+//            else
+//                assert(0);
+//        }
+
+        //cout << output << endl;
         p->Print(cout,output);
+        //p->Print(cout,"output");
     }
 
     p->PrintFooter(cout);
@@ -1461,7 +1497,10 @@ RC QL_Manager::getRelName(const RelAttr &relAttr, int nRelations, const char * c
         memcpy(&dataAttr+MAXNAME+1,pdata+MAXNAME,MAXNAME);
         memcpy(&dataAttr+2*MAXNAME+1,"\0",1); //incompatable between DataAttrInfo and SM_AttrcatRec
         memcpy(&dataAttr+2*MAXNAME+2,pdata+2*MAXNAME,3*sizeof(int)+sizeof(AttrType));
-
+//        cout <<
+        dataAttr.attrType = ((SM_AttrcatRec*)pdata)->attrType;
+//        cout << "dataA =  " << dataAttr.attrType << endl;
+//        cout << "pDAta  = " << ((SM_AttrcatRec*)pdata)->attrType << endl;
         return 0;
     }
     for(int j=0;j<nRelations;j++){

@@ -10,7 +10,7 @@ private:
     QL_RelAttrInfo   lhsAttrInfo;
     QL_RelAttrInfo   rhsAttrInfo;
 */
-#define QL_DEBUG_OPERATOR
+//#define QL_DEBUG_OPERATOR
 
 QL_FilterOp::QL_FilterOp(QL_Operator *pChd, const Condition &c,
                       SM_Manager *sm){
@@ -139,9 +139,9 @@ QL_ProjectOp::QL_ProjectOp     (QL_Operator *pCld, int nPAttrs , const RelAttr r
     this->tupleLength = projAttrInfos[nProjAttrs-1].offset + projAttrInfos[nProjAttrs-1].attrLength;
     //cout << "tuple Length after projection " << tupleLength<<  endl;
     //print all in projAttrInfos
-    for(int i = 0; i< nProjAttrs; i++){
-        cout <<projAttrInfos[i].attrType << projAttrInfos[i].attrLength << "offset" <<projAttrInfos[i].offset <<endl;
-    }
+   // for(int i = 0; i< nProjAttrs; i++){
+//        cout <<projAttrInfos[i].attrType << projAttrInfos[i].attrLength << "offset" <<projAttrInfos[i].offset <<endl;
+//    }
 }
 QL_ProjectOp::~QL_ProjectOp    (){
     delete pChild;
@@ -169,36 +169,36 @@ RC QL_ProjectOp::GetNext(RM_Record &rec){
     char * pDataRec;
     lastRec.GetData(pDataRec);
 
-    cout << *(int*)pDataRec << endl;
-    cout << "this->tupleLength = " << this->tupleLength << endl;
+    //cout << *(int*)pDataRec << endl;
+    //cout << "this->tupleLength = " << this->tupleLength << endl;
     //cout << "name tested " << pDataRec+4 << endl;
-    cout << "before pData" << endl;
-//    char * pData = new char[this->tupleLength]; //--->error no memory
-//    cout << "after pData" << endl;
-//    for(int i = 0; i< nProjAttrs; i++){
-//        QL_RelAttrInfo tInfo;
-//        cout << "proj" << projAttrs[i] << endl;
-//        pChild->SchemaLookup(projAttrs[i],tInfo);
-//#ifdef QL_DEBUG_OPERATOR
-////    cout << "tupleLength" << this->tupleLength<<endl;
-//        cout << "projAttr OFFSET in last operator" << tInfo.offset <<endl;
-//        cout << "tInfo.attrLength = " << tInfo.attrLength <<endl;
-//#endif
-//        memcpy(pData+projAttrInfos[i].offset,pDataRec+tInfo.offset,tInfo.attrLength);
-//    }
-//    rec.SetData(pData);
-//#ifdef QL_DEBUG_OPERATOR
-////    cout << "tupleLength" << this->tupleLength<<endl;
-//   cout << "projAttr OFFSET in this operator" << projAttrInfos[0].offset <<endl;
-//    cout << "data content" << pData <<endl;
-//#endif
+    //cout << "before pData" << endl;
+    char * pData = new char[this->tupleLength]; //--->error no memory
+    //cout << "after pData" << endl;
+    for(int i = 0; i< nProjAttrs; i++){
+        QL_RelAttrInfo tInfo;
+        //cout << "proj" << projAttrs[i] << endl;
+        pChild->SchemaLookup(projAttrs[i],tInfo);
+#ifdef QL_DEBUG_OPERATOR
+//    cout << "tupleLength" << this->tupleLength<<endl;
+        cout << "projAttr OFFSET in last operator" << tInfo.offset <<endl;
+        cout << "tInfo.attrLength = " << tInfo.attrLength <<endl;
+#endif
+        memcpy(pData+projAttrInfos[i].offset,pDataRec+tInfo.offset,tInfo.attrLength);
+    }
+    rec.SetData(pData);
+#ifdef QL_DEBUG_OPERATOR
+//    cout << "tupleLength" << this->tupleLength<<endl;
+   cout << "projAttr OFFSET in this operator" << projAttrInfos[0].offset <<endl;
+    cout << "data content" << pData <<endl;
+#endif
 
-//#ifdef QL_DEBUG_OPERATOR
-//    char * testData;
-//    rec.GetData(testData);
-//    cout << "data content" << testData <<endl;
-//    assert(pData==testData);
-//#endif
+#ifdef QL_DEBUG_OPERATOR
+    char * testData;
+    rec.GetData(testData);
+    cout << "data content" << testData <<endl;
+    assert(pData==testData);
+#endif
 
     return 0;
 }
@@ -252,7 +252,7 @@ QL_NLJOp::QL_NLJOp(QL_Operator *pLchild, QL_Operator *pRchild, const Condition &
     pLchild->SchemaLookup(c.lhsAttr,leftAttrInfo);
     pRchild->SchemaLookup(c.rhsAttr,rightAttrInfo);
     this->tupleLength = pLchild->tupleLength + pRchild->tupleLength - leftAttrInfo.attrLength;
-    cout << "tuple length after join" << tupleLength << endl;
+    //cout << "tuple length after join" << tupleLength << endl;
 }
 
 QL_NLJOp::~QL_NLJOp(){
@@ -281,8 +281,8 @@ RC QL_NLJOp::GetNext(RM_Record &rec){
     RC rc;
     bool found = false;
     char *pData;
+    RM_Record rightRec;
     while(!found){
-        RM_Record rightRec;
         if((rc=pRightChild->GetNext(rightRec))==QL_LASTWARN){
             //finalize before re-initialize
             pRightChild->Finalize();
@@ -294,8 +294,9 @@ RC QL_NLJOp::GetNext(RM_Record &rec){
 #endif
                 return rc; //should not happen
             }
+            //delete []leftData; //desallouer la memoire avant obtenir une nouvelle memoire
             if(rc=pLeftChild->GetNext(leftRec)){
-               return rc;
+                return rc;
             }
             leftRec.GetData(leftData);
         }
@@ -311,7 +312,7 @@ RC QL_NLJOp::GetNext(RM_Record &rec){
             memcpy(pData+pLeftChild->tupleLength,pRightData,rightAttrInfo.offset);
             memcpy(pData+pLeftChild->tupleLength+rightAttrInfo.offset,
                    pRightData+rightAttrInfo.offset+rightAttrInfo.attrLength,
-                   pRightChild->tupleLength-rightAttrInfo.attrLength);
+                   pRightChild->tupleLength-rightAttrInfo.offset-rightAttrInfo.attrLength);
         }
     }
     rec.SetData(pData);
@@ -331,27 +332,31 @@ RC QL_NLJOp::SchemaLookup  (const RelAttr &relattr, QL_RelAttrInfo &info){
     RC rc;
     //search in left, if not found, search right
     QL_RelAttrInfo tInfo;
-    cout << "relattr" << relattr << endl;
+    //cout << "relattr" << relattr << endl;
     if(rc=pLeftChild->SchemaLookup(relattr,tInfo)) {
         rc = pRightChild->SchemaLookup(relattr,tInfo);
 #ifdef QL_DEBUG_OPERATOR
         if(rc)
                 assert(0);
 
-#endif
+
         cout << "right relation NAME : " << relattr << endl;
         cout << "leftChildLength &&&&&&&&&&&" << pLeftChild->tupleLength << endl;
+#endif
         info.offset = pLeftChild->tupleLength + tInfo.offset;
         info.attrType = tInfo.attrType;
         info.attrLength = tInfo.attrLength;
+#ifdef QL_DEBUG_OPERATOR
         cout << "in right relation" << info.offset<< endl;
         cout << info.attrLength<< endl;
+#endif
+
         return 0;
     }
     info.offset = tInfo.offset;
     info.attrType = tInfo.attrType;
     info.attrLength = tInfo.attrLength;
-    cout << info.attrLength<< endl;
+    //cout << info.attrLength<< endl;
 
 
     return 0;
